@@ -7,7 +7,7 @@ use App\Http\Controllers\Api\Verifier\VerifierJobsController;
 use App\Http\Middleware\EnsureVerifierService;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth:sanctum', EnsureVerifierService::class])
+Route::middleware(['auth:sanctum', EnsureVerifierService::class, 'throttle:verifier-api'])
     ->prefix('verifier')
     ->name('api.verifier.')
     ->group(function () {
