@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Models\User;
 use App\Models\VerificationJob;
+use App\Support\Roles;
 
 class VerificationJobPolicy
 {
@@ -36,7 +37,11 @@ class VerificationJobPolicy
      */
     public function create(User $user): bool
     {
-        return false;
+        if (! $this->supportsRoles($user)) {
+            return true;
+        }
+
+        return $user->hasRole(Roles::ADMIN) || $user->hasRole(Roles::CUSTOMER);
     }
 
     /**
@@ -78,6 +83,6 @@ class VerificationJobPolicy
 
     private function isAdmin(User $user): bool
     {
-        return $this->supportsRoles($user) && $user->hasRole('admin');
+        return $this->supportsRoles($user) && $user->hasRole(Roles::ADMIN);
     }
 }

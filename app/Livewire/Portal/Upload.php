@@ -5,12 +5,14 @@ namespace App\Livewire\Portal;
 use App\Enums\VerificationJobStatus;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
 class Upload extends Component
 {
+    use AuthorizesRequests;
     use WithFileUploads;
 
     public $file;
@@ -27,6 +29,14 @@ class Upload extends Component
         $this->validate();
 
         $user = Auth::user();
+
+        $this->authorize('create', VerificationJob::class);
+
+        if (config('verifier.require_active_subscription') && ! $user->subscribed()) {
+            $this->addError('file', __('An active subscription is required to upload lists.'));
+
+            return;
+        }
 
         $job = VerificationJob::create([
             'user_id' => $user->id,
