@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BillingController;
 use App\Http\Controllers\Portal\VerificationJobDownloadController;
 use App\Livewire\Portal\JobShow;
 use App\Livewire\Portal\JobsIndex;
@@ -28,6 +29,16 @@ Route::middleware(['auth', 'verified'])
         Route::get('jobs/{job}/download', VerificationJobDownloadController::class)
             ->whereUuid('job')
             ->name('jobs.download');
+    });
+
+Route::middleware(['auth', 'verified'])
+    ->prefix('billing')
+    ->name('billing.')
+    ->group(function () {
+        Route::get('/', [BillingController::class, 'index'])->name('index');
+        Route::post('subscribe', [BillingController::class, 'subscribe'])->name('subscribe');
+        Route::get('success', [BillingController::class, 'success'])->name('success');
+        Route::get('cancel', [BillingController::class, 'cancel'])->name('cancel');
     });
 
 require __DIR__.'/auth.php';

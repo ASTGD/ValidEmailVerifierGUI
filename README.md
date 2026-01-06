@@ -131,6 +131,10 @@ Do not expose raw storage paths publicly.
 - admin: Filament admin access
 - verifier-service: Sanctum token access to verifier endpoints
 
+## Billing
+- Customer billing portal: `/billing`
+- Checkout uses `STRIPE_PRICE_ID` (set in `.env`)
+
 ## Verifier API (Sanctum)
 
 Endpoints:

@@ -7,6 +7,7 @@ use App\Models\VerificationJob;
 use App\Services\JobStorage;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -32,24 +33,29 @@ class Upload extends Component
 
         $this->authorize('create', VerificationJob::class);
 
-        if (config('verifier.require_active_subscription') && ! $user->subscribed()) {
+        if (
+            config('verifier.require_active_subscription')
+            && method_exists($user, 'subscribed')
+            && ! $user->subscribed('default')
+        ) {
             $this->addError('file', __('An active subscription is required to upload lists.'));
 
             return;
         }
 
-        $job = VerificationJob::create([
+        $job = new VerificationJob([
             'user_id' => $user->id,
             'status' => VerificationJobStatus::Pending,
             'original_filename' => $this->file->getClientOriginalName(),
         ]);
 
-        [$disk, $key] = $storage->storeInput($this->file, $job);
+        $job->id = (string) Str::uuid();
+        $job->input_disk = $storage->disk();
+        $job->input_key = $storage->inputKey($job);
 
-        $job->update([
-            'input_disk' => $disk,
-            'input_key' => $key,
-        ]);
+        $storage->storeInput($this->file, $job, $job->input_disk, $job->input_key);
+
+        $job->save();
 
         $this->reset('file');
 

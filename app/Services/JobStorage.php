@@ -30,10 +30,10 @@ class JobStorage
         return sprintf('results/%s/%s/report.json', $job->user_id, $job->id);
     }
 
-    public function storeInput(UploadedFile $file, VerificationJob $job): array
+    public function storeInput(UploadedFile $file, VerificationJob $job, ?string $disk = null, ?string $key = null): array
     {
-        $disk = $this->disk();
-        $key = $this->inputKey($job);
+        $disk = $disk ?: $this->disk();
+        $key = $key ?: $this->inputKey($job);
 
         Storage::disk($disk)->putFileAs(
             dirname($key),

@@ -41,7 +41,19 @@ class VerificationJobPolicy
             return true;
         }
 
-        return $user->hasRole(Roles::ADMIN) || $user->hasRole(Roles::CUSTOMER);
+        if ($user->hasRole(Roles::ADMIN)) {
+            return true;
+        }
+
+        if (! $user->hasRole(Roles::CUSTOMER)) {
+            return false;
+        }
+
+        if (config('verifier.require_active_subscription') && method_exists($user, 'subscribed')) {
+            return $user->subscribed('default');
+        }
+
+        return true;
     }
 
     /**
