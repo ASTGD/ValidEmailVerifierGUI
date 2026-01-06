@@ -1,0 +1,46 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\VerificationJob;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+
+class JobStorage
+{
+    public function disk(): string
+    {
+        $disk = config('verifier.storage_disk');
+
+        return $disk ?: (string) config('filesystems.default');
+    }
+
+    public function inputKey(VerificationJob $job): string
+    {
+        return sprintf('uploads/%s/%s/input.csv', $job->user_id, $job->id);
+    }
+
+    public function outputKey(VerificationJob $job): string
+    {
+        return sprintf('results/%s/%s/cleaned.csv', $job->user_id, $job->id);
+    }
+
+    public function reportKey(VerificationJob $job): string
+    {
+        return sprintf('results/%s/%s/report.json', $job->user_id, $job->id);
+    }
+
+    public function storeInput(UploadedFile $file, VerificationJob $job): array
+    {
+        $disk = $this->disk();
+        $key = $this->inputKey($job);
+
+        Storage::disk($disk)->putFileAs(
+            dirname($key),
+            $file,
+            basename($key)
+        );
+
+        return [$disk, $key];
+    }
+}

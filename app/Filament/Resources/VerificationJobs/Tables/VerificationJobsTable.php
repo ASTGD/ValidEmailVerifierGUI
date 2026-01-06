@@ -1,0 +1,96 @@
+<?php
+
+namespace App\Filament\Resources\VerificationJobs\Tables;
+
+use App\Enums\VerificationJobStatus;
+use App\Models\VerificationJob;
+use Filament\Actions\Action;
+use Filament\Forms\Components\Textarea;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Table;
+
+class VerificationJobsTable
+{
+    public static function configure(Table $table): Table
+    {
+        return $table
+            ->columns([
+                TextColumn::make('id')
+                    ->label('Job ID')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('user.email')
+                    ->label('User')
+                    ->searchable(),
+                TextColumn::make('original_filename')
+                    ->label('Filename')
+                    ->searchable(),
+                TextColumn::make('status')
+                    ->label('Status')
+                    ->badge()
+                    ->formatStateUsing(function ($state): string {
+                        if ($state instanceof VerificationJobStatus) {
+                            return $state->label();
+                        }
+
+                        return ucfirst((string) $state);
+                    })
+                    ->color(function ($state): string {
+                        $value = $state instanceof VerificationJobStatus ? $state->value : (string) $state;
+
+                        return match ($value) {
+                            VerificationJobStatus::Pending->value => 'warning',
+                            VerificationJobStatus::Processing->value => 'info',
+                            VerificationJobStatus::Completed->value => 'success',
+                            VerificationJobStatus::Failed->value => 'danger',
+                            default => 'gray',
+                        };
+                    }),
+                TextColumn::make('created_at')
+                    ->label('Created')
+                    ->dateTime()
+                    ->sortable(),
+                TextColumn::make('input_key')
+                    ->label('Input Key')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('output_key')
+                    ->label('Output Key')
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->filters([
+                SelectFilter::make('status')
+                    ->options(self::statusOptions()),
+            ])
+            ->recordActions([
+                Action::make('mark_failed')
+                    ->label('Mark Failed')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->form([
+                        Textarea::make('error_message')
+                            ->label('Error message')
+                            ->required(),
+                    ])
+                    ->action(function (VerificationJob $record, array $data): void {
+                        $record->update([
+                            'status' => VerificationJobStatus::Failed,
+                            'error_message' => $data['error_message'],
+                            'finished_at' => now(),
+                        ]);
+                    })
+                    ->visible(fn (VerificationJob $record): bool => $record->status !== VerificationJobStatus::Failed),
+            ]);
+    }
+
+    private static function statusOptions(): array
+    {
+        $options = [];
+
+        foreach (VerificationJobStatus::cases() as $status) {
+            $options[$status->value] = $status->label();
+        }
+
+        return $options;
+    }
+}
