@@ -131,6 +131,28 @@ Do not expose raw storage paths publicly.
 - admin: Filament admin access
 - verifier-service: Sanctum token access to verifier endpoints
 
+## Billing
+- Customer billing portal: `/billing`
+- Checkout uses `STRIPE_PRICE_ID` (set in `.env`)
+
+## Verifier API (Sanctum)
+
+Endpoints:
+- GET /api/verifier/jobs?status=pending&limit=10
+- POST /api/verifier/jobs/{id}/status
+- POST /api/verifier/jobs/{id}/complete
+- GET /api/verifier/jobs/{id}/download
+
+Issue a verifier token:
+
+    ./vendor/bin/sail artisan app:issue-verifier-token
+
+## Maintenance
+
+Purge completed/failed jobs older than the retention window:
+
+    ./vendor/bin/sail artisan app:purge-verification-jobs
+
 ---
 
 ## Contribution Workflow

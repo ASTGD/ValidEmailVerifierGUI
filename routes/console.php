@@ -1,10 +1,14 @@
 <?php
 
+use App\Enums\VerificationJobStatus;
 use App\Models\User;
+use App\Models\VerificationJob;
+use App\Services\JobStorage;
 use App\Support\Roles;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Role;
 
 Artisan::command('inspire', function () {
@@ -80,3 +84,85 @@ Artisan::command('app:bootstrap-users
 
     $this->info('Roles ensured and users provisioned.');
 })->purpose('Create roles, an admin user, and a verifier-service user');
+
+Artisan::command('app:issue-verifier-token
+    {--verifier-email= : Verifier service email address}
+    {--name=verifier-service : Token name}
+', function () {
+    $verifierEmail = $this->option('verifier-email') ?: env('VERIFIER_SERVICE_EMAIL');
+    if (! $verifierEmail) {
+        $verifierEmail = $this->ask('Verifier service email');
+    }
+
+    $verifier = User::where('email', $verifierEmail)->first();
+    if (! $verifier) {
+        $this->error('Verifier service user not found. Run app:bootstrap-users first.');
+        return 1;
+    }
+
+    $token = $verifier->createToken($this->option('name'))->plainTextToken;
+
+    $this->line('Verifier token:');
+    $this->line($token);
+
+    return 0;
+})->purpose('Issue a Sanctum token for the verifier-service user');
+
+Artisan::command('app:purge-verification-jobs
+    {--days= : Purge jobs completed before this many days ago}
+    {--dry-run : Show what would be deleted without removing anything}
+', function () {
+    $days = (int) ($this->option('days') ?: config('verifier.retention_days', 30));
+    if ($days < 0) {
+        $this->error('Retention days must be zero or greater.');
+        return 1;
+    }
+
+    $cutoff = now()->subDays($days);
+
+    $jobs = VerificationJob::query()
+        ->whereIn('status', [VerificationJobStatus::Completed, VerificationJobStatus::Failed])
+        ->whereNotNull('finished_at')
+        ->where('finished_at', '<=', $cutoff)
+        ->get();
+
+    if ($jobs->isEmpty()) {
+        $this->info('No verification jobs to purge.');
+        return 0;
+    }
+
+    $storage = app(JobStorage::class);
+    $defaultDisk = $storage->disk();
+    $dryRun = (bool) $this->option('dry-run');
+    $deleted = 0;
+
+    foreach ($jobs as $job) {
+        $inputDisk = $job->input_disk ?: $defaultDisk;
+        if ($job->input_key && Storage::disk($inputDisk)->exists($job->input_key)) {
+            if (! $dryRun) {
+                Storage::disk($inputDisk)->delete($job->input_key);
+            }
+        }
+
+        $outputDisk = $job->output_disk ?: $defaultDisk;
+        if ($job->output_key && Storage::disk($outputDisk)->exists($job->output_key)) {
+            if (! $dryRun) {
+                Storage::disk($outputDisk)->delete($job->output_key);
+            }
+        }
+
+        if (! $dryRun) {
+            $job->delete();
+        }
+
+        $deleted++;
+    }
+
+    $message = $dryRun
+        ? sprintf('Dry run complete. %d job(s) would be purged.', $deleted)
+        : sprintf('Purge complete. %d job(s) deleted.', $deleted);
+
+    $this->info($message);
+
+    return 0;
+})->purpose('Purge completed/failed verification jobs and their stored files');

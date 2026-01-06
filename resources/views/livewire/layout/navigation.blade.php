@@ -33,6 +33,15 @@ new class extends Component
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
                         {{ __('Dashboard') }}
                     </x-nav-link>
+                    <x-nav-link :href="route('portal.jobs.index')" :active="request()->routeIs('portal.jobs.*')" wire:navigate>
+                        {{ __('Jobs') }}
+                    </x-nav-link>
+                    <x-nav-link :href="route('portal.upload')" :active="request()->routeIs('portal.upload')" wire:navigate>
+                        {{ __('Upload') }}
+                    </x-nav-link>
+                    <x-nav-link :href="route('billing.index')" :active="request()->routeIs('billing.*')" wire:navigate>
+                        {{ __('Billing') }}
+                    </x-nav-link>
                 </div>
             </div>
 
@@ -83,6 +92,15 @@ new class extends Component
         <div class="pt-2 pb-3 space-y-1">
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
                 {{ __('Dashboard') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('portal.jobs.index')" :active="request()->routeIs('portal.jobs.*')" wire:navigate>
+                {{ __('Jobs') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('portal.upload')" :active="request()->routeIs('portal.upload')" wire:navigate>
+                {{ __('Upload') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('billing.index')" :active="request()->routeIs('billing.*')" wire:navigate>
+                {{ __('Billing') }}
             </x-responsive-nav-link>
         </div>
 
