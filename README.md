@@ -61,6 +61,10 @@ Composer commands (always via Sail):
     ./vendor/bin/sail composer install
     ./vendor/bin/sail composer require vendor/package
 
+### Create Admin User
+
+    ./vendor/bin/sail artisan app:bootstrap-users
+
 ---
 
 ## Project Modules (What lives where)
@@ -122,10 +126,10 @@ Do not expose raw storage paths publicly.
 
 ---
 
-## Roles & Access (High-level)
-- Customer: portal access
-- Admin: Filament admin access
-- Verifier Service: Sanctum token access to verifier endpoints
+## Roles
+- customer: portal access
+- admin: Filament admin access
+- verifier-service: Sanctum token access to verifier endpoints
 
 ---
 

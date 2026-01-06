@@ -1,12 +1,14 @@
 <?php
 
 use App\Models\User;
+use App\Support\Roles;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
 use Livewire\Attributes\Layout;
 use Livewire\Volt\Component;
+use Spatie\Permission\Models\Role;
 
 new #[Layout('layouts.guest')] class extends Component
 {
@@ -28,7 +30,12 @@ new #[Layout('layouts.guest')] class extends Component
 
         $validated['password'] = Hash::make($validated['password']);
 
-        event(new Registered($user = User::create($validated)));
+        $user = User::create($validated);
+
+        Role::findOrCreate(Roles::CUSTOMER, config('auth.defaults.guard'));
+        $user->assignRole(Roles::CUSTOMER);
+
+        event(new Registered($user));
 
         Auth::login($user);
 
