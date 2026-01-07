@@ -38,6 +38,21 @@ class VerifierJobCompleteController
             'error_message' => null,
         ]);
 
+        $job->addLog(
+            'completed',
+            'Job completed via verifier API.',
+            [
+                'output_disk' => $job->output_disk,
+                'output_key' => $job->output_key,
+                'total_emails' => $job->total_emails,
+                'valid_count' => $job->valid_count,
+                'invalid_count' => $job->invalid_count,
+                'risky_count' => $job->risky_count,
+                'unknown_count' => $job->unknown_count,
+            ],
+            $request->user()?->id
+        );
+
         return response()->json([
             'data' => [
                 'id' => (string) $job->id,

@@ -12,6 +12,7 @@ class VerifierJobStatusController
     public function __invoke(UpdateJobStatusRequest $request, VerificationJob $job): JsonResponse
     {
         $status = VerificationJobStatus::from($request->string('status')->toString());
+        $previousStatus = $job->status;
 
         if ($status === VerificationJobStatus::Processing && $job->status !== VerificationJobStatus::Pending) {
             return response()->json([
@@ -41,6 +42,22 @@ class VerifierJobStatusController
         }
 
         $job->update($attributes);
+
+        $context = [
+            'from' => $previousStatus->value,
+            'to' => $job->status->value,
+        ];
+
+        if ($status === VerificationJobStatus::Failed) {
+            $context['error_message'] = $request->input('error_message');
+        }
+
+        $job->addLog(
+            'status_changed',
+            'Status updated via verifier API.',
+            $context,
+            $request->user()?->id
+        );
 
         return response()->json([
             'data' => [

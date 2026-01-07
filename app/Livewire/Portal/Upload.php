@@ -9,9 +9,11 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
+#[Layout('layouts.portal')]
 class Upload extends Component
 {
     use AuthorizesRequests;
@@ -72,6 +74,9 @@ class Upload extends Component
         $storage->storeInput($this->file, $job, $job->input_disk, $job->input_key);
 
         $job->save();
+        $job->addLog('created', 'Job created via customer portal upload.', [
+            'original_filename' => $job->original_filename,
+        ], $user->id);
 
         $this->reset('file');
 

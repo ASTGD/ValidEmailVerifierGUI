@@ -78,8 +78,49 @@ class VerificationJobsTable
                             'error_message' => $data['error_message'],
                             'finished_at' => now(),
                         ]);
+
+                        $record->addLog(
+                            'failed',
+                            'Job marked failed by admin.',
+                            [
+                                'error_message' => $data['error_message'],
+                            ],
+                            auth()->id()
+                        );
                     })
                     ->visible(fn (VerificationJob $record): bool => $record->status !== VerificationJobStatus::Failed),
+                Action::make('retry')
+                    ->label('Retry')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->action(function (VerificationJob $record): void {
+                        $fromStatus = $record->status;
+
+                        $record->update([
+                            'status' => VerificationJobStatus::Pending,
+                            'error_message' => null,
+                            'started_at' => null,
+                            'finished_at' => null,
+                            'output_disk' => null,
+                            'output_key' => null,
+                            'total_emails' => null,
+                            'valid_count' => null,
+                            'invalid_count' => null,
+                            'risky_count' => null,
+                            'unknown_count' => null,
+                        ]);
+
+                        $record->addLog(
+                            'retried',
+                            'Job re-queued by admin.',
+                            [
+                                'from' => $fromStatus->value,
+                                'to' => VerificationJobStatus::Pending->value,
+                            ],
+                            auth()->id()
+                        );
+                    })
+                    ->visible(fn (VerificationJob $record): bool => $record->status === VerificationJobStatus::Failed),
             ]);
     }
 
