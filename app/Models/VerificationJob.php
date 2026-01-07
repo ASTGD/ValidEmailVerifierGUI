@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\VerificationJobStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Model;
 
 class VerificationJob extends Model
@@ -47,5 +48,20 @@ class VerificationJob extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function logs(): HasMany
+    {
+        return $this->hasMany(VerificationJobLog::class, 'verification_job_id');
+    }
+
+    public function addLog(string $event, ?string $message = null, ?array $context = null, ?int $userId = null): VerificationJobLog
+    {
+        return $this->logs()->create([
+            'user_id' => $userId,
+            'event' => $event,
+            'message' => $message,
+            'context' => $context,
+        ]);
     }
 }

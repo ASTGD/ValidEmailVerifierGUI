@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\VerificationJobs;
 
 use App\Filament\Resources\VerificationJobs\Pages\ListVerificationJobs;
+use App\Filament\Resources\VerificationJobs\RelationManagers\VerificationJobLogsRelationManager;
 use App\Filament\Resources\VerificationJobs\Schemas\VerificationJobForm;
 use App\Filament\Resources\VerificationJobs\Tables\VerificationJobsTable;
 use App\Models\VerificationJob;
@@ -31,7 +32,7 @@ class VerificationJobResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            VerificationJobLogsRelationManager::class,
         ];
     }
 

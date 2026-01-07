@@ -2,8 +2,11 @@
 
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\Portal\VerificationJobDownloadController;
+use App\Livewire\Portal\Dashboard;
 use App\Livewire\Portal\JobShow;
 use App\Livewire\Portal\JobsIndex;
+use App\Livewire\Portal\Settings;
+use App\Livewire\Portal\Support;
 use App\Livewire\Portal\Upload;
 use Illuminate\Support\Facades\Route;
 
@@ -21,6 +24,7 @@ Route::middleware(['auth', 'verified'])
     ->prefix('portal')
     ->name('portal.')
     ->group(function () {
+        Route::get('dashboard', Dashboard::class)->name('dashboard');
         Route::get('upload', Upload::class)->name('upload');
         Route::get('jobs', JobsIndex::class)->name('jobs.index');
         Route::get('jobs/{job}', JobShow::class)
@@ -29,6 +33,8 @@ Route::middleware(['auth', 'verified'])
         Route::get('jobs/{job}/download', VerificationJobDownloadController::class)
             ->whereUuid('job')
             ->name('jobs.download');
+        Route::get('settings', Settings::class)->name('settings');
+        Route::get('support', Support::class)->name('support');
     });
 
 Route::middleware(['auth', 'verified'])
