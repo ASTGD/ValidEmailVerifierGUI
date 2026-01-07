@@ -48,6 +48,10 @@ Run migrations:
 
     ./vendor/bin/sail artisan migrate
 
+Reset database + seed dev users:
+
+    ./vendor/bin/sail artisan migrate:fresh --seed
+
 Run tests:
 
     ./vendor/bin/sail artisan test
