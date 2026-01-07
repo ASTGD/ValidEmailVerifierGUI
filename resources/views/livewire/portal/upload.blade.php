@@ -12,6 +12,9 @@
     </x-slot>
 
     <div class="space-y-6">
+        @if($errors->any())
+            <x-flash type="error" :message="__('Please fix the errors below and try again.')" />
+        @endif
         <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6">
             <form wire:submit.prevent="save" class="space-y-6" enctype="multipart/form-data">
                 <div>
@@ -29,8 +32,9 @@
                 </div>
 
                 <div class="flex items-center gap-4">
-                    <x-primary-button wire:loading.attr="disabled">
-                        {{ __('Upload list') }}
+                    <x-primary-button wire:loading.attr="disabled" wire:target="save">
+                        <span wire:loading.remove wire:target="save">{{ __('Upload list') }}</span>
+                        <span wire:loading wire:target="save">{{ __('Uploading...') }}</span>
                     </x-primary-button>
                     <a href="{{ route('portal.jobs.index') }}" class="text-sm text-gray-600 hover:text-gray-800" wire:navigate>
                         {{ __('Browse existing jobs') }}

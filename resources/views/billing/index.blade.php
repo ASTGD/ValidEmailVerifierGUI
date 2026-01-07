@@ -8,11 +8,6 @@
         </x-slot>
 
         <div class="space-y-6">
-            @if (session('status'))
-                <div class="rounded-md bg-green-50 p-4 text-sm text-green-700">
-                    {{ session('status') }}
-                </div>
-            @endif
 
             <div class="grid gap-4 md:grid-cols-2">
                 <div class="rounded-lg border border-gray-200 p-4">
