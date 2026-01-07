@@ -20,8 +20,6 @@
 
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #0a0f1c;
-            color: #ffffff;
             line-height: 1.6;
             overflow-x: hidden;
         }
@@ -35,6 +33,31 @@
             list-style: none;
         }
 
+        /* ==================== COLOR VARIABLES ==================== */
+        :root {
+            /* Dark Theme Colors */
+            --dark-bg: #0a0f1c;
+            --dark-bg-secondary: #0d1321;
+            --dark-text: #ffffff;
+            --dark-text-muted: #a0aec0;
+            --dark-card-bg: rgba(255, 255, 255, 0.05);
+            --dark-border: rgba(255, 255, 255, 0.1);
+
+            /* Light Theme Colors */
+            --light-bg: #ffffff;
+            --light-bg-secondary: #f8fafc;
+            --light-text: #1a202c;
+            --light-text-muted: #64748b;
+            --light-card-bg: #ffffff;
+            --light-border: #e2e8f0;
+
+            /* Accent Colors */
+            --primary-start: #667eea;
+            --primary-end: #764ba2;
+            --success: #48bb78;
+            --warning: #fbbf24;
+        }
+
         /* ==================== UTILITY CLASSES ==================== */
         .container {
             max-width: 1200px;
@@ -46,6 +69,35 @@
             padding: 100px 0;
         }
 
+        /* Dark Section Styling */
+        .section-dark {
+            background-color: var(--dark-bg);
+            color: var(--dark-text);
+        }
+
+        .section-dark .section-title p,
+        .section-dark .text-muted {
+            color: var(--dark-text-muted);
+        }
+
+        /* Light Section Styling */
+        .section-light {
+            background-color: var(--light-bg);
+            color: var(--light-text);
+        }
+
+        .section-light-alt {
+            background-color: var(--light-bg-secondary);
+            color: var(--light-text);
+        }
+
+        .section-light .section-title p,
+        .section-light .text-muted,
+        .section-light-alt .section-title p,
+        .section-light-alt .text-muted {
+            color: var(--light-text-muted);
+        }
+
         .section-title {
             text-align: center;
             margin-bottom: 60px;
@@ -55,14 +107,13 @@
             font-size: 2.5rem;
             font-weight: 700;
             margin-bottom: 15px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
 
         .section-title p {
-            color: #a0aec0;
             font-size: 1.1rem;
             max-width: 600px;
             margin: 0 auto;
@@ -81,7 +132,7 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
             color: #fff;
             box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
         }
@@ -99,7 +150,31 @@
 
         .btn-secondary:hover {
             background: rgba(255, 255, 255, 0.1);
-            border-color: #667eea;
+            border-color: var(--primary-start);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--primary-start);
+            border: 2px solid var(--primary-start);
+        }
+
+        .btn-outline:hover {
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
+            color: #fff;
+            border-color: transparent;
+        }
+
+        .btn-light {
+            background: transparent;
+            color: var(--light-text);
+            border: 2px solid var(--light-border);
+        }
+
+        .btn-light:hover {
+            background: var(--light-bg-secondary);
+            border-color: var(--primary-start);
+            color: var(--primary-start);
         }
 
         /* ==================== 1. NAVIGATION ==================== */
@@ -114,7 +189,7 @@
         }
 
         .navbar.scrolled {
-            background: rgba(10, 15, 28, 0.95);
+            background: rgba(10, 15, 28, 0.98);
             backdrop-filter: blur(20px);
             padding: 15px 0;
             box-shadow: 0 5px 30px rgba(0, 0, 0, 0.3);
@@ -135,12 +210,12 @@
         }
 
         .logo i {
-            color: #667eea;
+            color: var(--primary-start);
             font-size: 1.8rem;
         }
 
         .logo span {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -149,11 +224,11 @@
         .nav-links {
             display: flex;
             align-items: center;
-            gap: 35px;
+            gap: 30px;
         }
 
         .nav-links a {
-            color: #a0aec0;
+            color: var(--dark-text-muted);
             font-weight: 500;
             transition: color 0.3s ease;
             position: relative;
@@ -166,7 +241,7 @@
             left: 0;
             width: 0;
             height: 2px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
             transition: width 0.3s ease;
         }
 
@@ -178,9 +253,45 @@
             width: 100%;
         }
 
+        .nav-buttons {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
         .nav-btn {
             padding: 10px 25px;
             font-size: 0.9rem;
+        }
+
+        .btn-login {
+            background: transparent;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .btn-login:hover {
+            color: var(--primary-start);
+        }
+
+        .btn-register {
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
+            color: #fff;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 50px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-register:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
         }
 
         .mobile-menu-btn {
@@ -192,7 +303,7 @@
             cursor: pointer;
         }
 
-        /* ==================== 2. HERO SECTION ==================== */
+        /* ==================== 2. HERO SECTION (DARK) ==================== */
         .hero {
             min-height: 100vh;
             display: flex;
@@ -200,6 +311,8 @@
             position: relative;
             overflow: hidden;
             padding-top: 80px;
+            background: var(--dark-bg);
+            color: var(--dark-text);
         }
 
         .hero::before {
@@ -236,7 +349,7 @@
         }
 
         .hero-content h1 span {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -244,7 +357,7 @@
 
         .hero-content p {
             font-size: 1.2rem;
-            color: #a0aec0;
+            color: var(--dark-text-muted);
             margin-bottom: 35px;
             max-width: 500px;
         }
@@ -266,12 +379,12 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            color: #a0aec0;
+            color: var(--dark-text-muted);
             font-size: 0.9rem;
         }
 
         .trust-badge i {
-            color: #48bb78;
+            color: var(--success);
             font-size: 1.1rem;
         }
 
@@ -296,7 +409,7 @@
 
         .email-input-demo label {
             display: block;
-            color: #a0aec0;
+            color: var(--dark-text-muted);
             font-size: 0.85rem;
             margin-bottom: 10px;
         }
@@ -314,14 +427,14 @@
         }
 
         .email-input-demo input:focus {
-            border-color: #667eea;
+            border-color: var(--primary-start);
         }
 
         .verify-btn-demo {
             width: 100%;
             padding: 15px;
             border-radius: 10px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
             color: #fff;
             font-weight: 600;
             border: none;
@@ -350,25 +463,25 @@
         }
 
         .result-item span:first-child {
-            color: #a0aec0;
+            color: var(--dark-text-muted);
         }
 
         .result-item .valid {
-            color: #48bb78;
+            color: var(--success);
             font-weight: 600;
         }
 
         .result-item .score {
-            color: #667eea;
+            color: var(--primary-start);
             font-weight: 600;
         }
 
-        /* ==================== 3. STATISTICS ==================== */
+        /* ==================== 3. STATISTICS (LIGHT) ==================== */
         .statistics {
-            background: linear-gradient(145deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-            padding: 60px 0;
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            padding: 80px 0;
+            border-top: 1px solid var(--light-border);
+            border-bottom: 1px solid var(--light-border);
         }
 
         .stats-grid {
@@ -379,12 +492,21 @@
 
         .stat-item {
             text-align: center;
+            padding: 30px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-item:hover {
+            transform: translateY(-5px);
         }
 
         .stat-number {
             font-size: 3rem;
             font-weight: 800;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -392,13 +514,160 @@
         }
 
         .stat-label {
-            color: #a0aec0;
+            color: var(--light-text-muted);
             font-size: 1rem;
+            font-weight: 500;
         }
 
-        /* ==================== 4. HOW IT WORKS ==================== */
+        /* ==================== 4. PRICING (LIGHT) ==================== */
+        .pricing {
+            background: var(--light-bg);
+            color: var(--light-text);
+        }
+
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 25px;
+            align-items: start;
+        }
+
+        .pricing-card {
+            background: var(--light-bg);
+            border: 2px solid var(--light-border);
+            border-radius: 25px;
+            padding: 40px 30px;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .pricing-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px rgba(102, 126, 234, 0.15);
+            border-color: var(--primary-start);
+        }
+
+        .pricing-card.popular {
+            background: linear-gradient(145deg, var(--dark-bg) 0%, var(--dark-bg-secondary) 100%);
+            border-color: var(--primary-start);
+            color: var(--dark-text);
+            transform: scale(1.05);
+        }
+
+        .pricing-card.popular:hover {
+            transform: scale(1.05) translateY(-10px);
+        }
+
+        .popular-badge {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
+            color: white;
+            padding: 8px 25px;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .pricing-card h3 {
+            font-size: 1.4rem;
+            margin-bottom: 10px;
+        }
+
+        .pricing-card .subtitle {
+            color: var(--light-text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 25px;
+        }
+
+        .pricing-card.popular .subtitle {
+            color: var(--dark-text-muted);
+        }
+
+        .price {
+            margin-bottom: 30px;
+        }
+
+        .price .amount {
+            font-size: 3rem;
+            font-weight: 800;
+        }
+
+        .price .period {
+            color: var(--light-text-muted);
+            font-size: 0.95rem;
+        }
+
+        .pricing-card.popular .price .period {
+            color: var(--dark-text-muted);
+        }
+
+        .pricing-features {
+            margin-bottom: 30px;
+            text-align: left;
+        }
+
+        .pricing-features li {
+            padding: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--light-text-muted);
+            font-size: 0.95rem;
+        }
+
+        .pricing-card.popular .pricing-features li {
+            color: var(--dark-text-muted);
+        }
+
+        .pricing-features li i {
+            color: var(--success);
+            font-size: 0.9rem;
+        }
+
+        .pricing-card .btn {
+            width: 100%;
+        }
+
+        .money-back {
+            text-align: center;
+            margin-top: 50px;
+            padding: 30px;
+            background: linear-gradient(145deg, rgba(72, 187, 120, 0.1) 0%, rgba(72, 187, 120, 0.05) 100%);
+            border: 2px solid rgba(72, 187, 120, 0.3);
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .money-back i {
+            font-size: 2.5rem;
+            color: var(--success);
+        }
+
+        .money-back div {
+            text-align: left;
+        }
+
+        .money-back h4 {
+            color: var(--success);
+            margin-bottom: 5px;
+        }
+
+        .money-back p {
+            color: var(--light-text-muted);
+            font-size: 0.9rem;
+        }
+
+        /* ==================== 5. HOW IT WORKS (DARK) ==================== */
         .how-it-works {
-            background: #0d1321;
+            background: var(--dark-bg);
+            color: var(--dark-text);
         }
 
         .steps-grid {
@@ -415,7 +684,7 @@
             left: 15%;
             right: 15%;
             height: 2px;
-            background: linear-gradient(90deg, #667eea, #764ba2);
+            background: linear-gradient(90deg, var(--primary-start), var(--primary-end));
             opacity: 0.3;
         }
 
@@ -440,7 +709,7 @@
             width: 60px;
             height: 60px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -452,7 +721,7 @@
         .step-icon {
             font-size: 2.5rem;
             margin-bottom: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -464,13 +733,14 @@
         }
 
         .step-card p {
-            color: #a0aec0;
+            color: var(--dark-text-muted);
             font-size: 0.95rem;
         }
 
-        /* ==================== 5. WHY CHOOSE US ==================== */
+        /* ==================== 6. WHY CHOOSE US (LIGHT) ==================== */
         .why-choose {
-            background: #0a0f1c;
+            background: var(--light-bg-secondary);
+            color: var(--light-text);
         }
 
         .features-grid {
@@ -481,23 +751,23 @@
 
         .feature-card {
             padding: 40px 30px;
-            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: var(--light-bg);
+            border: 2px solid var(--light-border);
             border-radius: 20px;
             transition: all 0.3s ease;
         }
 
         .feature-card:hover {
             transform: translateY(-5px);
-            border-color: rgba(102, 126, 234, 0.3);
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+            border-color: var(--primary-start);
+            box-shadow: 0 15px 35px rgba(102, 126, 234, 0.1);
         }
 
         .feature-icon {
             width: 70px;
             height: 70px;
             border-radius: 15px;
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -506,7 +776,7 @@
         }
 
         .feature-icon i {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -515,145 +785,18 @@
         .feature-card h3 {
             font-size: 1.3rem;
             margin-bottom: 15px;
+            color: var(--light-text);
         }
 
         .feature-card p {
-            color: #a0aec0;
+            color: var(--light-text-muted);
             font-size: 0.95rem;
         }
 
-        /* ==================== 6. PRICING ==================== */
-        .pricing {
-            background: #0d1321;
-        }
-
-        .pricing-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 25px;
-            align-items: start;
-        }
-
-        .pricing-card {
-            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 25px;
-            padding: 40px 30px;
-            text-align: center;
-            transition: all 0.3s ease;
-            position: relative;
-        }
-
-        .pricing-card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
-        }
-
-        .pricing-card.popular {
-            background: linear-gradient(145deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
-            border-color: rgba(102, 126, 234, 0.3);
-            transform: scale(1.05);
-        }
-
-        .pricing-card.popular:hover {
-            transform: scale(1.05) translateY(-10px);
-        }
-
-        .popular-badge {
-            position: absolute;
-            top: -15px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 8px 25px;
-            border-radius: 50px;
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-
-        .pricing-card h3 {
-            font-size: 1.4rem;
-            margin-bottom: 10px;
-        }
-
-        .pricing-card .subtitle {
-            color: #a0aec0;
-            font-size: 0.9rem;
-            margin-bottom: 25px;
-        }
-
-        .price {
-            margin-bottom: 30px;
-        }
-
-        .price .amount {
-            font-size: 3rem;
-            font-weight: 800;
-        }
-
-        .price .period {
-            color: #a0aec0;
-            font-size: 0.95rem;
-        }
-
-        .pricing-features {
-            margin-bottom: 30px;
-            text-align: left;
-        }
-
-        .pricing-features li {
-            padding: 10px 0;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            color: #a0aec0;
-            font-size: 0.95rem;
-        }
-
-        .pricing-features li i {
-            color: #48bb78;
-            font-size: 0.9rem;
-        }
-
-        .pricing-card .btn {
-            width: 100%;
-        }
-
-        .money-back {
-            text-align: center;
-            margin-top: 50px;
-            padding: 30px;
-            background: linear-gradient(145deg, rgba(72, 187, 120, 0.1) 0%, rgba(72, 187, 120, 0.05) 100%);
-            border: 1px solid rgba(72, 187, 120, 0.2);
-            border-radius: 15px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 15px;
-        }
-
-        .money-back i {
-            font-size: 2.5rem;
-            color: #48bb78;
-        }
-
-        .money-back div {
-            text-align: left;
-        }
-
-        .money-back h4 {
-            color: #48bb78;
-            margin-bottom: 5px;
-        }
-
-        .money-back p {
-            color: #a0aec0;
-            font-size: 0.9rem;
-        }
-
-        /* ==================== 7. TESTIMONIALS ==================== */
+        /* ==================== 7. TESTIMONIALS (LIGHT) ==================== */
         .testimonials {
-            background: #0a0f1c;
+            background: var(--light-bg);
+            color: var(--light-text);
         }
 
         .testimonials-grid {
@@ -663,8 +806,8 @@
         }
 
         .testimonial-card {
-            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: var(--light-bg);
+            border: 2px solid var(--light-border);
             border-radius: 20px;
             padding: 35px;
             transition: all 0.3s ease;
@@ -672,7 +815,8 @@
 
         .testimonial-card:hover {
             transform: translateY(-5px);
-            border-color: rgba(102, 126, 234, 0.3);
+            border-color: var(--primary-start);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.1);
         }
 
         .testimonial-header {
@@ -686,39 +830,42 @@
             width: 60px;
             height: 60px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 1.5rem;
             font-weight: 700;
+            color: white;
         }
 
         .testimonial-info h4 {
             font-size: 1.1rem;
             margin-bottom: 3px;
+            color: var(--light-text);
         }
 
         .testimonial-info p {
-            color: #a0aec0;
+            color: var(--light-text-muted);
             font-size: 0.85rem;
         }
 
         .testimonial-rating {
-            color: #fbbf24;
+            color: var(--warning);
             margin-bottom: 15px;
         }
 
         .testimonial-text {
-            color: #a0aec0;
+            color: var(--light-text-muted);
             font-size: 0.95rem;
             line-height: 1.7;
             font-style: italic;
         }
 
-        /* ==================== 8. FAQ ==================== */
+        /* ==================== 8. FAQ (DARK) ==================== */
         .faq {
-            background: #0d1321;
+            background: var(--dark-bg-secondary);
+            color: var(--dark-text);
         }
 
         .faq-container {
@@ -747,11 +894,12 @@
             cursor: pointer;
             font-weight: 600;
             font-size: 1.05rem;
+            color: var(--dark-text);
         }
 
         .faq-question i {
             transition: transform 0.3s ease;
-            color: #667eea;
+            color: var(--primary-start);
         }
 
         .faq-item.active .faq-question i {
@@ -770,13 +918,14 @@
 
         .faq-answer p {
             padding: 0 30px 25px;
-            color: #a0aec0;
+            color: var(--dark-text-muted);
             line-height: 1.7;
         }
 
-        /* ==================== 9. CONTACT ==================== */
+        /* ==================== 9. CONTACT (LIGHT) ==================== */
         .contact {
-            background: #0a0f1c;
+            background: var(--light-bg-secondary);
+            color: var(--light-text);
         }
 
         .contact-container {
@@ -789,10 +938,11 @@
         .contact-info h3 {
             font-size: 2rem;
             margin-bottom: 20px;
+            color: var(--light-text);
         }
 
-        .contact-info p {
-            color: #a0aec0;
+        .contact-info > p {
+            color: var(--light-text-muted);
             margin-bottom: 30px;
             font-size: 1.05rem;
         }
@@ -813,21 +963,21 @@
             width: 50px;
             height: 50px;
             border-radius: 12px;
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #667eea;
+            color: var(--primary-start);
             font-size: 1.2rem;
         }
 
         .contact-item span {
-            color: #a0aec0;
+            color: var(--light-text-muted);
         }
 
         .contact-form {
-            background: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: var(--light-bg);
+            border: 2px solid var(--light-border);
             border-radius: 25px;
             padding: 40px;
         }
@@ -839,8 +989,9 @@
         .form-group label {
             display: block;
             margin-bottom: 10px;
-            color: #a0aec0;
+            color: var(--light-text-muted);
             font-size: 0.9rem;
+            font-weight: 500;
         }
 
         .form-group input,
@@ -848,9 +999,9 @@
             width: 100%;
             padding: 15px 20px;
             border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(0, 0, 0, 0.3);
-            color: #fff;
+            border: 2px solid var(--light-border);
+            background: var(--light-bg);
+            color: var(--light-text);
             font-size: 1rem;
             font-family: inherit;
             outline: none;
@@ -859,7 +1010,7 @@
 
         .form-group input:focus,
         .form-group textarea:focus {
-            border-color: #667eea;
+            border-color: var(--primary-start);
         }
 
         .form-group textarea {
@@ -871,9 +1022,10 @@
             width: 100%;
         }
 
-        /* ==================== 10. FOOTER ==================== */
+        /* ==================== 10. FOOTER (DARK) ==================== */
         .footer {
-            background: #070a12;
+            background: var(--dark-bg);
+            color: var(--dark-text);
             padding: 80px 0 30px;
             border-top: 1px solid rgba(255, 255, 255, 0.05);
         }
@@ -890,7 +1042,7 @@
         }
 
         .footer-brand p {
-            color: #a0aec0;
+            color: var(--dark-text-muted);
             margin-bottom: 25px;
             font-size: 0.95rem;
         }
@@ -908,13 +1060,13 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #a0aec0;
+            color: var(--dark-text-muted);
             font-size: 1.1rem;
             transition: all 0.3s ease;
         }
 
         .social-links a:hover {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
             color: #fff;
             transform: translateY(-3px);
         }
@@ -922,6 +1074,7 @@
         .footer-column h4 {
             font-size: 1.1rem;
             margin-bottom: 25px;
+            color: var(--dark-text);
         }
 
         .footer-column ul li {
@@ -929,13 +1082,13 @@
         }
 
         .footer-column ul li a {
-            color: #a0aec0;
+            color: var(--dark-text-muted);
             font-size: 0.95rem;
             transition: color 0.3s ease;
         }
 
         .footer-column ul li a:hover {
-            color: #667eea;
+            color: var(--primary-start);
         }
 
         .footer-bottom {
@@ -949,7 +1102,7 @@
         }
 
         .footer-bottom p {
-            color: #a0aec0;
+            color: var(--dark-text-muted);
             font-size: 0.9rem;
         }
 
@@ -959,13 +1112,13 @@
         }
 
         .footer-bottom-links a {
-            color: #a0aec0;
+            color: var(--dark-text-muted);
             font-size: 0.9rem;
             transition: color 0.3s ease;
         }
 
         .footer-bottom-links a:hover {
-            color: #667eea;
+            color: var(--primary-start);
         }
 
         /* ==================== 11. FLOATING CHAT BUTTON ==================== */
@@ -976,7 +1129,7 @@
             width: 65px;
             height: 65px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1001,7 +1154,7 @@
             position: absolute;
             right: 80px;
             background: #fff;
-            color: #0a0f1c;
+            color: var(--dark-bg);
             padding: 10px 20px;
             border-radius: 10px;
             font-size: 0.9rem;
@@ -1010,6 +1163,7 @@
             opacity: 0;
             visibility: hidden;
             transition: all 0.3s ease;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
         }
 
         .chat-button:hover .chat-tooltip {
@@ -1059,6 +1213,151 @@
             font-weight: 500;
         }
 
+        .mobile-auth-btns {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* ==================== AUTH MODAL ==================== */
+        .auth-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 15, 28, 0.9);
+            backdrop-filter: blur(10px);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .auth-modal.active {
+            display: flex;
+        }
+
+        .auth-modal-content {
+            background: var(--light-bg);
+            border-radius: 25px;
+            padding: 50px 40px;
+            max-width: 450px;
+            width: 100%;
+            position: relative;
+            color: var(--light-text);
+        }
+
+        .auth-modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--light-text-muted);
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .auth-modal-close:hover {
+            color: var(--light-text);
+        }
+
+        .auth-modal-content h2 {
+            text-align: center;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--primary-start) 0%, var(--primary-end) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .auth-modal-content .subtitle {
+            text-align: center;
+            color: var(--light-text-muted);
+            margin-bottom: 30px;
+        }
+
+        .auth-form .form-group {
+            margin-bottom: 20px;
+        }
+
+        .auth-form .btn {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .auth-divider {
+            display: flex;
+            align-items: center;
+            margin: 25px 0;
+            color: var(--light-text-muted);
+        }
+
+        .auth-divider::before,
+        .auth-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--light-border);
+        }
+
+        .auth-divider span {
+            padding: 0 15px;
+            font-size: 0.9rem;
+        }
+
+        .social-auth-btns {
+            display: flex;
+            gap: 15px;
+        }
+
+        .social-auth-btn {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid var(--light-border);
+            border-radius: 12px;
+            background: var(--light-bg);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-weight: 500;
+            color: var(--light-text);
+        }
+
+        .social-auth-btn:hover {
+            border-color: var(--primary-start);
+            background: var(--light-bg-secondary);
+        }
+
+        .social-auth-btn i {
+            font-size: 1.2rem;
+        }
+
+        .auth-switch {
+            text-align: center;
+            margin-top: 25px;
+            color: var(--light-text-muted);
+        }
+
+        .auth-switch a {
+            color: var(--primary-start);
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .auth-switch a:hover {
+            text-decoration: underline;
+        }
+
         /* ==================== RESPONSIVE ==================== */
         @media (max-width: 1200px) {
             .pricing-grid {
@@ -1071,7 +1370,8 @@
         }
 
         @media (max-width: 992px) {
-            .nav-links {
+            .nav-links,
+            .nav-buttons {
                 display: none;
             }
 
@@ -1148,7 +1448,11 @@
 
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
-                gap: 30px;
+                gap: 20px;
+            }
+
+            .stat-item {
+                padding: 20px;
             }
 
             .stat-number {
@@ -1194,6 +1498,15 @@
                 width: 100%;
                 max-width: 300px;
             }
+
+            .money-back {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .money-back div {
+                text-align: center;
+            }
         }
 
         @media (max-width: 480px) {
@@ -1219,6 +1532,10 @@
                 bottom: 20px;
                 right: 20px;
             }
+
+            .auth-modal-content {
+                padding: 40px 25px;
+            }
         }
     </style>
 </head>
@@ -1233,14 +1550,19 @@
             </a>
             <ul class="nav-links">
                 <li><a href="#home">Home</a></li>
+                <li><a href="#pricing">Pricing</a></li>
                 <li><a href="#how-it-works">How It Works</a></li>
                 <li><a href="#features">Features</a></li>
-                <li><a href="#pricing">Pricing</a></li>
                 <li><a href="#testimonials">Testimonials</a></li>
                 <li><a href="#faq">FAQ</a></li>
                 <li><a href="#contact">Contact</a></li>
-                <li><a href="#" class="btn btn-primary nav-btn">Try Free</a></li>
             </ul>
+            <div class="nav-buttons">
+                <button class="btn-login" id="loginBtn">Login</button>
+                <button class="btn-register" id="registerBtn">
+                    <i class="fas fa-user-plus"></i> Register
+                </button>
+            </div>
             <button class="mobile-menu-btn" id="mobileMenuBtn">
                 <i class="fas fa-bars"></i>
             </button>
@@ -1254,17 +1576,100 @@
         </button>
         <ul>
             <li><a href="#home" class="mobile-link">Home</a></li>
+            <li><a href="#pricing" class="mobile-link">Pricing</a></li>
             <li><a href="#how-it-works" class="mobile-link">How It Works</a></li>
             <li><a href="#features" class="mobile-link">Features</a></li>
-            <li><a href="#pricing" class="mobile-link">Pricing</a></li>
             <li><a href="#testimonials" class="mobile-link">Testimonials</a></li>
             <li><a href="#faq" class="mobile-link">FAQ</a></li>
             <li><a href="#contact" class="mobile-link">Contact</a></li>
-            <li><a href="#" class="btn btn-primary" style="margin-top: 20px;">Try Free</a></li>
         </ul>
+        <div class="mobile-auth-btns">
+            <button class="btn btn-secondary" id="mobileLoginBtn">Login</button>
+            <button class="btn btn-primary" id="mobileRegisterBtn">Register</button>
+        </div>
     </div>
 
-    <!-- ==================== 2. HERO SECTION ==================== -->
+    <!-- Login Modal -->
+    <div class="auth-modal" id="loginModal">
+        <div class="auth-modal-content">
+            <button class="auth-modal-close" id="loginModalClose">
+                <i class="fas fa-times"></i>
+            </button>
+            <h2>Welcome Back!</h2>
+            <p class="subtitle">Login to your dashboard</p>
+            <form class="auth-form" id="loginForm">
+                <div class="form-group">
+                    <label for="loginEmail">Email Address</label>
+                    <input type="email" id="loginEmail" placeholder="john@example.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" placeholder="Enter your password" required>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-sign-in-alt"></i> Login
+                </button>
+            </form>
+            <div class="auth-divider">
+                <span>or continue with</span>
+            </div>
+            <div class="social-auth-btns">
+                <button class="social-auth-btn">
+                    <i class="fab fa-google"></i> Google
+                </button>
+                <button class="social-auth-btn">
+                    <i class="fab fa-github"></i> GitHub
+                </button>
+            </div>
+            <p class="auth-switch">
+                Don't have an account? <a id="switchToRegister">Register</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- Register Modal -->
+    <div class="auth-modal" id="registerModal">
+        <div class="auth-modal-content">
+            <button class="auth-modal-close" id="registerModalClose">
+                <i class="fas fa-times"></i>
+            </button>
+            <h2>Create Account</h2>
+            <p class="subtitle">Start verifying emails for free</p>
+            <form class="auth-form" id="registerForm">
+                <div class="form-group">
+                    <label for="registerName">Full Name</label>
+                    <input type="text" id="registerName" placeholder="John Doe" required>
+                </div>
+                <div class="form-group">
+                    <label for="registerEmail">Email Address</label>
+                    <input type="email" id="registerEmail" placeholder="john@example.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="registerPassword">Password</label>
+                    <input type="password" id="registerPassword" placeholder="Create a password" required>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-user-plus"></i> Create Account
+                </button>
+            </form>
+            <div class="auth-divider">
+                <span>or continue with</span>
+            </div>
+            <div class="social-auth-btns">
+                <button class="social-auth-btn">
+                    <i class="fab fa-google"></i> Google
+                </button>
+                <button class="social-auth-btn">
+                    <i class="fab fa-github"></i> GitHub
+                </button>
+            </div>
+            <p class="auth-switch">
+                Already have an account? <a id="switchToLogin">Login</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- ==================== 2. HERO SECTION (DARK) ==================== -->
     <section class="hero" id="home">
         <div class="container">
             <div class="hero-content">
@@ -1321,12 +1726,12 @@
         </div>
     </section>
 
-    <!-- ==================== 3. STATISTICS ==================== -->
+    <!-- ==================== 3. STATISTICS (LIGHT) ==================== -->
     <section class="statistics">
         <div class="container">
             <div class="stats-grid">
                 <div class="stat-item">
-                    <div class="stat-number" data-target="10">10M+</div>
+                    <div class="stat-number">10M+</div>
                     <div class="stat-label">Emails Verified</div>
                 </div>
                 <div class="stat-item">
@@ -1345,8 +1750,103 @@
         </div>
     </section>
 
-    <!-- ==================== 4. HOW IT WORKS ==================== -->
-    <section class="how-it-works section" id="how-it-works">
+    <!-- ==================== 4. PRICING (LIGHT) - MOVED HERE ==================== -->
+    <section class="pricing section section-light" id="pricing">
+        <div class="container">
+            <div class="section-title">
+                <h2>Simple, Transparent Pricing</h2>
+                <p>Choose the perfect plan for your email verification needs</p>
+            </div>
+            <div class="pricing-grid">
+                <!-- Free Plan -->
+                <div class="pricing-card">
+                    <h3>Free</h3>
+                    <p class="subtitle">For getting started</p>
+                    <div class="price">
+                        <span class="amount">$0</span>
+                        <span class="period">/month</span>
+                    </div>
+                    <ul class="pricing-features">
+                        <li><i class="fas fa-check"></i> 100 verifications/month</li>
+                        <li><i class="fas fa-check"></i> Single email verification</li>
+                        <li><i class="fas fa-check"></i> Basic email checks</li>
+                        <li><i class="fas fa-check"></i> Email support</li>
+                        <li><i class="fas fa-check"></i> Dashboard access</li>
+                    </ul>
+                    <a href="#" class="btn btn-outline" id="freeStartBtn">Get Started</a>
+                </div>
+
+                <!-- Basic Plan -->
+                <div class="pricing-card">
+                    <h3>Basic</h3>
+                    <p class="subtitle">For small businesses</p>
+                    <div class="price">
+                        <span class="amount">$29</span>
+                        <span class="period">/month</span>
+                    </div>
+                    <ul class="pricing-features">
+                        <li><i class="fas fa-check"></i> 5,000 verifications/month</li>
+                        <li><i class="fas fa-check"></i> Bulk email upload</li>
+                        <li><i class="fas fa-check"></i> Advanced email checks</li>
+                        <li><i class="fas fa-check"></i> Priority email support</li>
+                        <li><i class="fas fa-check"></i> Export to CSV</li>
+                    </ul>
+                    <a href="#" class="btn btn-outline">Choose Basic</a>
+                </div>
+
+                <!-- Pro Plan (Popular) -->
+                <div class="pricing-card popular">
+                    <div class="popular-badge">Most Popular</div>
+                    <h3>Pro</h3>
+                    <p class="subtitle">For growing teams</p>
+                    <div class="price">
+                        <span class="amount">$79</span>
+                        <span class="period">/month</span>
+                    </div>
+                    <ul class="pricing-features">
+                        <li><i class="fas fa-check"></i> 25,000 verifications/month</li>
+                        <li><i class="fas fa-check"></i> API access</li>
+                        <li><i class="fas fa-check"></i> Real-time verification</li>
+                        <li><i class="fas fa-check"></i> Priority support</li>
+                        <li><i class="fas fa-check"></i> Team collaboration</li>
+                        <li><i class="fas fa-check"></i> Detailed analytics</li>
+                    </ul>
+                    <a href="#" class="btn btn-primary">Choose Pro</a>
+                </div>
+
+                <!-- Enterprise Plan -->
+                <div class="pricing-card">
+                    <h3>Enterprise</h3>
+                    <p class="subtitle">For large organizations</p>
+                    <div class="price">
+                        <span class="amount">$199</span>
+                        <span class="period">/month</span>
+                    </div>
+                    <ul class="pricing-features">
+                        <li><i class="fas fa-check"></i> Unlimited verifications</li>
+                        <li><i class="fas fa-check"></i> Dedicated API</li>
+                        <li><i class="fas fa-check"></i> Custom integrations</li>
+                        <li><i class="fas fa-check"></i> 24/7 phone support</li>
+                        <li><i class="fas fa-check"></i> SLA guarantee</li>
+                        <li><i class="fas fa-check"></i> Account manager</li>
+                    </ul>
+                    <a href="#" class="btn btn-outline">Contact Sales</a>
+                </div>
+            </div>
+
+            <!-- Money Back Guarantee -->
+            <div class="money-back">
+                <i class="fas fa-medal"></i>
+                <div>
+                    <h4>30-Day Money-Back Guarantee</h4>
+                    <p>Not satisfied? Get a full refund within 30 days, no questions asked.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== 5. HOW IT WORKS (DARK) ==================== -->
+    <section class="how-it-works section section-dark" id="how-it-works">
         <div class="container">
             <div class="section-title">
                 <h2>How It Works</h2>
@@ -1381,8 +1881,8 @@
         </div>
     </section>
 
-    <!-- ==================== 5. WHY CHOOSE US ==================== -->
-    <section class="why-choose section" id="features">
+    <!-- ==================== 6. WHY CHOOSE US (LIGHT) ==================== -->
+    <section class="why-choose section section-light-alt" id="features">
         <div class="container">
             <div class="section-title">
                 <h2>Why Choose Us</h2>
@@ -1435,103 +1935,8 @@
         </div>
     </section>
 
-    <!-- ==================== 6. PRICING ==================== -->
-    <section class="pricing section" id="pricing">
-        <div class="container">
-            <div class="section-title">
-                <h2>Simple, Transparent Pricing</h2>
-                <p>Choose the perfect plan for your email verification needs</p>
-            </div>
-            <div class="pricing-grid">
-                <!-- Free Plan -->
-                <div class="pricing-card">
-                    <h3>Free</h3>
-                    <p class="subtitle">For getting started</p>
-                    <div class="price">
-                        <span class="amount">$0</span>
-                        <span class="period">/month</span>
-                    </div>
-                    <ul class="pricing-features">
-                        <li><i class="fas fa-check"></i> 100 verifications/month</li>
-                        <li><i class="fas fa-check"></i> Single email verification</li>
-                        <li><i class="fas fa-check"></i> Basic email checks</li>
-                        <li><i class="fas fa-check"></i> Email support</li>
-                        <li><i class="fas fa-check"></i> Dashboard access</li>
-                    </ul>
-                    <a href="#" class="btn btn-secondary">Get Started</a>
-                </div>
-
-                <!-- Basic Plan -->
-                <div class="pricing-card">
-                    <h3>Basic</h3>
-                    <p class="subtitle">For small businesses</p>
-                    <div class="price">
-                        <span class="amount">$29</span>
-                        <span class="period">/month</span>
-                    </div>
-                    <ul class="pricing-features">
-                        <li><i class="fas fa-check"></i> 5,000 verifications/month</li>
-                        <li><i class="fas fa-check"></i> Bulk email upload</li>
-                        <li><i class="fas fa-check"></i> Advanced email checks</li>
-                        <li><i class="fas fa-check"></i> Priority email support</li>
-                        <li><i class="fas fa-check"></i> Export to CSV</li>
-                    </ul>
-                    <a href="#" class="btn btn-secondary">Choose Basic</a>
-                </div>
-
-                <!-- Pro Plan (Popular) -->
-                <div class="pricing-card popular">
-                    <div class="popular-badge">Most Popular</div>
-                    <h3>Pro</h3>
-                    <p class="subtitle">For growing teams</p>
-                    <div class="price">
-                        <span class="amount">$79</span>
-                        <span class="period">/month</span>
-                    </div>
-                    <ul class="pricing-features">
-                        <li><i class="fas fa-check"></i> 25,000 verifications/month</li>
-                        <li><i class="fas fa-check"></i> API access</li>
-                        <li><i class="fas fa-check"></i> Real-time verification</li>
-                        <li><i class="fas fa-check"></i> Priority support</li>
-                        <li><i class="fas fa-check"></i> Team collaboration</li>
-                        <li><i class="fas fa-check"></i> Detailed analytics</li>
-                    </ul>
-                    <a href="#" class="btn btn-primary">Choose Pro</a>
-                </div>
-
-                <!-- Enterprise Plan -->
-                <div class="pricing-card">
-                    <h3>Enterprise</h3>
-                    <p class="subtitle">For large organizations</p>
-                    <div class="price">
-                        <span class="amount">$199</span>
-                        <span class="period">/month</span>
-                    </div>
-                    <ul class="pricing-features">
-                        <li><i class="fas fa-check"></i> Unlimited verifications</li>
-                        <li><i class="fas fa-check"></i> Dedicated API</li>
-                        <li><i class="fas fa-check"></i> Custom integrations</li>
-                        <li><i class="fas fa-check"></i> 24/7 phone support</li>
-                        <li><i class="fas fa-check"></i> SLA guarantee</li>
-                        <li><i class="fas fa-check"></i> Account manager</li>
-                    </ul>
-                    <a href="#" class="btn btn-secondary">Contact Sales</a>
-                </div>
-            </div>
-
-            <!-- Money Back Guarantee -->
-            <div class="money-back">
-                <i class="fas fa-medal"></i>
-                <div>
-                    <h4>30-Day Money-Back Guarantee</h4>
-                    <p>Not satisfied? Get a full refund within 30 days, no questions asked.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- ==================== 7. TESTIMONIALS ==================== -->
-    <section class="testimonials section" id="testimonials">
+    <!-- ==================== 7. TESTIMONIALS (LIGHT) ==================== -->
+    <section class="testimonials section section-light" id="testimonials">
         <div class="container">
             <div class="section-title">
                 <h2>What Our Customers Say</h2>
@@ -1595,8 +2000,8 @@
         </div>
     </section>
 
-    <!-- ==================== 8. FAQ ==================== -->
-    <section class="faq section" id="faq">
+    <!-- ==================== 8. FAQ (DARK) ==================== -->
+    <section class="faq section section-dark" id="faq">
         <div class="container">
             <div class="section-title">
                 <h2>Frequently Asked Questions</h2>
@@ -1666,8 +2071,8 @@
         </div>
     </section>
 
-    <!-- ==================== 9. CONTACT ==================== -->
-    <section class="contact section" id="contact">
+    <!-- ==================== 9. CONTACT (LIGHT) ==================== -->
+    <section class="contact section section-light-alt" id="contact">
         <div class="container">
             <div class="section-title">
                 <h2>Get In Touch</h2>
@@ -1719,7 +2124,7 @@
         </div>
     </section>
 
-    <!-- ==================== 10. FOOTER ==================== -->
+    <!-- ==================== 10. FOOTER (DARK) ==================== -->
     <footer class="footer">
         <div class="container">
             <div class="footer-grid">
@@ -1813,6 +2218,109 @@
             });
         });
 
+        // Auth Modals
+        const loginBtn = document.getElementById('loginBtn');
+        const registerBtn = document.getElementById('registerBtn');
+        const mobileLoginBtn = document.getElementById('mobileLoginBtn');
+        const mobileRegisterBtn = document.getElementById('mobileRegisterBtn');
+        const loginModal = document.getElementById('loginModal');
+        const registerModal = document.getElementById('registerModal');
+        const loginModalClose = document.getElementById('loginModalClose');
+        const registerModalClose = document.getElementById('registerModalClose');
+        const switchToRegister = document.getElementById('switchToRegister');
+        const switchToLogin = document.getElementById('switchToLogin');
+        const freeStartBtn = document.getElementById('freeStartBtn');
+
+        // Open Login Modal
+        loginBtn.addEventListener('click', () => {
+            loginModal.classList.add('active');
+        });
+
+        mobileLoginBtn.addEventListener('click', () => {
+            mobileMenu.classList.remove('active');
+            loginModal.classList.add('active');
+        });
+
+        // Open Register Modal
+        registerBtn.addEventListener('click', () => {
+            registerModal.classList.add('active');
+        });
+
+        mobileRegisterBtn.addEventListener('click', () => {
+            mobileMenu.classList.remove('active');
+            registerModal.classList.add('active');
+        });
+
+        freeStartBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            registerModal.classList.add('active');
+        });
+
+        // Close Modals
+        loginModalClose.addEventListener('click', () => {
+            loginModal.classList.remove('active');
+        });
+
+        registerModalClose.addEventListener('click', () => {
+            registerModal.classList.remove('active');
+        });
+
+        // Switch between modals
+        switchToRegister.addEventListener('click', () => {
+            loginModal.classList.remove('active');
+            registerModal.classList.add('active');
+        });
+
+        switchToLogin.addEventListener('click', () => {
+            registerModal.classList.remove('active');
+            loginModal.classList.add('active');
+        });
+
+        // Close modal on outside click
+        loginModal.addEventListener('click', (e) => {
+            if (e.target === loginModal) {
+                loginModal.classList.remove('active');
+            }
+        });
+
+        registerModal.addEventListener('click', (e) => {
+            if (e.target === registerModal) {
+                registerModal.classList.remove('active');
+            }
+        });
+
+        // Login Form Submit
+        const loginForm = document.getElementById('loginForm');
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const btn = loginForm.querySelector('.btn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+            setTimeout(() => {
+                btn.innerHTML = '<i class="fas fa-check"></i> Success!';
+                setTimeout(() => {
+                    loginModal.classList.remove('active');
+                    btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
+                    alert('Welcome back! Redirecting to dashboard...');
+                }, 1000);
+            }, 1500);
+        });
+
+        // Register Form Submit
+        const registerForm = document.getElementById('registerForm');
+        registerForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const btn = registerForm.querySelector('.btn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating account...';
+            setTimeout(() => {
+                btn.innerHTML = '<i class="fas fa-check"></i> Account Created!';
+                setTimeout(() => {
+                    registerModal.classList.remove('active');
+                    btn.innerHTML = '<i class="fas fa-user-plus"></i> Create Account';
+                    alert('Account created successfully! Redirecting to dashboard...');
+                }, 1000);
+            }, 1500);
+        });
+
         // Demo email verification
         const verifyBtn = document.getElementById('verifyBtn');
         const demoEmail = document.getElementById('demoEmail');
@@ -1845,10 +2353,8 @@
             question.addEventListener('click', () => {
                 const isActive = item.classList.contains('active');
 
-                // Close all items
                 faqItems.forEach(faq => faq.classList.remove('active'));
 
-                // Open clicked item if it wasn't active
                 if (!isActive) {
                     item.classList.add('active');
                 }
@@ -1907,7 +2413,7 @@
             });
         }, observerOptions);
 
-        document.querySelectorAll('.step-card, .feature-card, .pricing-card, .testimonial-card').forEach(el => {
+        document.querySelectorAll('.step-card, .feature-card, .pricing-card, .testimonial-card, .stat-item').forEach(el => {
             el.style.opacity = '0';
             el.style.transform = 'translateY(30px)';
             el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
