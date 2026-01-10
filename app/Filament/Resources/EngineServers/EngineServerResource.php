@@ -22,7 +22,7 @@ class EngineServerResource extends Resource
 
     protected static ?string $navigationLabel = 'Engine Servers';
 
-    protected static ?string $navigationGroup = 'Operations';
+    protected static string|\UnitEnum|null $navigationGroup = 'Operations';
 
     protected static ?int $navigationSort = 2;
 

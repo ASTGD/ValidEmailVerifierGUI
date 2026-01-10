@@ -22,7 +22,7 @@ class SubscriptionResource extends Resource
 
     protected static ?string $navigationLabel = 'Subscriptions';
 
-    protected static ?string $navigationGroup = 'Billing';
+    protected static string|\UnitEnum|null $navigationGroup = 'Billing';
 
     protected static ?int $navigationSort = 1;
 
