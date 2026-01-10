@@ -6,6 +6,7 @@ use App\Enums\VerificationJobStatus;
 use App\Models\VerificationJob;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
+use Filament\Tables\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -63,6 +64,7 @@ class VerificationJobsTable
                     ->options(self::statusOptions()),
             ])
             ->recordActions([
+                ViewAction::make(),
                 Action::make('mark_failed')
                     ->label('Mark Failed')
                     ->color('danger')
@@ -89,6 +91,30 @@ class VerificationJobsTable
                         );
                     })
                     ->visible(fn (VerificationJob $record): bool => $record->status !== VerificationJobStatus::Failed),
+                Action::make('cancel')
+                    ->label('Cancel')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->action(function (VerificationJob $record): void {
+                        $fromStatus = $record->status;
+
+                        $record->update([
+                            'status' => VerificationJobStatus::Failed,
+                            'error_message' => 'Cancelled by admin.',
+                            'finished_at' => now(),
+                        ]);
+
+                        $record->addLog(
+                            'cancelled',
+                            'Job cancelled by admin.',
+                            [
+                                'from' => $fromStatus->value,
+                                'to' => VerificationJobStatus::Failed->value,
+                            ],
+                            auth()->id()
+                        );
+                    })
+                    ->visible(fn (VerificationJob $record): bool => in_array($record->status, [VerificationJobStatus::Pending, VerificationJobStatus::Processing], true)),
                 Action::make('retry')
                     ->label('Retry')
                     ->color('warning')
