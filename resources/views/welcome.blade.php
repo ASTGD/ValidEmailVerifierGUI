@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ asset('css/style.css') }}">
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 
 <body class="bg-[#F8FAFC]">
@@ -141,7 +142,7 @@
                                 1</div>
                             <div>
                                 <h4 class="text-lg font-bold text-[#0F172A]">Upload Your List</h4>
-                                <p class="text-[#64748B]">Drag and drop your CSV or TXT file into the calculator.</p>
+                                <p class="text-[#64748B]">Drag and drop your XLSX, xls, CSV or TXT file into the calculator.</p>
                             </div>
                         </div>
                         <div class="flex gap-5">
@@ -187,7 +188,7 @@
                         <!-- Drop zone now uses flex-grow to fill all available space -->
                         <div id="drop-zone"
                             class="border-2 border-dashed border-[#CBD5E1] rounded-[2.5rem] p-12 text-center transition-all hover:border-[#1E7CCF] bg-[#F8FAFC] cursor-pointer group flex flex-col items-center justify-center flex-grow">
-                            <input type="file" id="file-input" hidden accept=".csv,.txt">
+                            <input type="file" id="file-input" hidden accept=".xls,.xlsx,.csv,.txt">
 
                             <!-- Initial State -->
                             <div id="calc-initial" class="flex flex-col items-center justify-center">
@@ -731,6 +732,9 @@
             if (resultUI.classList.contains('hidden')) fileInput.click();
         };
 
+        //
+
+
         fileInput.onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -738,33 +742,62 @@
             initialUI.classList.add('hidden');
             processingUI.classList.remove('hidden');
 
+            const fileName = file.name.toLowerCase();
             const reader = new FileReader();
-            reader.onload = (event) => {
-                const text = event.target.result;
-                const emails = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-                const count = emails.length;
 
-                // Calculate Price
-                let rate = 0.03;
-                if (count > 5000) rate = 0.02;
-                if (count > 15000) rate = 0.01;
-                const total = (count * rate).toFixed(2);
+            // 1. Check if it's an Excel File
+            if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+                reader.onload = (event) => {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, {
+                        type: 'array'
+                    });
 
-                // Update UI after a short fake "processing" delay for effect
-                setTimeout(() => {
-                    document.getElementById('calc-email-count').innerText = count.toLocaleString();
-                    document.getElementById('calc-total-price').innerText = '$' + total;
+                    let allText = "";
+                    // Loop through all sheets in the Excel file
+                    workbook.SheetNames.forEach(sheetName => {
+                        const worksheet = workbook.Sheets[sheetName];
+                        // Convert sheet to plain text strings to find emails
+                        allText += JSON.stringify(XLSX.utils.sheet_to_json(worksheet));
+                    });
 
-                    processingUI.classList.add('hidden');
-                    resultUI.classList.remove('hidden');
-
-                    document.getElementById('payout-redirect').onclick = () => {
-                        window.location.href = `/checkout?count=${count}&price=${total}`;
-                    };
-                }, 800);
-            };
-            reader.readAsText(file);
+                    processEmailMatches(allText);
+                };
+                reader.readAsArrayBuffer(file); // Binary read for Excel
+            }
+            // 2. Otherwise treat as Plain Text (CSV/TXT)
+            else {
+                reader.onload = (event) => {
+                    processEmailMatches(event.target.result);
+                };
+                reader.readAsText(file); // Text read for CSV/TXT
+            }
         };
+
+        function processEmailMatches(text) {
+            const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+            const emails = text.match(emailRegex) || [];
+            const count = emails.length;
+
+            // Calculate Price based on your Tiers
+            let rate = 0.03;
+            if (count > 5000) rate = 0.02;
+            if (count > 15000) rate = 0.01;
+            const total = (count * rate).toFixed(2);
+
+            // Update UI
+            setTimeout(() => {
+                document.getElementById('calc-email-count').innerText = count.toLocaleString();
+                document.getElementById('calc-total-price').innerText = '$' + total;
+
+                processingUI.classList.add('hidden');
+                resultUI.classList.remove('hidden');
+
+                document.getElementById('payout-redirect').onclick = () => {
+                    window.location.href = `/checkout?count=${count}&price=${total}`;
+                };
+            }, 800);
+        }
     </script>
 </body>
 
