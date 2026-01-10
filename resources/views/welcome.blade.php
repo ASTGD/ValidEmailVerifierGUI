@@ -118,22 +118,22 @@
         </div>
     </section>
 
-    <!-- SECTION 4: SPLIT PRICING & TIERED CALCULATOR -->
+    <!-- SECTION 4: SPLIT PRICING & TIERED CALCULATOR (UNIFORM HEIGHT) -->
     <section id="pricing" class="w-full py-32 bg-[#F1F5F9]">
         <div class="max-w-[1280px] mx-auto px-10">
-            <div class="grid lg:grid-cols-2 gap-16 items-center">
+            <!-- added items-stretch to ensure children have same height -->
+            <div class="grid lg:grid-cols-2 gap-16 items-stretch">
 
-                <!-- Left Side: Tutorial -->
-                <div>
+                <!-- Left Side: Tutorial & Tiers -->
+                <div class="flex flex-col">
                     <div
-                        class="inline-flex items-center gap-2 bg-white text-[#1E7CCF] px-4 py-2 rounded-full text-sm font-bold mb-6 shadow-sm">
+                        class="inline-flex items-center gap-2 bg-white text-[#1E7CCF] px-4 py-2 rounded-full text-sm font-bold mb-6 shadow-sm w-fit">
                         <i data-lucide="tag" class="w-4 h-4"></i> Pay-As-You-Go
                     </div>
                     <h2 class="text-4xl md:text-5xl font-black text-[#0F172A] mb-8 tracking-tight leading-tight">
                         Smart Pricing for <br><span class="text-[#1E7CCF]">Smart Marketers.</span>
                     </h2>
 
-                    <!-- Tutorial Steps -->
                     <div class="space-y-8 mb-12">
                         <div class="flex gap-5">
                             <div
@@ -156,7 +156,7 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-3xl p-8 shadow-xl border border-white">
+                    <div class="bg-white rounded-3xl p-8 shadow-xl border border-white mt-auto">
                         <h4 class="font-bold text-[#0F172A] mb-6 flex items-center gap-2">
                             <i data-lucide="bar-chart-3" class="text-[#1E7CCF]"></i> Volume Discount Tiers
                         </h4>
@@ -180,43 +180,67 @@
                     </div>
                 </div>
 
-                <!-- Right Side: The Tool -->
-                <div class="bg-white p-4 rounded-[3rem] shadow-2xl border border-white relative">
-                    <div id="drop-zone"
-                        class="border-2 border-dashed border-[#CBD5E1] rounded-[2.5rem] p-12 md:p-16 text-center bg-[#F8FAFC] cursor-pointer">
-                        <input type="file" id="file-input" hidden accept=".csv,.txt">
+                <!-- Right Side: The Interactive Tool (Now Uniform Height) -->
+                <div class="flex flex-col h-full">
+                    <div
+                        class="bg-white p-6 rounded-[3rem] shadow-2xl border border-white flex flex-col h-full relative overflow-hidden">
+                        <!-- Drop zone now uses flex-grow to fill all available space -->
+                        <div id="drop-zone"
+                            class="border-2 border-dashed border-[#CBD5E1] rounded-[2.5rem] p-12 text-center transition-all hover:border-[#1E7CCF] bg-[#F8FAFC] cursor-pointer group flex flex-col items-center justify-center flex-grow">
+                            <input type="file" id="file-input" hidden accept=".csv,.txt">
 
-                        <div id="calc-initial">
-                            <i data-lucide="upload-cloud" class="text-[#1E7CCF] w-12 h-12 mx-auto mb-6"></i>
-                            <h3 class="text-2xl font-bold text-[#0F172A] mb-2">Upload Your List</h3>
-                            <p class="text-[#64748B] mb-8 font-medium">Click to browse or drag & drop</p>
-                            <button class="bg-[#1E7CCF] text-white px-8 py-3 rounded-xl font-bold">Select File</button>
-                        </div>
+                            <!-- Initial State -->
+                            <div id="calc-initial" class="flex flex-col items-center justify-center">
+                                <div
+                                    class="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-sm group-hover:scale-110 transition-transform">
+                                    <i data-lucide="upload-cloud" class="text-[#1E7CCF] w-10 h-10"></i>
+                                </div>
+                                <h3 class="text-2xl font-bold text-[#0F172A] mb-2">Upload Your List</h3>
+                                <p class="text-[#64748B] mb-8 font-medium px-4">Click to browse or drag & drop</p>
+                                <button
+                                    class="bg-[#1E7CCF] text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-blue-100 transition-all">
+                                    Select File
+                                </button>
+                            </div>
 
-                        <div id="calc-processing" class="hidden py-10">
-                            <div
-                                class="animate-spin rounded-full h-16 w-16 border-4 border-[#E9F2FB] border-t-[#1E7CCF] mx-auto mb-6">
+                            <!-- Processing State -->
+                            <div id="calc-processing" class="hidden flex flex-col items-center justify-center py-10">
+                                <div
+                                    class="animate-spin rounded-full h-16 w-16 border-4 border-[#E9F2FB] border-t-[#1E7CCF] mb-6">
+                                </div>
+                                <h3 class="text-xl font-bold text-[#0F172A]">Analyzing Tiers...</h3>
                             </div>
-                            <h3 class="text-xl font-bold text-[#0F172A]">Analyzing Tiers...</h3>
-                        </div>
 
-                        <div id="calc-result" class="hidden text-left">
-                            <div class="bg-[#F1F5F9] p-6 rounded-2xl mb-4">
-                                <p class="text-xs font-bold uppercase text-[#64748B]">Emails Found</p>
-                                <h4 id="calc-email-count" class="text-4xl font-black">0</h4>
+                            <!-- Result State -->
+                            <div id="calc-result" class="hidden w-full text-left">
+                                <div class="space-y-4 mb-8">
+                                    <div class="bg-white p-6 rounded-2xl border border-[#E2E8F0]">
+                                        <p class="text-[#64748B] text-xs font-bold uppercase tracking-widest mb-1">
+                                            Email Count</p>
+                                        <h4 id="calc-email-count" class="text-4xl font-black text-[#0F172A]">0</h4>
+                                    </div>
+                                    <div id="price-card"
+                                        class="bg-[#E9F2FB] p-6 rounded-2xl border border-[#1E7CCF]/20">
+                                        <p class="text-[#1E7CCF] text-xs font-bold uppercase tracking-widest mb-1">
+                                            Total Quote</p>
+                                        <h4 id="calc-total-price" class="text-4xl font-black text-[#1E7CCF]">$0.00
+                                        </h4>
+                                    </div>
+                                </div>
+
+                                <div class="flex flex-col gap-3">
+                                    <button id="payout-redirect"
+                                        class="w-full bg-[#1E7CCF] hover:bg-[#1866AD] text-white py-5 rounded-2xl font-bold text-lg shadow-xl shadow-blue-100 transition-all">Proceed
+                                        to Checkout</button>
+                                    <button onclick="location.reload()"
+                                        class="w-full py-4 text-[#64748B] font-bold hover:text-[#0F172A]">Clear and
+                                        Restart</button>
+                                </div>
                             </div>
-                            <div id="price-card" class="bg-[#E9F2FB] p-6 rounded-2xl mb-6 border border-[#1E7CCF]/20">
-                                <p class="text-xs font-bold uppercase text-[#1E7CCF]">Total Cost</p>
-                                <h4 id="calc-total-price" class="text-4xl font-black text-[#1E7CCF]">$0.00</h4>
-                            </div>
-                            <button id="payout-redirect"
-                                class="w-full bg-[#1E7CCF] text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-blue-200">Proceed
-                                to Checkout</button>
-                            <button onclick="location.reload()"
-                                class="w-full mt-4 text-[#64748B] font-medium text-sm">Clear and Start Over</button>
                         </div>
                     </div>
                 </div>
+
             </div>
         </div>
     </section>
@@ -522,35 +546,40 @@
                     </summary>
                     <p class="mt-4 text-[#64748B]">We guarantee 99.9% accuracy through our multi-step SMTP and DNS
                         checking process.</p>
-                </details><details class="group border border-[#E2E8F0] rounded-2xl p-6">
+                </details>
+                <details class="group border border-[#E2E8F0] rounded-2xl p-6">
                     <summary class="list-none font-bold text-lg cursor-pointer flex justify-between">
                         How accurate is the verification?
                         <span class="text-[#1E7CCF]">+</span>
                     </summary>
                     <p class="mt-4 text-[#64748B]">We guarantee 99.9% accuracy through our multi-step SMTP and DNS
                         checking process.</p>
-                </details><details class="group border border-[#E2E8F0] rounded-2xl p-6">
+                </details>
+                <details class="group border border-[#E2E8F0] rounded-2xl p-6">
                     <summary class="list-none font-bold text-lg cursor-pointer flex justify-between">
                         How accurate is the verification?
                         <span class="text-[#1E7CCF]">+</span>
                     </summary>
                     <p class="mt-4 text-[#64748B]">We guarantee 99.9% accuracy through our multi-step SMTP and DNS
                         checking process.</p>
-                </details><details class="group border border-[#E2E8F0] rounded-2xl p-6">
+                </details>
+                <details class="group border border-[#E2E8F0] rounded-2xl p-6">
                     <summary class="list-none font-bold text-lg cursor-pointer flex justify-between">
                         How accurate is the verification?
                         <span class="text-[#1E7CCF]">+</span>
                     </summary>
                     <p class="mt-4 text-[#64748B]">We guarantee 99.9% accuracy through our multi-step SMTP and DNS
                         checking process.</p>
-                </details><details class="group border border-[#E2E8F0] rounded-2xl p-6">
+                </details>
+                <details class="group border border-[#E2E8F0] rounded-2xl p-6">
                     <summary class="list-none font-bold text-lg cursor-pointer flex justify-between">
                         How accurate is the verification?
                         <span class="text-[#1E7CCF]">+</span>
                     </summary>
                     <p class="mt-4 text-[#64748B]">We guarantee 99.9% accuracy through our multi-step SMTP and DNS
                         checking process.</p>
-                </details><details class="group border border-[#E2E8F0] rounded-2xl p-6">
+                </details>
+                <details class="group border border-[#E2E8F0] rounded-2xl p-6">
                     <summary class="list-none font-bold text-lg cursor-pointer flex justify-between">
                         How accurate is the verification?
                         <span class="text-[#1E7CCF]">+</span>
