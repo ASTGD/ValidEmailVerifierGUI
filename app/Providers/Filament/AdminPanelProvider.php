@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Widgets\AdminDashboardHighlights;
 use App\Filament\Widgets\AdminQuickLinks;
 use App\Filament\Widgets\AdminStatsOverview;
 use Filament\Http\Middleware\Authenticate;
@@ -39,6 +40,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
+                AdminDashboardHighlights::class,
                 AdminStatsOverview::class,
                 AdminQuickLinks::class,
                 AccountWidget::class,
