@@ -76,6 +76,37 @@ Optional Accents
   --info: #0EA5E9;
 }
 
+## Tailwind Tokens
+
+The palette is wired into `tailwind.config.js` as theme tokens:
+
+Brand
+- `brand` / `brand-hover` / `brand-active` / `brand-soft`
+
+Surfaces
+- `surface-page` (page background)
+- `surface` (card/surface)
+- `surface-alt` (alternate section)
+
+Borders
+- `border-light` / `border-medium`
+
+Text (ink)
+- `ink-heading` / `ink-body` / `ink-muted` / `ink-disabled`
+
+Status
+- `status-success` / `status-success-light`
+- `status-warning` / `status-warning-light`
+- `status-error` / `status-error-light`
+- `status-info` / `status-info-light`
+
+Accents
+- `accent-purple` / `accent-teal` / `accent-orange`
+
+Examples
+- `bg-brand`, `bg-brand-soft`, `text-ink-heading`, `border-border-light`
+- `bg-status-success-light`, `text-status-error`
+
 ## Typography
 
 Font Family
@@ -83,8 +114,8 @@ Font Family
 
 Base Settings
 - Base font size: 16px
-- Body line height: 1.5
-- Heading line height: 1.2
+- Body line height: 1.5 (use `leading-relaxed` for long text)
+- Heading line height: 1.2 (use `leading-tight`)
 
 Scale (Desktop / Default)
 - text-xs: 12px
@@ -102,6 +133,11 @@ Usage Guidelines
 - Card title: text-base to text-lg, font-semibold
 - Body: text-base
 - Meta / labels: text-sm or text-xs with text-muted
+
+Suggested Settings
+- Font weights: 400 (body), 500 (labels), 600 (headings), 700 (hero only)
+- Letter spacing: use `tracking-wide` for uppercase labels
+- Line length: keep paragraphs around 60-80 characters where possible
 
 ## Notes
 
