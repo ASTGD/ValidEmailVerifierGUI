@@ -1,0 +1,101 @@
+/* --- INDUSTRY STANDARD BASE --- */
+:root {
+    --primary: #1E7CCF;
+    --primary-hover: #1866AD;
+    --primary-active: #14578F;
+    --primary-soft: #E9F2FB;
+    --bg-main: #F8FAFC;
+    --bg-card: #FFFFFF;
+    --bg-alt: #F1F5F9;
+    --text-heading: #0F172A;
+    --text-body: #334155;
+    --text-muted: #64748B;
+    --border-light: #E2E8F0;
+    --border-medium: #CBD5E1;
+    --success: #16A34A;
+    --error: #DC2626;
+    --container-width: 1280px;
+}
+
+body {
+    background-color: var(--bg-main);
+    color: var(--text-body);
+    font-family: 'Inter', sans-serif;
+    line-height: 1.6;
+}
+
+/* Layout Containers */
+.section-full {
+    width: 100%;
+}
+
+.container-custom {
+    max-width: var(--container-width);
+    margin: 0 auto;
+    padding: 0 32px;
+    /* Professional side padding */
+}
+
+/* Typography */
+h1,
+h2,
+h3 {
+    color: var(--text-heading);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+/* Professional SaaS Shadow */
+.soft-shadow {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.04), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
+}
+
+/* Interactive Upload Area Styling */
+.drop-zone {
+    border: 2px dashed var(--border-medium);
+    transition: all 0.3s ease;
+    background: var(--bg-card);
+}
+
+.drop-zone.drag-over {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+}
+
+/* Hero Gradient */
+.hero-bg {
+    background: radial-gradient(circle at top right, #E9F2FB 0%, #F8FAFC 50%);
+}
+
+.btn-primary {
+    background-color: var(--primary);
+    color: white;
+    transition: all 0.2s;
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-hover);
+    transform: translateY(-1px);
+}
+
+/* FINAL HEADER FIX */
+.nav-sticky {
+    position: sticky;
+    top: 0;
+    width: 100%;
+    /* 1. Solid background - absolutely no transparency */
+    background-color: #ffffff !important;
+    /* 2. High z-index - ensures it stays on top of all images/text */
+    z-index: 9999 !important;
+    /* 3. Border and shadow to separate it from the page content */
+    border-bottom: 1px solid #E2E8F0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
+}
+
+/* Ensure no other element has a higher z-index than the nav */
+header,
+section {
+    position: relative;
+    z-index: 1;
+}
