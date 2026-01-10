@@ -4,6 +4,7 @@ namespace App\Filament\Resources\VerificationJobs\Tables;
 
 use App\Enums\VerificationJobStatus;
 use App\Models\VerificationJob;
+use App\Support\AdminAuditLogger;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Tables\Actions\ViewAction;
@@ -91,6 +92,10 @@ class VerificationJobsTable
                             ],
                             auth()->id()
                         );
+
+                        AdminAuditLogger::log('job_mark_failed', $record, [
+                            'error_message' => $data['error_message'],
+                        ]);
                     })
                     ->visible(fn (VerificationJob $record): bool => $record->status !== VerificationJobStatus::Failed),
                 Action::make('cancel')
@@ -115,6 +120,11 @@ class VerificationJobsTable
                             ],
                             auth()->id()
                         );
+
+                        AdminAuditLogger::log('job_cancelled', $record, [
+                            'from' => $fromStatus->value,
+                            'to' => VerificationJobStatus::Failed->value,
+                        ]);
                     })
                     ->visible(fn (VerificationJob $record): bool => in_array($record->status, [VerificationJobStatus::Pending, VerificationJobStatus::Processing], true)),
                 Action::make('retry')
@@ -147,6 +157,11 @@ class VerificationJobsTable
                             ],
                             auth()->id()
                         );
+
+                        AdminAuditLogger::log('job_retried', $record, [
+                            'from' => $fromStatus->value,
+                            'to' => VerificationJobStatus::Pending->value,
+                        ]);
                     })
                     ->visible(fn (VerificationJob $record): bool => $record->status === VerificationJobStatus::Failed),
             ]);

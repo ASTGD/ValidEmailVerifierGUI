@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EngineServers\Tables;
 
 use App\Models\EngineServer;
+use App\Support\AdminAuditLogger;
 use Filament\Actions\Action;
 use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
@@ -54,7 +55,11 @@ class EngineServersTable
             ->recordActions([
                 Action::make('record_heartbeat')
                     ->label('Record heartbeat')
-                    ->action(fn (EngineServer $record) => $record->update(['last_heartbeat_at' => now()]))
+                    ->action(function (EngineServer $record): void {
+                        $record->update(['last_heartbeat_at' => now()]);
+
+                        AdminAuditLogger::log('engine_heartbeat_recorded', $record);
+                    })
                     ->requiresConfirmation()
                     ->visible(fn (EngineServer $record): bool => $record->is_active),
                 EditAction::make(),
