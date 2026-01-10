@@ -13,6 +13,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Laravel\Cashier\Subscription;
+use UnitEnum;
 
 class SubscriptionResource extends Resource
 {
@@ -22,7 +23,7 @@ class SubscriptionResource extends Resource
 
     protected static ?string $navigationLabel = 'Subscriptions';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Billing';
+    protected static string|UnitEnum|null $navigationGroup = 'Billing';
 
     protected static ?int $navigationSort = 1;
 
