@@ -13,7 +13,7 @@
 
     <div class="space-y-8" @if($this->shouldPoll) wire:poll.8s @endif>
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div class="rounded-lg border border-gray-200 p-4">
+            <div class="rounded-lg border border-gray-200 bg-white p-4">
                 <p class="text-xs uppercase tracking-wide text-gray-500">{{ __('Plan / Credits') }}</p>
                 <p class="mt-2 text-lg font-semibold text-gray-900">{{ $this->planName }}</p>
                 <p class="text-xs text-gray-500">
@@ -30,17 +30,17 @@
                     {{ __('Manage billing') }}
                 </a>
             </div>
-            <div class="rounded-lg border border-gray-200 p-4">
+            <div class="rounded-lg border border-gray-200 bg-white p-4">
                 <p class="text-xs uppercase tracking-wide text-gray-500">{{ __('Jobs in queue') }}</p>
                 <p class="mt-2 text-lg font-semibold text-gray-900">{{ $this->queueCount }}</p>
                 <p class="text-xs text-gray-500">{{ __('Pending + Processing') }}</p>
             </div>
-            <div class="rounded-lg border border-gray-200 p-4">
+            <div class="rounded-lg border border-gray-200 bg-white p-4">
                 <p class="text-xs uppercase tracking-wide text-gray-500">{{ __('Verified this month') }}</p>
                 <p class="mt-2 text-lg font-semibold text-gray-900">{{ number_format($this->verifiedJobsThisMonth) }}</p>
                 <p class="text-xs text-gray-500">{{ __('Completed jobs') }}</p>
             </div>
-            <div class="rounded-lg border border-gray-200 p-4">
+            <div class="rounded-lg border border-gray-200 bg-white p-4">
                 <p class="text-xs uppercase tracking-wide text-gray-500">{{ __('Latest job status') }}</p>
                 @if($this->latestJob)
                     <div class="mt-2 flex items-center gap-2">
