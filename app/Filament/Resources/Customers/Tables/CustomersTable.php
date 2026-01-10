@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Customers\Tables;
 
 use App\Models\User;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 
 class CustomersTable
@@ -54,6 +55,23 @@ class CustomersTable
                     ->label('Created')
                     ->dateTime()
                     ->sortable(),
-            ]);
+            ])
+            ->filters([
+                TernaryFilter::make('email_verified_at')
+                    ->label('Email verified')
+                    ->nullable()
+                    ->trueLabel('Verified')
+                    ->falseLabel('Unverified'),
+                TernaryFilter::make('has_subscription')
+                    ->label('Subscription')
+                    ->trueLabel('Has subscription')
+                    ->falseLabel('No subscription')
+                    ->queries(
+                        true: fn ($query) => $query->whereHas('subscriptions'),
+                        false: fn ($query) => $query->whereDoesntHave('subscriptions'),
+                    ),
+            ])
+            ->emptyStateHeading('No customers yet')
+            ->emptyStateDescription('Customer accounts will appear here once users sign up.');
     }
 }

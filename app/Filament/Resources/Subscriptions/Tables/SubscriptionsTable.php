@@ -63,6 +63,8 @@ class SubscriptionsTable
                         'incomplete' => 'Incomplete',
                         'incomplete_expired' => 'Incomplete expired',
                     ]),
-            ]);
+            ])
+            ->emptyStateHeading('No subscriptions yet')
+            ->emptyStateDescription('Subscriptions will appear once customers start billing.');
     }
 }

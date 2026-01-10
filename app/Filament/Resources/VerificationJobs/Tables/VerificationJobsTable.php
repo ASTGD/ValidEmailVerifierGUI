@@ -63,6 +63,8 @@ class VerificationJobsTable
                 SelectFilter::make('status')
                     ->options(self::statusOptions()),
             ])
+            ->emptyStateHeading('No verification jobs yet')
+            ->emptyStateDescription('Jobs will appear here once customers upload lists.')
             ->recordActions([
                 ViewAction::make(),
                 Action::make('mark_failed')

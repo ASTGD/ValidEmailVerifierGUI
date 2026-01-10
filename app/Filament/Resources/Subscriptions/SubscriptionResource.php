@@ -24,6 +24,8 @@ class SubscriptionResource extends Resource
 
     protected static ?string $navigationGroup = 'Billing';
 
+    protected static ?int $navigationSort = 1;
+
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->with('user');

@@ -23,6 +23,8 @@ class VerificationJobResource extends Resource
 
     protected static ?string $navigationGroup = 'Operations';
 
+    protected static ?int $navigationSort = 1;
+
     public static function form(Schema $schema): Schema
     {
         return VerificationJobForm::configure($schema);

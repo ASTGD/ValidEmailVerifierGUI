@@ -49,6 +49,8 @@ class EngineServersTable
                 TernaryFilter::make('is_active')
                     ->label('Active'),
             ])
+            ->emptyStateHeading('No engine servers')
+            ->emptyStateDescription('Register engine servers to track heartbeat status.')
             ->recordActions([
                 Action::make('record_heartbeat')
                     ->label('Record heartbeat')
