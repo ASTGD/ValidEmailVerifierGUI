@@ -1,29 +1,27 @@
-<x-app-layout>
-    <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-            {{ __('Profile') }}
-        </h2>
-    </x-slot>
+@extends('layouts.portal')
 
-    <div class="py-12">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-            <div class="p-4 sm:p-8 bg-white shadow sm:rounded-lg">
-                <div class="max-w-xl">
-                    <livewire:profile.update-profile-information-form />
-                </div>
-            </div>
-
-            <div class="p-4 sm:p-8 bg-white shadow sm:rounded-lg">
-                <div class="max-w-xl">
-                    <livewire:profile.update-password-form />
-                </div>
-            </div>
-
-            <div class="p-4 sm:p-8 bg-white shadow sm:rounded-lg">
-                <div class="max-w-xl">
-                    <livewire:profile.delete-user-form />
-                </div>
-            </div>
-        </div>
+@section('content')
+<div class="space-y-10">
+    <!-- HEADER SECTION -->
+    <div>
+        <h1 class="text-3xl font-black text-[#0F172A] tracking-tight">{{ __('Account Settings') }}</h1>
+        <p class="text-[#64748B] font-medium mt-1">{{ __('Manage your personal information, security, and account status.') }}</p>
     </div>
-</x-app-layout>
+
+    <!-- 1. Profile Information Section -->
+    <div class="max-w-4xl">
+        <livewire:profile.update-profile-information-form />
+    </div>
+
+    <!-- 2. Update Password Section -->
+    <div class="max-w-4xl">
+        <livewire:profile.update-password-form />
+    </div>
+
+    <!-- 3. Delete Account Section (Danger Zone) -->
+    <div class="max-w-4xl">
+        <livewire:profile.delete-user-form />
+    </div>
+</div>
+@endsection
+

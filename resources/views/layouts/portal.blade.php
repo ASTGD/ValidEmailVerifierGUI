@@ -149,6 +149,9 @@
     <!-- Tailwind CDN for the new design components -->
     <script src="https://cdn.tailwindcss.com"></script>
 
+    <!-- Alpine.js CDN for the new design components -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -212,34 +215,69 @@
     <div class="flex-1 flex flex-col md:ml-72 min-w-0">
 
         <!-- TOP HEADER -->
+        <!-- TOP NAVIGATION -->
         <header
             class="h-20 bg-white border-b border-[#E2E8F0] px-8 flex items-center justify-between sticky top-0 z-40">
-            <div>
-                <!-- This can dynamic based on the page -->
-                <h2 class="text-sm font-bold text-[#64748B] uppercase tracking-widest">Customer Portal</h2>
-            </div>
+            <h2 class="text-xs font-black text-[#64748B] uppercase tracking-widest">Customer Portal</h2>
 
             <div class="flex items-center gap-6">
-                <!-- User Profile & Logout -->
-                <div class="flex items-center gap-4 pl-6 border-l border-[#E2E8F0]">
-                    <div class="text-right hidden sm:block">
-                        <p class="text-sm font-bold text-[#0F172A]">{{ Auth::user()->name }}</p>
-                        <!-- LOGOUT FORM -->
+                <!-- USER DROPDOWN -->
+                <div class="relative" x-data="{ open: false }">
+                    <!-- Clickable Trigger -->
+                    <button @click="open = !open" @click.away="open = false"
+                        class="flex items-center gap-3 focus:outline-none group">
+                        <div class="text-right hidden sm:block">
+                            <p class="text-sm font-bold text-[#0F172A] group-hover:text-[#1E7CCF] transition-colors">
+                                {{ Auth::user()->name }}</p>
+                            <p class="text-[10px] font-bold text-[#94A3B8] uppercase tracking-tighter text-left">
+                                Verified Member</p>
+                        </div>
+                        <!-- Avatar -->
+                        <div
+                            class="w-10 h-10 bg-[#E9F2FB] rounded-xl flex items-center justify-center text-[#1E7CCF] font-bold border border-[#1E7CCF]/10 group-hover:shadow-md transition-all">
+                            {{ substr(Auth::user()->name, 0, 1) }}
+                        </div>
+                        <i data-lucide="chevron-down" class="w-4 h-4 text-[#64748B] transition-transform"
+                            :class="open ? 'rotate-180' : ''"></i>
+                    </button>
+
+                    <!-- Dropdown Menu -->
+                    <div x-show="open" x-transition:enter="transition ease-out duration-100"
+                        x-transition:enter-start="transform opacity-0 scale-95"
+                        x-transition:enter-end="transform opacity-100 scale-100"
+                        x-transition:leave="transition ease-in duration-75"
+                        x-transition:leave-start="transform opacity-100 scale-100"
+                        x-transition:leave-end="transform opacity-0 scale-95"
+                        class="absolute right-0 mt-3 w-48 bg-white rounded-2xl shadow-xl border border-[#E2E8F0] py-2 z-50"
+                        style="display: none;">
+
+                        <!-- Profile Link -->
+                        <a href="{{ route('profile') }}"
+                            class="flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-[#334155] hover:bg-[#F8FAFC] hover:text-[#1E7CCF] transition-colors">
+                            <i data-lucide="user" class="w-4 h-4"></i> {{ __('My Profile') }}
+                        </a>
+
+                        <!-- Settings Link -->
+                        <a href="{{ route('portal.settings') }}"
+                            class="flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-[#334155] hover:bg-[#F8FAFC] hover:text-[#1E7CCF] transition-colors">
+                            <i data-lucide="settings" class="w-4 h-4"></i> {{ __('Settings') }}
+                        </a>
+
+                        <div class="border-t border-[#F1F5F9] my-1"></div>
+
+                        <!-- Logout Form -->
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
                             <button type="submit"
-                                class="text-[11px] font-black text-red-500 hover:underline uppercase tracking-tighter">
-                                {{ __('Logout') }}
+                                class="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors">
+                                <i data-lucide="log-out" class="w-4 h-4"></i> {{ __('Logout') }}
                             </button>
                         </form>
-                    </div>
-                    <div
-                        class="w-10 h-10 bg-[#E9F2FB] rounded-full flex items-center justify-center text-[#1E7CCF] font-bold border border-[#1E7CCF]/10">
-                        {{ substr(Auth::user()->name, 0, 1) }}
                     </div>
                 </div>
             </div>
         </header>
+
 
         <!-- 3. DYNAMIC CONTENT (THE SLOT) -->
         <!-- Max-width 1440px as per industry standard for Dashboards -->
@@ -267,24 +305,3 @@
 </body>
 
 </html>
-
-{{-- <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="csrf-token" content="{{ csrf_token() }}">
-
-        <title>{{ config('app.name', 'Laravel') }}</title>
-
-        <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
-
-        <!-- Scripts -->
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
-    </head>
-    <body class="font-sans antialiased bg-gray-100 text-gray-900">
-        {{ $slot }}
-    </body>
-</html> --}}
