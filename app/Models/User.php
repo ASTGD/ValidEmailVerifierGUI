@@ -7,6 +7,7 @@ use App\Support\Roles;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Cashier\Billable;
@@ -59,5 +60,10 @@ class User extends Authenticatable implements FilamentUser
         }
 
         return $this->hasRole(Roles::ADMIN);
+    }
+
+    public function verificationJobs(): HasMany
+    {
+        return $this->hasMany(VerificationJob::class);
     }
 }

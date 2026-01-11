@@ -4,6 +4,7 @@ use App\Enums\VerificationJobStatus;
 use App\Models\User;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
+use App\Support\RetentionSettings;
 use App\Support\Roles;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -112,7 +113,8 @@ Artisan::command('app:purge-verification-jobs
     {--days= : Purge jobs completed before this many days ago}
     {--dry-run : Show what would be deleted without removing anything}
 ', function () {
-    $days = (int) ($this->option('days') ?: config('verifier.retention_days', 30));
+    $daysOption = $this->option('days');
+    $days = is_null($daysOption) ? RetentionSettings::days() : (int) $daysOption;
     if ($days < 0) {
         $this->error('Retention days must be zero or greater.');
         return 1;
