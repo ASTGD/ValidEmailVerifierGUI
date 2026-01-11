@@ -5,7 +5,7 @@ namespace App\Filament\Resources\EngineServers\Tables;
 use App\Models\EngineServer;
 use App\Support\AdminAuditLogger;
 use Filament\Actions\Action;
-use Filament\Tables\Actions\EditAction;
+use Filament\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\TernaryFilter;

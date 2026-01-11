@@ -6,7 +6,7 @@ use App\Models\RetentionSetting;
 use App\Support\AdminAuditLogger;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
-use Filament\Tables\Actions\EditAction;
+use Filament\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Artisan;

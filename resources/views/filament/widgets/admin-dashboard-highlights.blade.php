@@ -1,9 +1,9 @@
 <x-filament-widgets::widget>
     <div style="display:grid;gap:1.5rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
         @foreach ($cards as $card)
-            <div style="border-radius:16px;border:1px solid rgba(30,41,59,0.45);background:#0f172a;color:#ffffff;box-shadow:0 6px 18px rgba(15,23,42,0.15);">
+            <div class="admin-highlight-card" style="border-radius:16px;border:1px solid var(--admin-highlight-border);background:var(--admin-highlight-bg);color:var(--admin-highlight-text);box-shadow:var(--admin-highlight-shadow);">
                 <div style="padding:1.25rem;">
-                    <div style="font-size:0.875rem;color:#94a3b8;">{{ $card['title'] }}</div>
+                    <div style="font-size:0.875rem;color:var(--admin-highlight-muted);">{{ $card['title'] }}</div>
                     <div style="margin-top:0.5rem;font-size:1.5rem;font-weight:600;">{{ $card['value'] }}</div>
                     <div style="margin-top:0.75rem;display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;font-weight:600;color:{{ str_contains($card['delta_class'], 'emerald') ? '#34d399' : '#fb7185' }};">
                         <span>{{ $card['delta'] }}</span>
@@ -25,5 +25,5 @@
             </div>
         @endforeach
     </div>
-    <p style="margin-top:0.75rem;font-size:0.75rem;color:#64748b;">Sample data for dashboard layout preview.</p>
+    <p style="margin-top:0.75rem;font-size:0.75rem;color:var(--admin-highlight-muted);">Sample data for dashboard layout preview.</p>
 </x-filament-widgets::widget>

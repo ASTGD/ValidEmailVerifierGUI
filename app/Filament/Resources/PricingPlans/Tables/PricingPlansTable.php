@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\PricingPlans\Tables;
 
 use App\Models\PricingPlan;
-use Filament\Tables\Actions\EditAction;
+use Filament\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;

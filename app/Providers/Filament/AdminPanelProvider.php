@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Filament\Widgets\AdminDashboardHighlights;
 use App\Filament\Widgets\AdminQuickLinks;
 use App\Filament\Widgets\AdminStatsOverview;
+use Filament\Support\Assets\Css;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -30,6 +31,11 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->brandName(config('verifier.brand_name') ?: config('app.name'))
+            ->assets([
+                Css::make('admin-overrides')
+                    ->relativePublicPath('css/filament/admin-overrides.css'),
+            ])
             ->colors([
                 'primary' => Color::Amber,
             ])
@@ -42,8 +48,8 @@ class AdminPanelProvider extends PanelProvider
             ->widgets([
                 AdminDashboardHighlights::class,
                 AdminStatsOverview::class,
-                AdminQuickLinks::class,
                 AccountWidget::class,
+                AdminQuickLinks::class,
             ])
             ->middleware([
                 EncryptCookies::class,
