@@ -36,7 +36,7 @@
                     <span class="text-[#DC2626]">{{ __('Not Configured') }}</span>
                 @endif
             </h3>
-            <p class="mt-3 text-[11px] font-bold text-[#94A3B8] uppercase">Used this month: <span
+            <p class="mt-3 text-[11px] font-bold text-[#94A3B8] uppercase">{{ __('Used this month') }}: <span
                     class="text-[#334155]">{{ number_format($this->creditsUsedThisMonth) }}</span></p>
         </div>
 
@@ -128,7 +128,7 @@
                                     </div>
                                     <div>
                                         <p class="font-bold text-[#0F172A]">{{ $job->original_filename }}</p>
-                                        <p class="text-xs text-[#94A3B8]">ID: {{ $job->id }}</p>
+                                        <p class="text-xs text-[#94A3B8]">{{ __('ID') }}: {{ $job->id }}</p>
                                     </div>
                                 </div>
                             </td>

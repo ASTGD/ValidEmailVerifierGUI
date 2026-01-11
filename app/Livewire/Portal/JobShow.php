@@ -33,6 +33,10 @@ class JobShow extends Component
 
         return view('livewire.portal.job-show', [
             'job' => $this->job,
+            'activityLogs' => $this->job->logs()
+                ->latest()
+                ->limit(20)
+                ->get(),
         ]);
     }
 }

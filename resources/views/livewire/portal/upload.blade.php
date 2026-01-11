@@ -14,6 +14,10 @@
         </div>
     </div>
 
+    @if ($errors->any())
+        <x-flash type="error" :message="__('Please fix the errors below and try again.')" />
+    @endif
+
     <!-- 2. MAIN UPLOAD CARD -->
     <div class="max-w-4xl mx-auto">
         <div class="bg-white p-4 rounded-[2.5rem] border border-[#E2E8F0] shadow-2xl shadow-blue-900/5">
@@ -109,4 +113,3 @@
     document.addEventListener('livewire:load', () => lucide.createIcons());
     document.addEventListener('livewire:update', () => lucide.createIcons());
 </script>
-
