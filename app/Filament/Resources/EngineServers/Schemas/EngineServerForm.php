@@ -1,0 +1,44 @@
+<?php
+
+namespace App\Filament\Resources\EngineServers\Schemas;
+
+use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
+
+class EngineServerForm
+{
+    public static function configure(Schema $schema): Schema
+    {
+        return $schema
+            ->components([
+                Section::make('Server Details')
+                    ->schema([
+                        TextInput::make('name')
+                            ->required()
+                            ->maxLength(255),
+                        TextInput::make('ip_address')
+                            ->label('IP address')
+                            ->required()
+                            ->maxLength(255),
+                        TextInput::make('environment')
+                            ->maxLength(255),
+                        TextInput::make('region')
+                            ->maxLength(255),
+                        DateTimePicker::make('last_heartbeat_at')
+                            ->label('Last heartbeat')
+                            ->seconds(false),
+                        Toggle::make('is_active')
+                            ->label('Active')
+                            ->default(true),
+                        Textarea::make('notes')
+                            ->rows(3)
+                            ->columnSpanFull(),
+                    ])
+                    ->columns(2),
+            ]);
+    }
+}

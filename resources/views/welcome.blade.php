@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ asset('css/style.css') }}">
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 
 <body class="bg-[#F8FAFC]">
@@ -19,7 +20,7 @@
         <div class="max-w-[1280px] mx-auto px-10 h-20 flex items-center justify-between">
 
             <!-- Logo (Left) -->
-            <a href="/" class="flex items-center gap-3">
+            <a href="{{ url('/') }}" class="flex items-center gap-3">
                 <div
                     class="w-10 h-10 bg-[#1E7CCF] rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
                     <i data-lucide="shield-check" class="text-white w-6 h-6"></i>
@@ -42,16 +43,16 @@
                 <!-- Auth Buttons -->
                 <div class="flex items-center gap-4">
                     @guest
-                        <a href="http://localhost:8082/login"
+                        <a href="{{ route('login') }}"
                             class="text-[#334155] font-bold hover:text-[#1E7CCF] transition-all">Login</a>
-                        <a href="http://localhost:8082/register"
+                        <a href="{{ route('register') }}"
                             class="bg-[#1E7CCF] hover:bg-[#1866AD] text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-100 transition-all">
                             Sign Up
                         </a>
                     @endguest
 
                     @auth
-                        <a href="http://localhost:8082/portal/dashboard"
+                        <a href="{{ route('portal.dashboard') }}"
                             class="bg-[#1E7CCF] hover:bg-[#1866AD] text-white px-6 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2">
                             Dashboard <i data-lucide="arrow-right" class="w-4 h-4"></i>
                         </a>
@@ -141,7 +142,7 @@
                                 1</div>
                             <div>
                                 <h4 class="text-lg font-bold text-[#0F172A]">Upload Your List</h4>
-                                <p class="text-[#64748B]">Drag and drop your CSV or TXT file into the calculator.</p>
+                                <p class="text-[#64748B]">Drag and drop your XLSX, XLS, CSV, or TXT file into the calculator.</p>
                             </div>
                         </div>
                         <div class="flex gap-5">
@@ -187,7 +188,7 @@
                         <!-- Drop zone now uses flex-grow to fill all available space -->
                         <div id="drop-zone"
                             class="border-2 border-dashed border-[#CBD5E1] rounded-[2.5rem] p-12 text-center transition-all hover:border-[#1E7CCF] bg-[#F8FAFC] cursor-pointer group flex flex-col items-center justify-center flex-grow">
-                            <input type="file" id="file-input" hidden accept=".csv,.txt">
+                            <input type="file" id="file-input" hidden accept=".xls,.xlsx,.csv,.txt">
 
                             <!-- Initial State -->
                             <div id="calc-initial" class="flex flex-col items-center justify-center">
@@ -257,7 +258,7 @@
                         folders.
                     </p>
                 </div>
-                <a href="http://localhost:8082/register"
+                <a href="{{ route('register') }}"
                     class="text-[#1E7CCF] font-bold text-lg flex items-center gap-2 hover:gap-4 transition-all">
                     See all features <i data-lucide="arrow-right"></i>
                 </a>
@@ -467,7 +468,7 @@
                     <p class="text-[#1E7CCF] font-bold text-lg">Did you know? Verifying your list can increase ROI by
                         up to 25%.</p>
                 </div>
-                <a href="http://localhost:8082/register"
+                <a href="{{ route('register') }}"
                     class="bg-[#1E7CCF] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#1866AD] transition-all whitespace-nowrap">
                     Verify My List Now
                 </a>
@@ -627,97 +628,6 @@
         </div>
     </footer>
 
-    {{-- <script>
-        lucide.createIcons();
-
-        const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('file-input');
-        const initialUI = document.getElementById('calc-initial');
-        const processingUI = document.getElementById('calc-processing');
-        const resultUI = document.getElementById('calc-result');
-        const progressBar = document.getElementById('calc-progress-bar');
-
-        // File Selection
-        dropZone.addEventListener('click', () => {
-            if (resultUI.classList.contains('hidden')) fileInput.click();
-        });
-
-        fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
-
-        function handleFile(file) {
-            if (!file) return;
-            initialUI.classList.add('hidden');
-            processingUI.classList.remove('hidden');
-
-            let progress = 0;
-            const interval = setInterval(() => {
-                progress += 10;
-                progressBar.style.width = progress + '%';
-                if (progress >= 100) {
-                    clearInterval(interval);
-                    setTimeout(() => readEmails(file), 400);
-                }
-            }, 100);
-        }
-
-        function readEmails(file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const text = e.target.result;
-                const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-                const matches = text.match(emailRegex) || [];
-                const count = matches.length;
-
-                let price = 0;
-                let tierText = "";
-                let showContact = false;
-
-                // TIERED LOGIC
-                if (count <= 5000) {
-                    price = count * 0.03;
-                    tierText = "Rate Applied: $0.03 / email";
-                } else if (count <= 15000) {
-                    price = count * 0.02;
-                    tierText = "Rate Applied: $0.02 / email (Volume Discount)";
-                } else if (count <= 50000) {
-                    price = count * 0.01;
-                    tierText = "Rate Applied: $0.01 / email (Maximum Discount)";
-                } else {
-                    showContact = true;
-                }
-
-                document.getElementById('calc-email-count').innerText = count.toLocaleString();
-
-                if (showContact) {
-                    document.getElementById('price-card').classList.add('hidden');
-                    document.getElementById('payout-redirect').classList.add('hidden');
-                    document.getElementById('contact-notice').classList.remove('hidden');
-                } else {
-                    document.getElementById('price-card').classList.remove('hidden');
-                    document.getElementById('payout-redirect').classList.remove('hidden');
-                    document.getElementById('contact-notice').classList.add('hidden');
-                    document.getElementById('calc-total-price').innerText = '$' + price.toFixed(2);
-                    document.getElementById('tier-label').innerText = tierText;
-                }
-
-                processingUI.classList.add('hidden');
-                resultUI.classList.remove('hidden');
-
-                document.getElementById('payout-redirect').onclick = () => {
-                    window.location.href =
-                        `http://localhost:8082/checkout?count=${count}&price=${price.toFixed(2)}`;
-                };
-            };
-            reader.readAsText(file);
-        }
-
-        function resetCalc() {
-            resultUI.classList.add('hidden');
-            initialUI.classList.remove('hidden');
-            progressBar.style.width = '0%';
-            fileInput.value = '';
-        }
-    </script> --}}
     <script>
         lucide.createIcons();
 
@@ -726,6 +636,7 @@
         const initialUI = document.getElementById('calc-initial');
         const processingUI = document.getElementById('calc-processing');
         const resultUI = document.getElementById('calc-result');
+        const checkoutUrl = @json(route('checkout'));
 
         dropZone.onclick = () => {
             if (resultUI.classList.contains('hidden')) fileInput.click();
@@ -738,33 +649,53 @@
             initialUI.classList.add('hidden');
             processingUI.classList.remove('hidden');
 
+            const fileName = file.name.toLowerCase();
             const reader = new FileReader();
-            reader.onload = (event) => {
-                const text = event.target.result;
-                const emails = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-                const count = emails.length;
 
-                // Calculate Price
-                let rate = 0.03;
-                if (count > 5000) rate = 0.02;
-                if (count > 15000) rate = 0.01;
-                const total = (count * rate).toFixed(2);
+            if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+                reader.onload = (event) => {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
 
-                // Update UI after a short fake "processing" delay for effect
-                setTimeout(() => {
-                    document.getElementById('calc-email-count').innerText = count.toLocaleString();
-                    document.getElementById('calc-total-price').innerText = '$' + total;
+                    let allText = '';
+                    workbook.SheetNames.forEach((sheetName) => {
+                        const worksheet = workbook.Sheets[sheetName];
+                        allText += JSON.stringify(XLSX.utils.sheet_to_json(worksheet));
+                    });
 
-                    processingUI.classList.add('hidden');
-                    resultUI.classList.remove('hidden');
-
-                    document.getElementById('payout-redirect').onclick = () => {
-                        window.location.href = `/checkout?count=${count}&price=${total}`;
-                    };
-                }, 800);
-            };
-            reader.readAsText(file);
+                    processEmailMatches(allText);
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                reader.onload = (event) => {
+                    processEmailMatches(event.target.result);
+                };
+                reader.readAsText(file);
+            }
         };
+
+        function processEmailMatches(text) {
+            const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+            const emails = text.match(emailRegex) || [];
+            const count = emails.length;
+
+            let rate = 0.03;
+            if (count > 5000) rate = 0.02;
+            if (count > 15000) rate = 0.01;
+            const total = (count * rate).toFixed(2);
+
+            setTimeout(() => {
+                document.getElementById('calc-email-count').innerText = count.toLocaleString();
+                document.getElementById('calc-total-price').innerText = '$' + total;
+
+                processingUI.classList.add('hidden');
+                resultUI.classList.remove('hidden');
+
+                document.getElementById('payout-redirect').onclick = () => {
+                    window.location.href = `${checkoutUrl}?count=${count}&price=${total}`;
+                };
+            }, 800);
+        }
     </script>
 </body>
 

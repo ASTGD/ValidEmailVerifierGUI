@@ -52,4 +52,4 @@ require __DIR__.'/auth.php';
 
 Route::get('/checkout', function (Request $request) {
     return view('checkout');
-});
+})->name('checkout');

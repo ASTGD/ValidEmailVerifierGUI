@@ -1,6 +1,11 @@
 <?php
 
 namespace App\Providers\Filament;
+
+use App\Filament\Widgets\AdminDashboardHighlights;
+use App\Filament\Widgets\AdminQuickLinks;
+use App\Filament\Widgets\AdminStatsOverview;
+use Filament\Support\Assets\Css;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -10,7 +15,6 @@ use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use Filament\Widgets\AccountWidget;
-use Filament\Widgets\FilamentInfoWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -27,6 +31,11 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->brandName(config('verifier.brand_name') ?: config('app.name'))
+            ->assets([
+                Css::make('admin-overrides')
+                    ->relativePublicPath('css/filament/admin-overrides.css'),
+            ])
             ->colors([
                 'primary' => Color::Amber,
             ])
@@ -37,8 +46,10 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
+                AdminDashboardHighlights::class,
+                AdminStatsOverview::class,
                 AccountWidget::class,
-                FilamentInfoWidget::class,
+                AdminQuickLinks::class,
             ])
             ->middleware([
                 EncryptCookies::class,

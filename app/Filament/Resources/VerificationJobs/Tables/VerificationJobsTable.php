@@ -4,8 +4,10 @@ namespace App\Filament\Resources\VerificationJobs\Tables;
 
 use App\Enums\VerificationJobStatus;
 use App\Models\VerificationJob;
+use App\Support\AdminAuditLogger;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
+use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -62,7 +64,10 @@ class VerificationJobsTable
                 SelectFilter::make('status')
                     ->options(self::statusOptions()),
             ])
+            ->emptyStateHeading('No verification jobs yet')
+            ->emptyStateDescription('Jobs will appear here once customers upload lists.')
             ->recordActions([
+                ViewAction::make(),
                 Action::make('mark_failed')
                     ->label('Mark Failed')
                     ->color('danger')
@@ -87,8 +92,41 @@ class VerificationJobsTable
                             ],
                             auth()->id()
                         );
+
+                        AdminAuditLogger::log('job_mark_failed', $record, [
+                            'error_message' => $data['error_message'],
+                        ]);
                     })
                     ->visible(fn (VerificationJob $record): bool => $record->status !== VerificationJobStatus::Failed),
+                Action::make('cancel')
+                    ->label('Cancel')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->action(function (VerificationJob $record): void {
+                        $fromStatus = $record->status;
+
+                        $record->update([
+                            'status' => VerificationJobStatus::Failed,
+                            'error_message' => 'Cancelled by admin.',
+                            'finished_at' => now(),
+                        ]);
+
+                        $record->addLog(
+                            'cancelled',
+                            'Job cancelled by admin.',
+                            [
+                                'from' => $fromStatus->value,
+                                'to' => VerificationJobStatus::Failed->value,
+                            ],
+                            auth()->id()
+                        );
+
+                        AdminAuditLogger::log('job_cancelled', $record, [
+                            'from' => $fromStatus->value,
+                            'to' => VerificationJobStatus::Failed->value,
+                        ]);
+                    })
+                    ->visible(fn (VerificationJob $record): bool => in_array($record->status, [VerificationJobStatus::Pending, VerificationJobStatus::Processing], true)),
                 Action::make('retry')
                     ->label('Retry')
                     ->color('warning')
@@ -119,6 +157,11 @@ class VerificationJobsTable
                             ],
                             auth()->id()
                         );
+
+                        AdminAuditLogger::log('job_retried', $record, [
+                            'from' => $fromStatus->value,
+                            'to' => VerificationJobStatus::Pending->value,
+                        ]);
                     })
                     ->visible(fn (VerificationJob $record): bool => $record->status === VerificationJobStatus::Failed),
             ]);
