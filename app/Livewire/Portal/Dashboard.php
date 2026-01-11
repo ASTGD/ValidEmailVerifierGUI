@@ -4,6 +4,7 @@ namespace App\Livewire\Portal;
 
 use App\Enums\VerificationJobStatus;
 use App\Models\VerificationJob;
+use App\Models\VerificationOrder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
@@ -15,6 +16,14 @@ class Dashboard extends Component
     public function getLatestJobProperty()
     {
         return VerificationJob::query()
+            ->where('user_id', Auth::id())
+            ->latest()
+            ->first();
+    }
+
+    public function getLatestOrderProperty()
+    {
+        return VerificationOrder::query()
             ->where('user_id', Auth::id())
             ->latest()
             ->first();

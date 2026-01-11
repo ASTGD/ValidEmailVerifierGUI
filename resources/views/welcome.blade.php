@@ -161,34 +161,63 @@
                         <h4 class="font-bold text-[#0F172A] mb-6 flex items-center gap-2">
                             <i data-lucide="bar-chart-3" class="text-[#1E7CCF]"></i> Volume Discount Tiers
                         </h4>
+                        @php
+                            $currencyCode = strtoupper(config('cashier.currency', 'usd'));
+                            $currencyPrefix = $currencyCode === 'USD' ? '$' : $currencyCode.' ';
+                        @endphp
+
                         <div class="space-y-4">
-                            <div
-                                class="flex justify-between items-center p-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
-                                <span class="font-semibold text-[#334155]">1 - 5,000 Emails</span>
-                                <span class="text-[#1E7CCF] font-bold">$0.03 / ea</span>
-                            </div>
-                            <div
-                                class="flex justify-between items-center p-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
-                                <span class="font-semibold text-[#334155]">5,001 - 15,000 Emails</span>
-                                <span class="text-[#1E7CCF] font-bold">$0.02 / ea</span>
-                            </div>
-                            <div
-                                class="flex justify-between items-center p-3 rounded-xl bg-[#E9F2FB] border border-[#1E7CCF]/20">
-                                <span class="font-bold text-[#1E7CCF]">15,001 - 50,000 Emails</span>
-                                <span class="text-[#1E7CCF] font-black">$0.01 / ea</span>
-                            </div>
+                            @forelse ($pricingTiers as $tier)
+                                @php
+                                    $min = $tier->min_emails;
+                                    $max = $tier->max_emails;
+
+                                    if ($min !== null && $max !== null) {
+                                        $rangeLabel = number_format($min).' - '.number_format($max).' Emails';
+                                    } elseif ($min !== null) {
+                                        $rangeLabel = number_format($min).'+'.' Emails';
+                                    } elseif ($max !== null) {
+                                        $rangeLabel = __('Up to :max Emails', ['max' => number_format($max)]);
+                                    } else {
+                                        $rangeLabel = __('Any volume');
+                                    }
+
+                                    if ($tier->price_per_email !== null) {
+                                        $priceLabel = $currencyPrefix.number_format((float) $tier->price_per_email, 4).' / email';
+                                    } elseif ($tier->price_per_1000 !== null) {
+                                        $priceLabel = $currencyPrefix.number_format((float) $tier->price_per_1000, 2).' / 1k';
+                                    } else {
+                                        $priceLabel = __('Contact us');
+                                    }
+                                @endphp
+                                <div
+                                    class="flex justify-between items-center p-3 rounded-xl {{ $loop->last ? 'bg-[#E9F2FB] border border-[#1E7CCF]/20' : 'bg-[#F8FAFC] border border-[#E2E8F0]' }}">
+                                    <span class="{{ $loop->last ? 'font-bold text-[#1E7CCF]' : 'font-semibold text-[#334155]' }}">{{ $rangeLabel }}</span>
+                                    <span class="{{ $loop->last ? 'text-[#1E7CCF] font-black' : 'text-[#1E7CCF] font-bold' }}">{{ $priceLabel }}</span>
+                                </div>
+                            @empty
+                                <div class="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 text-[#64748B] font-semibold">
+                                    {{ __('Pricing tiers are not configured yet.') }}
+                                </div>
+                            @endforelse
                         </div>
                     </div>
                 </div>
 
                 <!-- Right Side: The Interactive Tool (Now Uniform Height) -->
                 <div class="flex flex-col h-full">
-                    <div
+                    <form id="calc-form" method="POST" action="{{ route('checkout.intent.store') }}" enctype="multipart/form-data"
                         class="bg-white p-6 rounded-[3rem] shadow-2xl border border-white flex flex-col h-full relative overflow-hidden">
+                        @csrf
+                        @error('file')
+                            <div class="mb-4 rounded-2xl border border-[#FEE2E2] bg-[#FEF2F2] px-5 py-3 text-sm font-semibold text-[#DC2626]">
+                                {{ $message }}
+                            </div>
+                        @enderror
                         <!-- Drop zone now uses flex-grow to fill all available space -->
                         <div id="drop-zone"
                             class="border-2 border-dashed border-[#CBD5E1] rounded-[2.5rem] p-12 text-center transition-all hover:border-[#1E7CCF] bg-[#F8FAFC] cursor-pointer group flex flex-col items-center justify-center flex-grow">
-                            <input type="file" id="file-input" hidden accept=".xls,.xlsx,.csv,.txt">
+                            <input type="file" id="file-input" name="file" hidden accept=".xls,.xlsx,.csv,.txt">
 
                             <!-- Initial State -->
                             <div id="calc-initial" class="flex flex-col items-center justify-center">
@@ -198,7 +227,7 @@
                                 </div>
                                 <h3 class="text-2xl font-bold text-[#0F172A] mb-2">Upload Your List</h3>
                                 <p class="text-[#64748B] mb-8 font-medium px-4">Click to browse or drag & drop</p>
-                                <button
+                                <button type="button"
                                     class="bg-[#1E7CCF] text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-blue-100 transition-all">
                                     Select File
                                 </button>
@@ -224,22 +253,23 @@
                                         class="bg-[#E9F2FB] p-6 rounded-2xl border border-[#1E7CCF]/20">
                                         <p class="text-[#1E7CCF] text-xs font-bold uppercase tracking-widest mb-1">
                                             Total Quote</p>
-                                        <h4 id="calc-total-price" class="text-4xl font-black text-[#1E7CCF]">$0.00
+                                        <h4 id="calc-total-price" class="text-4xl font-black text-[#1E7CCF]">{{ $currencyPrefix }}0.00
                                         </h4>
+                                        <p id="calc-tier-note" class="mt-2 text-xs font-bold text-[#64748B]"></p>
                                     </div>
                                 </div>
 
                                 <div class="flex flex-col gap-3">
-                                    <button id="payout-redirect"
-                                        class="w-full bg-[#1E7CCF] hover:bg-[#1866AD] text-white py-5 rounded-2xl font-bold text-lg shadow-xl shadow-blue-100 transition-all">Proceed
+                                    <button id="payout-redirect" type="submit" disabled
+                                        class="w-full bg-[#1E7CCF] text-white py-5 rounded-2xl font-bold text-lg shadow-xl shadow-blue-100 transition-all opacity-60 cursor-not-allowed">Proceed
                                         to Checkout</button>
-                                    <button onclick="location.reload()"
+                                    <button type="button" onclick="location.reload()"
                                         class="w-full py-4 text-[#64748B] font-bold hover:text-[#0F172A]">Clear and
                                         Restart</button>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </form>
                 </div>
 
             </div>
@@ -628,6 +658,17 @@
         </div>
     </footer>
 
+    @php
+        $pricingTierData = ($pricingTiers ?? collect())
+            ->map(fn ($tier) => [
+                'min' => $tier->min_emails,
+                'max' => $tier->max_emails,
+                'per_email' => $tier->price_per_email !== null ? (float) $tier->price_per_email : null,
+                'per_1000' => $tier->price_per_1000 !== null ? (float) $tier->price_per_1000 : null,
+            ])
+            ->values();
+    @endphp
+
     <script>
         lucide.createIcons();
 
@@ -636,7 +677,10 @@
         const initialUI = document.getElementById('calc-initial');
         const processingUI = document.getElementById('calc-processing');
         const resultUI = document.getElementById('calc-result');
-        const checkoutUrl = @json(route('checkout'));
+        const checkoutButton = document.getElementById('payout-redirect');
+        const tierNote = document.getElementById('calc-tier-note');
+        const pricingTiers = @json($pricingTierData);
+        const currencyPrefix = @json($currencyPrefix);
 
         dropZone.onclick = () => {
             if (resultUI.classList.contains('hidden')) fileInput.click();
@@ -647,7 +691,9 @@
             if (!file) return;
 
             initialUI.classList.add('hidden');
+            resultUI.classList.add('hidden');
             processingUI.classList.remove('hidden');
+            setCheckoutEnabled(false);
 
             const fileName = file.name.toLowerCase();
             const reader = new FileReader();
@@ -679,22 +725,70 @@
             const emails = text.match(emailRegex) || [];
             const count = emails.length;
 
-            let rate = 0.03;
-            if (count > 5000) rate = 0.02;
-            if (count > 15000) rate = 0.01;
-            const total = (count * rate).toFixed(2);
+            const tier = selectTier(pricingTiers, count);
+            const total = tier ? calculateTotal(tier, count) : 0;
 
             setTimeout(() => {
                 document.getElementById('calc-email-count').innerText = count.toLocaleString();
-                document.getElementById('calc-total-price').innerText = '$' + total;
+                document.getElementById('calc-total-price').innerText = tier ? currencyPrefix + total.toFixed(2) : 'N/A';
+                tierNote.textContent = tier ? `Applied tier: ${formatTierLabel(tier)}` : 'Pricing is not configured yet.';
 
                 processingUI.classList.add('hidden');
                 resultUI.classList.remove('hidden');
 
-                document.getElementById('payout-redirect').onclick = () => {
-                    window.location.href = `${checkoutUrl}?count=${count}&price=${total}`;
-                };
+                setCheckoutEnabled(Boolean(tier) && count > 0);
             }, 800);
+        }
+
+        function selectTier(tiers, count) {
+            if (!tiers.length) return null;
+
+            const match = tiers.find((tier) => {
+                const min = tier.min ?? 0;
+                const max = tier.max;
+                return count >= min && (max === null || max === undefined || count <= max);
+            });
+
+            if (match) return match;
+
+            return [...tiers]
+                .filter((tier) => (tier.min ?? 0) <= count)
+                .sort((a, b) => (b.min ?? 0) - (a.min ?? 0))[0] || null;
+        }
+
+        function calculateTotal(tier, count) {
+            if (tier.per_email !== null && tier.per_email !== undefined) {
+                return count * tier.per_email;
+            }
+            if (tier.per_1000 !== null && tier.per_1000 !== undefined) {
+                return (count / 1000) * tier.per_1000;
+            }
+            return 0;
+        }
+
+        function formatTierLabel(tier) {
+            const max = tier.max;
+            const min = tier.min ?? null;
+
+            if ((min === null || min === undefined) && max !== null && max !== undefined) {
+                return `Up to ${max.toLocaleString()} emails`;
+            }
+
+            if (max !== null && max !== undefined) {
+                return `${min.toLocaleString()} - ${max.toLocaleString()} emails`;
+            }
+
+            if (min === null || min === undefined) {
+                return 'Any volume';
+            }
+
+            return `${min.toLocaleString()}+ emails`;
+        }
+
+        function setCheckoutEnabled(enabled) {
+            checkoutButton.disabled = !enabled;
+            checkoutButton.classList.toggle('opacity-60', !enabled);
+            checkoutButton.classList.toggle('cursor-not-allowed', !enabled);
         }
     </script>
 </body>

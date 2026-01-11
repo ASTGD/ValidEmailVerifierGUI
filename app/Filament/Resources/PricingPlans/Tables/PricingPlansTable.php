@@ -34,6 +34,14 @@ class PricingPlansTable
                 TextColumn::make('price_per_1000')
                     ->label('Per 1,000')
                     ->formatStateUsing(fn ($state): string => $state !== null ? number_format((float) $state, 2) : '-'),
+                TextColumn::make('min_emails')
+                    ->label('Min emails')
+                    ->numeric()
+                    ->toggleable(),
+                TextColumn::make('max_emails')
+                    ->label('Max emails')
+                    ->numeric()
+                    ->toggleable(),
                 TextColumn::make('credits_per_month')
                     ->label('Credits')
                     ->numeric()

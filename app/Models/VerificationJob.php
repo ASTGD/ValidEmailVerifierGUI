@@ -6,6 +6,7 @@ use App\Enums\VerificationJobStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Model;
 
 class VerificationJob extends Model
@@ -55,6 +56,11 @@ class VerificationJob extends Model
         return $this->hasMany(VerificationJobLog::class, 'verification_job_id');
     }
 
+    public function order(): HasOne
+    {
+        return $this->hasOne(VerificationOrder::class, 'verification_job_id');
+    }
+
     public function addLog(string $event, ?string $message = null, ?array $context = null, ?int $userId = null): VerificationJobLog
     {
         return $this->logs()->create([
@@ -63,5 +69,22 @@ class VerificationJob extends Model
             'message' => $message,
             'context' => $context,
         ]);
+    }
+
+    protected static function booted(): void
+    {
+        static::updated(function (VerificationJob $job) {
+            if (! $job->wasChanged('status')) {
+                return;
+            }
+
+            if (! $job->relationLoaded('order')) {
+                $job->load('order');
+            }
+
+            if ($job->order) {
+                $job->order->syncStatusFromJob($job);
+            }
+        });
     }
 }
