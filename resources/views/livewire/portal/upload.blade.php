@@ -1,54 +1,115 @@
-<x-portal-layout>
-    <x-slot name="header">
+<div class="space-y-10">
+    <!-- 1. HEADER SECTION -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-            <h2 class="text-2xl font-semibold text-gray-900">{{ __('Verify List') }}</h2>
-            <p class="text-sm text-gray-500">{{ __('Upload a CSV or TXT file to start a new verification job.') }}</p>
+            <h1 class="text-3xl font-black text-[#0F172A] tracking-tight">{{ __('Verify New List') }}</h1>
+            <p class="text-[#64748B] font-medium mt-1">
+                {{ __('Upload your CSV or TXT file to start a new verification job.') }}</p>
         </div>
-    </x-slot>
-    <x-slot name="headerAction">
-        <a href="{{ route('portal.jobs.index') }}" class="text-sm text-indigo-600 hover:text-indigo-500" wire:navigate>
-            {{ __('View Jobs') }}
-        </a>
-    </x-slot>
+        <div class="flex items-center gap-3">
+            <a href="{{ route('portal.jobs.index') }}"
+                class="text-sm font-bold text-[#1E7CCF] hover:underline flex items-center gap-1" wire:navigate>
+                <i data-lucide="list-checks" class="w-4 h-4"></i> {{ __('View My Jobs') }}
+            </a>
+        </div>
+    </div>
 
-    <div class="space-y-6">
-        @if($errors->any())
-            <x-flash type="error" :message="__('Please fix the errors below and try again.')" />
-        @endif
-        <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6">
-            <form wire:submit.prevent="save" class="space-y-6" enctype="multipart/form-data">
-                <div>
-                    <x-input-label for="file" :value="__('CSV or TXT file')" />
-                    <input
-                        id="file"
-                        type="file"
-                        wire:model="file"
-                        class="mt-2 block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-white file:text-gray-700 hover:file:bg-gray-100"
-                    />
-                    <x-input-error :messages="$errors->get('file')" class="mt-2" />
-                    <p class="mt-2 text-sm text-gray-500">
-                        {{ __('Accepted formats: CSV or TXT. Max 10MB. One email per line.') }}
-                    </p>
+    @if ($errors->any())
+        <x-flash type="error" :message="__('Please fix the errors below and try again.')" />
+    @endif
+
+    <!-- 2. MAIN UPLOAD CARD -->
+    <div class="max-w-4xl mx-auto">
+        <div class="bg-white p-4 rounded-[2.5rem] border border-[#E2E8F0] shadow-2xl shadow-blue-900/5">
+            <form wire:submit.prevent="save" enctype="multipart/form-data">
+
+                <!-- THE INTERACTIVE DROP ZONE -->
+                <div
+                    class="border-2 border-dashed border-[#CBD5E1] rounded-[2rem] p-10 md:p-16 text-center bg-[#F8FAFC] transition-all hover:border-[#1E7CCF] group">
+
+                    <div wire:loading.remove wire:target="file">
+                        <div
+                            class="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm group-hover:scale-110 transition-transform">
+                            <i data-lucide="upload-cloud" class="text-[#1E7CCF] w-10 h-10"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold text-[#0F172A] mb-2">{{ __('Select Your Data Source') }}</h3>
+                        <p class="text-[#64748B] mb-8 font-medium">{{ __('Supported formats: CSV, TXT (Max 10MB)') }}
+                        </p>
+                    </div>
+
+                    <!-- LIVEWIRE LOADING STATE (While file is uploading to server) -->
+                    <div wire:loading wire:target="file" class="py-10">
+                        <div
+                            class="animate-spin rounded-full h-12 w-12 border-4 border-[#E9F2FB] border-t-[#1E7CCF] mx-auto mb-4">
+                        </div>
+                        <p class="text-sm font-bold text-[#1E7CCF] uppercase tracking-widest">
+                            {{ __('Uploading to secure server...') }}</p>
+                    </div>
+
+                    <!-- THE ACTUAL INPUT (Styled to look like a pro button) -->
+                    <div class="relative max-w-sm mx-auto">
+                        <input id="file" type="file" wire:model="file"
+                            class="block w-full text-sm text-[#64748B]
+                            file:mr-4 file:py-3 file:px-6
+                            file:rounded-xl file:border-0
+                            file:text-sm file:font-bold
+                            file:bg-[#1E7CCF] file:text-white
+                            hover:file:bg-[#1866AD] cursor-pointer" />
+                    </div>
+
+                    <!-- ERROR HANDLING (Keeping your backend logic) -->
+                    <x-input-error :messages="$errors->get('file')" class="mt-4 font-bold" />
                 </div>
 
-                <div class="flex items-center gap-4">
-                    <x-primary-button wire:loading.attr="disabled" wire:target="save">
-                        <span wire:loading.remove wire:target="save">{{ __('Upload list') }}</span>
-                        <span wire:loading wire:target="save">{{ __('Uploading...') }}</span>
-                    </x-primary-button>
-                    <a href="{{ route('portal.jobs.index') }}" class="text-sm text-gray-600 hover:text-gray-800" wire:navigate>
-                        {{ __('Browse existing jobs') }}
-                    </a>
+                <!-- SUBMIT ACTIONS -->
+                <div class="mt-8 px-4 flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div class="flex items-center gap-2 text-[#64748B]">
+                        <i data-lucide="shield-check" class="w-5 h-5 text-[#16A34A]"></i>
+                        <span
+                            class="text-xs font-bold uppercase tracking-wider">{{ __('Secured with AES-256 Encryption') }}</span>
+                    </div>
+
+                    <div class="flex items-center gap-4 w-full md:w-auto">
+                        <button type="submit" wire:loading.attr="disabled"
+                            class="w-full md:w-auto bg-[#1E7CCF] hover:bg-[#1866AD] text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                            <span wire:loading.remove wire:target="save">{{ __('Start Verification') }}</span>
+                            <span wire:loading wire:target="save" class="flex items-center gap-2">
+                                <i data-lucide="refresh-cw" class="w-4 h-4 animate-spin"></i> {{ __('Processing...') }}
+                            </span>
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>
+    </div>
 
-        <div class="rounded-lg border border-gray-200 p-4 text-sm text-gray-600">
-            {{ __('Need a template? Include a header row or paste a single column of emails.') }}
-            <a href="{{ route('portal.support') }}" class="text-indigo-600 hover:text-indigo-500" wire:navigate>
-                {{ __('Contact support') }}
-            </a>
-            {{ __('for help formatting your list.') }}
+    <!-- 3. HELP & TIPS SECTION -->
+    <div class="max-w-4xl mx-auto grid md:grid-cols-2 gap-6">
+        <div class="bg-[#F8FAFC] p-8 rounded-[2rem] border border-[#E2E8F0]">
+            <h4 class="font-bold text-[#0F172A] mb-3 flex items-center gap-2">
+                <i data-lucide="help-circle" class="text-[#1E7CCF] w-5 h-5"></i> {{ __('Formatting Help') }}
+            </h4>
+            <p class="text-sm text-[#64748B] leading-relaxed">
+                {{ __('Ensure your file contains one email per line. If using CSV, you can include a header row—our system will automatically detect the email column.') }}
+            </p>
+        </div>
+
+        <div class="bg-[#F8FAFC] p-8 rounded-[2rem] border border-[#E2E8F0]">
+            <h4 class="font-bold text-[#0F172A] mb-3 flex items-center gap-2">
+                <i data-lucide="info" class="text-[#1E7CCF] w-5 h-5"></i> {{ __('Need Support?') }}
+            </h4>
+            <p class="text-sm text-[#64748B] leading-relaxed">
+                {{ __('If you have a custom file format or very large lists (50k+), please contact our') }}
+                <a href="{{ route('portal.support') }}" class="text-[#1E7CCF] font-bold hover:underline"
+                    wire:navigate>{{ __('technical support team') }}</a>.
+            </p>
         </div>
     </div>
-</x-portal-layout>
+</div>
+
+<script>
+    lucide.createIcons();
+    // Re-render icons after Livewire updates
+    document.addEventListener('livewire:load', () => lucide.createIcons());
+    document.addEventListener('livewire:update', () => lucide.createIcons());
+</script>

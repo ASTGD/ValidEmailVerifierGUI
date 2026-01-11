@@ -9,6 +9,7 @@ use App\Livewire\Portal\Settings;
 use App\Livewire\Portal\Support;
 use App\Livewire\Portal\Upload;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
 
 Route::view('/', 'welcome');
 
@@ -48,3 +49,7 @@ Route::middleware(['auth', 'verified'])
     });
 
 require __DIR__.'/auth.php';
+
+Route::get('/checkout', function (Request $request) {
+    return view('checkout');
+});
