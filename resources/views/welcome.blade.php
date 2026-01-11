@@ -20,7 +20,7 @@
         <div class="max-w-[1280px] mx-auto px-10 h-20 flex items-center justify-between">
 
             <!-- Logo (Left) -->
-            <a href="/" class="flex items-center gap-3">
+            <a href="{{ url('/') }}" class="flex items-center gap-3">
                 <div
                     class="w-10 h-10 bg-[#1E7CCF] rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
                     <i data-lucide="shield-check" class="text-white w-6 h-6"></i>
@@ -43,16 +43,16 @@
                 <!-- Auth Buttons -->
                 <div class="flex items-center gap-4">
                     @guest
-                        <a href="http://localhost:8082/login"
+                        <a href="{{ route('login') }}"
                             class="text-[#334155] font-bold hover:text-[#1E7CCF] transition-all">Login</a>
-                        <a href="http://localhost:8082/register"
+                        <a href="{{ route('register') }}"
                             class="bg-[#1E7CCF] hover:bg-[#1866AD] text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-100 transition-all">
                             Sign Up
                         </a>
                     @endguest
 
                     @auth
-                        <a href="http://localhost:8082/portal/dashboard"
+                        <a href="{{ route('portal.dashboard') }}"
                             class="bg-[#1E7CCF] hover:bg-[#1866AD] text-white px-6 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2">
                             Dashboard <i data-lucide="arrow-right" class="w-4 h-4"></i>
                         </a>
@@ -142,7 +142,7 @@
                                 1</div>
                             <div>
                                 <h4 class="text-lg font-bold text-[#0F172A]">Upload Your List</h4>
-                                <p class="text-[#64748B]">Drag and drop your XLSX, xls, CSV or TXT file into the calculator.</p>
+                                <p class="text-[#64748B]">Drag and drop your XLSX, XLS, CSV, or TXT file into the calculator.</p>
                             </div>
                         </div>
                         <div class="flex gap-5">
@@ -258,7 +258,7 @@
                         folders.
                     </p>
                 </div>
-                <a href="http://localhost:8082/register"
+                <a href="{{ route('register') }}"
                     class="text-[#1E7CCF] font-bold text-lg flex items-center gap-2 hover:gap-4 transition-all">
                     See all features <i data-lucide="arrow-right"></i>
                 </a>
@@ -468,7 +468,7 @@
                     <p class="text-[#1E7CCF] font-bold text-lg">Did you know? Verifying your list can increase ROI by
                         up to 25%.</p>
                 </div>
-                <a href="http://localhost:8082/register"
+                <a href="{{ route('register') }}"
                     class="bg-[#1E7CCF] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#1866AD] transition-all whitespace-nowrap">
                     Verify My List Now
                 </a>
@@ -636,13 +636,11 @@
         const initialUI = document.getElementById('calc-initial');
         const processingUI = document.getElementById('calc-processing');
         const resultUI = document.getElementById('calc-result');
+        const checkoutUrl = @json(route('checkout'));
 
         dropZone.onclick = () => {
             if (resultUI.classList.contains('hidden')) fileInput.click();
         };
-
-        //
-
 
         fileInput.onchange = (e) => {
             const file = e.target.files[0];
@@ -654,32 +652,25 @@
             const fileName = file.name.toLowerCase();
             const reader = new FileReader();
 
-            // 1. Check if it's an Excel File
             if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
                 reader.onload = (event) => {
                     const data = new Uint8Array(event.target.result);
-                    const workbook = XLSX.read(data, {
-                        type: 'array'
-                    });
+                    const workbook = XLSX.read(data, { type: 'array' });
 
-                    let allText = "";
-                    // Loop through all sheets in the Excel file
-                    workbook.SheetNames.forEach(sheetName => {
+                    let allText = '';
+                    workbook.SheetNames.forEach((sheetName) => {
                         const worksheet = workbook.Sheets[sheetName];
-                        // Convert sheet to plain text strings to find emails
                         allText += JSON.stringify(XLSX.utils.sheet_to_json(worksheet));
                     });
 
                     processEmailMatches(allText);
                 };
-                reader.readAsArrayBuffer(file); // Binary read for Excel
-            }
-            // 2. Otherwise treat as Plain Text (CSV/TXT)
-            else {
+                reader.readAsArrayBuffer(file);
+            } else {
                 reader.onload = (event) => {
                     processEmailMatches(event.target.result);
                 };
-                reader.readAsText(file); // Text read for CSV/TXT
+                reader.readAsText(file);
             }
         };
 
@@ -688,13 +679,11 @@
             const emails = text.match(emailRegex) || [];
             const count = emails.length;
 
-            // Calculate Price based on your Tiers
             let rate = 0.03;
             if (count > 5000) rate = 0.02;
             if (count > 15000) rate = 0.01;
             const total = (count * rate).toFixed(2);
 
-            // Update UI
             setTimeout(() => {
                 document.getElementById('calc-email-count').innerText = count.toLocaleString();
                 document.getElementById('calc-total-price').innerText = '$' + total;
@@ -703,7 +692,7 @@
                 resultUI.classList.remove('hidden');
 
                 document.getElementById('payout-redirect').onclick = () => {
-                    window.location.href = `/checkout?count=${count}&price=${total}`;
+                    window.location.href = `${checkoutUrl}?count=${count}&price=${total}`;
                 };
             }, 800);
         }
