@@ -52,6 +52,11 @@
                     wire:navigate>
                     <i data-lucide="list-checks" class="w-5 h-5"></i> {{ __('Jobs') }}
                 </a>
+                <a href="{{ route('portal.orders.index') }}"
+                    class="flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors {{ request()->routeIs('portal.orders.*') ? 'bg-[#E9F2FB] text-[#1E7CCF] border-r-4 border-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}"
+                    wire:navigate>
+                    <i data-lucide="receipt" class="w-5 h-5"></i> {{ __('My Orders') }}
+                </a>
                 <a href="{{ route('billing.index') }}"
                     class="flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors {{ request()->routeIs('billing.*') ? 'bg-[#E9F2FB] text-[#1E7CCF] border-r-4 border-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}"
                     wire:navigate>
@@ -160,6 +165,9 @@
             </a>
             <a href="{{ route('portal.jobs.index') }}" class="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('portal.jobs.*') ? 'bg-[#E9F2FB] text-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}" wire:navigate>
                 {{ __('Jobs') }}
+            </a>
+            <a href="{{ route('portal.orders.index') }}" class="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('portal.orders.*') ? 'bg-[#E9F2FB] text-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}" wire:navigate>
+                {{ __('My Orders') }}
             </a>
             <a href="{{ route('billing.index') }}" class="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('billing.*') ? 'bg-[#E9F2FB] text-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}" wire:navigate>
                 {{ __('Billing') }}

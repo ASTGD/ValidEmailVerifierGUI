@@ -19,25 +19,38 @@
     <!-- 2. STATS CARDS GRID -->
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
 
-        <!-- Plan / Credits -->
+        <!-- Latest Order -->
         <div class="bg-white p-6 rounded-[2rem] border border-[#E2E8F0] shadow-sm hover:shadow-md transition-shadow">
             <div class="flex items-center justify-between mb-4">
                 <div class="w-12 h-12 bg-[#E9F2FB] text-[#1E7CCF] rounded-2xl flex items-center justify-center">
-                    <i data-lucide="credit-card" class="w-6 h-6"></i>
+                    <i data-lucide="receipt" class="w-6 h-6"></i>
                 </div>
-                <a href="{{ route('billing.index') }}" class="text-[#1E7CCF] text-xs font-bold hover:underline"
-                    wire:navigate>{{ __('Manage') }}</a>
+                <a href="{{ route('portal.orders.index') }}" class="text-[#1E7CCF] text-xs font-bold hover:underline"
+                    wire:navigate>{{ __('View orders') }}</a>
             </div>
-            <p class="text-[#64748B] text-xs font-bold uppercase tracking-widest">{{ $this->planName }}</p>
-            <h3 class="text-2xl font-black text-[#0F172A] mt-1">
-                @if ($this->billingConfigured)
-                    {{ $this->billingStatus }}
-                @else
-                    <span class="text-[#DC2626]">{{ __('Not Configured') }}</span>
-                @endif
-            </h3>
-            <p class="mt-3 text-[11px] font-bold text-[#94A3B8] uppercase">{{ __('Used this month') }}: <span
-                    class="text-[#334155]">{{ number_format($this->creditsUsedThisMonth) }}</span></p>
+            <p class="text-[#64748B] text-xs font-bold uppercase tracking-widest">{{ __('Latest order') }}</p>
+            @if ($this->latestOrder)
+                @php
+                    $orderCurrency = strtolower($this->latestOrder->currency) === 'usd' ? '$' : strtoupper($this->latestOrder->currency).' ';
+                @endphp
+                <h3 class="text-2xl font-black text-[#0F172A] mt-1">
+                    {{ number_format($this->latestOrder->email_count) }} {{ __('emails') }}
+                </h3>
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                    <span class="text-sm font-bold text-[#0F172A]">
+                        {{ $orderCurrency }}{{ number_format($this->latestOrder->amount_cents / 100, 2) }}
+                    </span>
+                    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase {{ $this->latestOrder->status->badgeClasses() }}">
+                        {{ $this->latestOrder->status->label() }}
+                    </span>
+                </div>
+                <p class="mt-2 text-[11px] font-bold text-[#94A3B8] uppercase truncate">
+                    {{ __('Order') }}: <span class="font-mono text-[#334155]">{{ $this->latestOrder->id }}</span>
+                </p>
+            @else
+                <h3 class="text-2xl font-black text-[#94A3B8] mt-1">{{ __('No orders yet') }}</h3>
+                <p class="mt-3 text-[11px] font-bold text-[#94A3B8] uppercase">{{ __('Upload a list to get started') }}</p>
+            @endif
         </div>
 
         <!-- Jobs in Queue -->

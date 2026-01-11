@@ -51,6 +51,14 @@ class PricingPlanForm
                             ->numeric()
                             ->minValue(0)
                             ->step('0.01'),
+                        TextInput::make('min_emails')
+                            ->label('Min emails')
+                            ->numeric()
+                            ->minValue(0),
+                        TextInput::make('max_emails')
+                            ->label('Max emails')
+                            ->numeric()
+                            ->minValue(0),
                         TextInput::make('credits_per_month')
                             ->label('Credits per month')
                             ->numeric()
