@@ -14,13 +14,12 @@ class StripeWebhookController extends WebhookController
     {
         $session = $payload['data']['object'] ?? [];
         $metadata = $session['metadata'] ?? [];
-        $intentId = $metadata['checkout_intent_id'] ?? null;
+        $intentId = $metadata['checkout_intent_id']
+            ?? ($session['client_reference_id'] ?? null);
 
-        if (! $intentId) {
-            return $this->successMethod();
-        }
-
-        $intent = CheckoutIntent::query()->with('order')->find($intentId);
+        $intent = $intentId
+            ? CheckoutIntent::query()->with('order')->find($intentId)
+            : CheckoutIntent::query()->with('order')->where('stripe_session_id', $session['id'] ?? null)->first();
 
         if (! $intent) {
             return $this->successMethod();
@@ -62,21 +61,21 @@ class StripeWebhookController extends WebhookController
     {
         $session = $payload['data']['object'] ?? [];
         $metadata = $session['metadata'] ?? [];
-        $intentId = $metadata['checkout_intent_id'] ?? null;
+        $intentId = $metadata['checkout_intent_id']
+            ?? ($session['client_reference_id'] ?? null);
 
-        if (! $intentId) {
+        $intent = $intentId
+            ? CheckoutIntent::find($intentId)
+            : CheckoutIntent::query()->where('stripe_session_id', $session['id'] ?? null)->first();
+
+        if (! $intent) {
             return $this->successMethod();
         }
 
-        $intent = CheckoutIntent::find($intentId);
-
-        if (! $intent || $intent->status !== CheckoutIntentStatus::Pending) {
-            return $this->successMethod();
+        if ($intent->status === CheckoutIntentStatus::Pending) {
+            $intent->status = CheckoutIntentStatus::Expired;
+            $intent->save();
         }
-
-        $intent->status = CheckoutIntentStatus::Expired;
-        $intent->save();
-
         return $this->successMethod();
     }
 }
