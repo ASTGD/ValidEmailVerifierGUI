@@ -1,0 +1,23 @@
+:root {
+    --admin-card-dark-bg: #0f172a;
+    --admin-highlight-bg: #ffffff;
+    --admin-highlight-text: #0f172a;
+    --admin-highlight-muted: #64748b;
+    --admin-highlight-border: rgba(148, 163, 184, 0.35);
+    --admin-highlight-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+}
+
+.dark .fi-section:not(.fi-section-not-contained),
+.dark .fi-section.fi-aside > .fi-section-content-ctn,
+.dark .fi-ta-ctn,
+.dark .fi-wi-stats-overview-stat {
+    background-color: var(--admin-card-dark-bg);
+}
+
+.dark .admin-highlight-card {
+    --admin-highlight-bg: #0f172a;
+    --admin-highlight-text: #ffffff;
+    --admin-highlight-muted: #94a3b8;
+    --admin-highlight-border: rgba(30, 41, 59, 0.45);
+    --admin-highlight-shadow: 0 6px 18px rgba(15, 23, 42, 0.25);
+}
