@@ -33,7 +33,7 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->brandName(config('verifier.brand_name') ?: config('app.name'))
             ->assets([
-                Css::make('admin-overrides')
+                Css::make('admin-overrides', resource_path('css/filament/admin/admin-overrides.css'))
                     ->relativePublicPath('css/filament/admin-overrides.css'),
             ])
             ->colors([
