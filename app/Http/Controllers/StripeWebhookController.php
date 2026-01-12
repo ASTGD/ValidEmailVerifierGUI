@@ -76,7 +76,6 @@ class StripeWebhookController extends WebhookController
             $intent->status = CheckoutIntentStatus::Expired;
             $intent->save();
         }
-
         return $this->successMethod();
     }
 }
