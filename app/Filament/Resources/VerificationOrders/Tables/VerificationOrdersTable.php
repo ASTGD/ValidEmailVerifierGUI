@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\VerificationOrders\Tables;
 
-use App\Enums\VerificationJobStatus;
 use App\Enums\CheckoutIntentStatus;
+use App\Enums\VerificationJobStatus;
 use App\Enums\VerificationOrderStatus;
 use App\Filament\Resources\Customers\CustomerResource;
 use App\Filament\Resources\VerificationOrders\VerificationOrderResource;
