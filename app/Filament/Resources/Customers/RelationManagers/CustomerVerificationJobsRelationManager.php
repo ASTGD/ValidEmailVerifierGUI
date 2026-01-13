@@ -17,6 +17,7 @@ class CustomerVerificationJobsRelationManager extends RelationManager
     {
         return $table
             ->defaultSort('created_at', 'desc')
+            ->modifyQueryUsing(fn ($query) => $query->excludeAdminFailures())
             ->columns([
                 TextColumn::make('id')
                     ->label('Job ID')

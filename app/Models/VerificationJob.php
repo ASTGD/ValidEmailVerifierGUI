@@ -13,6 +13,10 @@ class VerificationJob extends Model
 {
     use HasUuids;
 
+    public const FAILURE_SOURCE_ENGINE = 'engine';
+    public const FAILURE_SOURCE_ADMIN = 'admin';
+    public const FAILURE_SOURCE_SYSTEM = 'system';
+
     public $incrementing = false;
 
     protected $keyType = 'string';
@@ -26,6 +30,8 @@ class VerificationJob extends Model
         'output_disk',
         'output_key',
         'error_message',
+        'failure_source',
+        'failure_code',
         'started_at',
         'finished_at',
         'total_emails',
@@ -45,6 +51,14 @@ class VerificationJob extends Model
         'risky_count' => 'integer',
         'unknown_count' => 'integer',
     ];
+
+    public function scopeExcludeAdminFailures($query)
+    {
+        return $query->where(function ($inner) {
+            $inner->whereNull('failure_source')
+                ->orWhere('failure_source', '!=', self::FAILURE_SOURCE_ADMIN);
+        });
+    }
 
     public function user(): BelongsTo
     {

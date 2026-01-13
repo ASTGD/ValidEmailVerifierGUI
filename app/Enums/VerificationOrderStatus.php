@@ -8,6 +8,8 @@ enum VerificationOrderStatus: string
     case Processing = 'processing';
     case Delivered = 'delivered';
     case Failed = 'failed';
+    case Cancelled = 'cancelled';
+    case Fraud = 'fraud';
 
     public function label(): string
     {
@@ -16,6 +18,8 @@ enum VerificationOrderStatus: string
             self::Processing => __('Processing'),
             self::Delivered => __('Delivered'),
             self::Failed => __('Failed'),
+            self::Cancelled => __('Cancelled'),
+            self::Fraud => __('Fraud'),
         };
     }
 
@@ -26,6 +30,8 @@ enum VerificationOrderStatus: string
             self::Processing => 'bg-blue-100 text-blue-800',
             self::Delivered => 'bg-green-100 text-green-800',
             self::Failed => 'bg-red-100 text-red-800',
+            self::Cancelled => 'bg-slate-100 text-slate-700',
+            self::Fraud => 'bg-red-100 text-red-800',
         };
     }
 }

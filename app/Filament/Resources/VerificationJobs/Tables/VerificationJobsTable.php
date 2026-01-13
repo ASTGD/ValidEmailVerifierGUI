@@ -81,6 +81,8 @@ class VerificationJobsTable
                         $record->update([
                             'status' => VerificationJobStatus::Failed,
                             'error_message' => $data['error_message'],
+                            'failure_source' => VerificationJob::FAILURE_SOURCE_ADMIN,
+                            'failure_code' => 'manual_fail',
                             'finished_at' => now(),
                         ]);
 
@@ -108,6 +110,8 @@ class VerificationJobsTable
                         $record->update([
                             'status' => VerificationJobStatus::Failed,
                             'error_message' => 'Cancelled by admin.',
+                            'failure_source' => VerificationJob::FAILURE_SOURCE_ADMIN,
+                            'failure_code' => 'cancelled',
                             'finished_at' => now(),
                         ]);
 
@@ -137,6 +141,8 @@ class VerificationJobsTable
                         $record->update([
                             'status' => VerificationJobStatus::Pending,
                             'error_message' => null,
+                            'failure_source' => null,
+                            'failure_code' => null,
                             'started_at' => null,
                             'finished_at' => null,
                             'output_disk' => null,
@@ -163,7 +169,7 @@ class VerificationJobsTable
                             'to' => VerificationJobStatus::Pending->value,
                         ]);
                     })
-                    ->visible(fn (VerificationJob $record): bool => $record->status === VerificationJobStatus::Failed),
+                    ->visible(fn (VerificationJob $record): bool => $record->status === VerificationJobStatus::Failed && $record->failure_source !== VerificationJob::FAILURE_SOURCE_ADMIN),
             ]);
     }
 

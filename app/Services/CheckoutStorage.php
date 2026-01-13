@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CheckoutIntent;
 use App\Models\VerificationJob;
+use App\Models\VerificationOrder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -45,6 +46,25 @@ class CheckoutStorage
         $destination = $jobStorage->inputKey($job);
 
         if ($disk !== $jobStorage->disk()) {
+            Storage::disk($disk)->copy($source, $destination);
+            Storage::disk($disk)->delete($source);
+            return;
+        }
+
+        Storage::disk($disk)->move($source, $destination);
+    }
+
+    public function moveToOrder(CheckoutIntent $intent, VerificationOrder $order, OrderStorage $orderStorage): void
+    {
+        $disk = $intent->temp_disk;
+        $source = $intent->temp_key;
+        $destination = $order->input_key ?? $orderStorage->inputKey($order, pathinfo($source ?? '', PATHINFO_EXTENSION));
+
+        if (! $disk || ! $source) {
+            return;
+        }
+
+        if ($disk !== $orderStorage->disk()) {
             Storage::disk($disk)->copy($source, $destination);
             Storage::disk($disk)->delete($source);
             return;

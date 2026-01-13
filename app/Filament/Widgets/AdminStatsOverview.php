@@ -27,6 +27,7 @@ class AdminStatsOverview extends StatsOverviewWidget
 
         $failedLastDay = VerificationJob::query()
             ->where('status', VerificationJobStatus::Failed)
+            ->excludeAdminFailures()
             ->where('finished_at', '>=', now()->subDay())
             ->count();
 
