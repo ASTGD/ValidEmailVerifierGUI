@@ -46,8 +46,16 @@ class StripeWebhookController extends WebhookController
             return $this->successMethod();
         }
 
+        $paymentMethod = null;
+        if (! empty($session['payment_method_types'][0])) {
+            $paymentMethod = $session['payment_method_types'][0];
+        } elseif (! empty($session['payment_method_details']['type'])) {
+            $paymentMethod = $session['payment_method_details']['type'];
+        }
+
         $intent->stripe_session_id = $session['id'] ?? $intent->stripe_session_id;
         $intent->stripe_payment_intent_id = $session['payment_intent'] ?? $intent->stripe_payment_intent_id;
+        $intent->payment_method = $paymentMethod ?: $intent->payment_method;
         $intent->paid_at = $intent->paid_at ?: now();
         $intent->save();
 

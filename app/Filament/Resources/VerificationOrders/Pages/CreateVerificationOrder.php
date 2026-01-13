@@ -9,36 +9,28 @@ use App\Services\OrderStorage;
 use App\Support\AdminAuditLogger;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class CreateVerificationOrder extends CreateRecord
 {
     protected static string $resource = VerificationOrderResource::class;
+
+    protected ?TemporaryUploadedFile $uploadedFile = null;
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         $file = $data['input_file'] ?? null;
         unset($data['input_file']);
 
-        $data['id'] = (string) Str::uuid();
+        $data['order_number'] = VerificationOrder::generateOrderNumber();
         $data['status'] = VerificationOrderStatus::Pending->value;
 
         if (is_array($file)) {
             $file = $file[0] ?? null;
         }
 
-        if ($file) {
-            $order = new VerificationOrder([
-                'id' => $data['id'],
-                'user_id' => $data['user_id'],
-            ]);
-
-            $storage = app(OrderStorage::class);
-            [$disk, $key] = $storage->storeInput($file, $order);
-
-            $data['input_disk'] = $disk;
-            $data['input_key'] = $key;
-            $data['original_filename'] = $file->getClientOriginalName();
+        if ($file instanceof TemporaryUploadedFile) {
+            $this->uploadedFile = $file;
         }
 
         return $data;
@@ -47,7 +39,6 @@ class CreateVerificationOrder extends CreateRecord
     protected function handleRecordCreation(array $data): Model
     {
         $record = new VerificationOrder($data);
-        $record->id = $data['id'] ?? (string) Str::uuid();
         $record->save();
 
         return $record;
@@ -55,6 +46,17 @@ class CreateVerificationOrder extends CreateRecord
 
     protected function afterCreate(): void
     {
+        if ($this->uploadedFile) {
+            $storage = app(OrderStorage::class);
+            [$disk, $key] = $storage->storeInput($this->uploadedFile, $this->record);
+
+            $this->record->update([
+                'input_disk' => $disk,
+                'input_key' => $key,
+                'original_filename' => $this->uploadedFile->getClientOriginalName(),
+            ]);
+        }
+
         AdminAuditLogger::log('order_created', $this->record);
     }
 }

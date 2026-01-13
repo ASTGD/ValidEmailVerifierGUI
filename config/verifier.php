@@ -2,6 +2,7 @@
 
 return [
     'brand_name' => env('VERIFIER_BRAND_NAME', 'Valid Email Verifier'),
+    'order_number_prefix' => env('VERIFIER_ORDER_PREFIX', 'ORD'),
     'storage_disk' => env('VERIFIER_STORAGE_DISK'),
     'require_active_subscription' => (bool) env('VERIFIER_REQUIRE_SUBSCRIPTION', false),
     'retention_days' => (int) env('VERIFIER_RETENTION_DAYS', 30),
