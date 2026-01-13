@@ -3,11 +3,9 @@
 namespace App\Services;
 
 use App\Enums\CheckoutIntentStatus;
-use App\Enums\VerificationJobStatus;
 use App\Enums\VerificationOrderStatus;
 use App\Models\CheckoutIntent;
 use App\Models\User;
-use App\Models\VerificationJob;
 use App\Models\VerificationOrder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +19,7 @@ class CheckoutIntentService
         private readonly CheckoutStorage $storage,
         private readonly EmailListAnalyzer $analyzer,
         private readonly PricingCalculator $pricing,
-        private readonly JobStorage $jobStorage,
+        private readonly OrderStorage $orderStorage,
     ) {
     }
 
@@ -152,25 +150,8 @@ class CheckoutIntentService
                 $intent->user_id = $user->id;
             }
 
-            $job = new VerificationJob([
+            $order = new VerificationOrder([
                 'user_id' => $user->id,
-                'status' => VerificationJobStatus::Pending,
-                'original_filename' => $intent->original_filename,
-            ]);
-            $job->id = (string) Str::uuid();
-            $job->input_disk = $this->jobStorage->disk();
-            $job->input_key = $this->jobStorage->inputKey($job);
-            $job->save();
-
-            $this->storage->moveToJob($intent, $job, $this->jobStorage);
-
-            $job->addLog('created', 'Job created after checkout payment.', [
-                'checkout_intent_id' => $intent->id,
-            ], $user->id);
-
-            $order = VerificationOrder::create([
-                'user_id' => $user->id,
-                'verification_job_id' => $job->id,
                 'checkout_intent_id' => $intent->id,
                 'pricing_plan_id' => $intent->pricing_plan_id,
                 'status' => VerificationOrderStatus::Pending,
@@ -179,6 +160,12 @@ class CheckoutIntentService
                 'amount_cents' => $intent->amount_cents,
                 'currency' => $intent->currency,
             ]);
+            $order->id = (string) Str::uuid();
+            $order->input_disk = $this->orderStorage->disk();
+            $order->input_key = $this->orderStorage->inputKey($order, pathinfo((string) $intent->temp_key, PATHINFO_EXTENSION));
+            $order->save();
+
+            $this->storage->moveToOrder($intent, $order, $this->orderStorage);
 
             $intent->status = CheckoutIntentStatus::Completed;
             $intent->paid_at = $intent->paid_at ?: now();

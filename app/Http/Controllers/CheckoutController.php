@@ -107,6 +107,6 @@ class CheckoutController
 
         return redirect()
             ->route('portal.orders.index')
-            ->with('status', __('Order :id created and queued for processing.', ['id' => $order->id]));
+            ->with('status', __('Order :id created and awaiting activation.', ['id' => $order->id]));
     }
 }

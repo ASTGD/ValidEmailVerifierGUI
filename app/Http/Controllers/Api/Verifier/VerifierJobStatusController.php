@@ -38,6 +38,8 @@ class VerifierJobStatusController
 
         if ($status === VerificationJobStatus::Failed) {
             $attributes['error_message'] = $request->input('error_message');
+            $attributes['failure_source'] = VerificationJob::FAILURE_SOURCE_ENGINE;
+            $attributes['failure_code'] = 'engine_error';
             $attributes['finished_at'] = now();
         }
 

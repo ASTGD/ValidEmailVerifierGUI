@@ -14,6 +14,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use UnitEnum;
 
 class VerificationJobResource extends Resource
@@ -29,6 +30,16 @@ class VerificationJobResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return VerificationJobForm::configure($schema);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->excludeAdminFailures();
+    }
+
+    public static function getRecordRouteBindingEloquentQuery(): Builder
+    {
+        return parent::getRecordRouteBindingEloquentQuery()->excludeAdminFailures();
     }
 
     public static function infolist(Schema $schema): Schema

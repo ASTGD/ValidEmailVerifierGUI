@@ -23,6 +23,8 @@ class VerificationOrder extends Model
         'pricing_plan_id',
         'status',
         'original_filename',
+        'input_disk',
+        'input_key',
         'email_count',
         'amount_cents',
         'currency',
@@ -56,6 +58,10 @@ class VerificationOrder extends Model
 
     public function syncStatusFromJob(VerificationJob $job): void
     {
+        if (in_array($this->status, [VerificationOrderStatus::Cancelled, VerificationOrderStatus::Fraud], true)) {
+            return;
+        }
+
         $mapped = match ($job->status) {
             VerificationJobStatus::Pending => VerificationOrderStatus::Pending,
             VerificationJobStatus::Processing => VerificationOrderStatus::Processing,
