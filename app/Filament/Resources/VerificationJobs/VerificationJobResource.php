@@ -15,6 +15,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use UnitEnum;
+use Illuminate\Database\Eloquent\Builder;
 
 class VerificationJobResource extends Resource
 {
@@ -54,5 +55,11 @@ class VerificationJobResource extends Resource
             'index' => ListVerificationJobs::route('/'),
             'view' => ViewVerificationJob::route('/{record}'),
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        // Filter this specific page to only show 'processing' status
+        return parent::getEloquentQuery()->processing();
     }
 }

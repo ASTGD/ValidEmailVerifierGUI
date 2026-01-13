@@ -87,4 +87,32 @@ class VerificationJob extends Model
             }
         });
     }
+
+    /** --- HELPER SCOPES FOR FILAMENT --- **/
+
+    public function scopePending($query)
+    {
+        return $query->where('status', VerificationJobStatus::Pending);
+    }
+
+    public function scopeProcessing($query)
+    {
+        return $query->where('status', VerificationJobStatus::Processing);
+    }
+
+    public function scopeFinished($query)
+    {
+        return $query->whereIn('status', [
+            VerificationJobStatus::Completed,
+            VerificationJobStatus::Failed,
+            VerificationJobStatus::Cancelled,
+            VerificationJobStatus::Spam
+        ]);
+    }
+
+    /** Helper to check if results are ready for download **/
+    public function isDownloadable(): bool
+    {
+        return $this->status === VerificationJobStatus::Completed && !empty($this->output_key);
+    }
 }
