@@ -5,6 +5,7 @@ namespace App\Filament\Resources\VerificationOrders\Pages;
 use App\Enums\VerificationOrderStatus;
 use App\Filament\Resources\VerificationOrders\VerificationOrderResource;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Support\Enums\Width;
 use Illuminate\Database\Eloquent\Builder;
 
 use function Filament\Support\original_request;
@@ -12,6 +13,7 @@ use function Filament\Support\original_request;
 class ListVerificationOrders extends ListRecords
 {
     protected static string $resource = VerificationOrderResource::class;
+    protected Width | string | null $maxContentWidth = Width::Full;
 
     protected function getTableQuery(): Builder
     {

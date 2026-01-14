@@ -6,11 +6,15 @@ use App\Enums\VerificationJobStatus;
 use App\Enums\VerificationOrderStatus;
 use App\Filament\Resources\Customers\CustomerResource;
 use App\Filament\Resources\VerificationJobs\VerificationJobResource;
+use App\Filament\Resources\VerificationOrders\Actions\OrderActions;
 use App\Models\VerificationOrder;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Alignment;
+use Filament\Support\Enums\FontWeight;
+use Filament\Support\Enums\TextSize;
 
 class VerificationOrderInfolist
 {
@@ -28,6 +32,9 @@ class VerificationOrderInfolist
                         TextEntry::make('id')
                             ->label('Order ID')
                             ->copyable(),
+                        TextEntry::make('created_at')
+                            ->label('Created')
+                            ->dateTime(),
                         TextEntry::make('status')
                             ->label('Order Status')
                             ->badge()
@@ -63,47 +70,6 @@ class VerificationOrderInfolist
                                     default => 'gray',
                                 };
                             }),
-                        TextEntry::make('email_count')
-                            ->label('Email Count')
-                            ->numeric()
-                            ->placeholder('-'),
-                        TextEntry::make('amount_cents')
-                            ->label('Amount')
-                            ->formatStateUsing(function ($state, VerificationOrder $record): string {
-                                $currency = strtoupper((string) ($record->currency ?: 'usd'));
-                                $amount = $state !== null ? ((int) $state) / 100 : 0;
-
-                                return sprintf('%s %.2f', $currency, $amount);
-                            }),
-                        TextEntry::make('pricingPlan.name')
-                            ->label('Pricing Plan')
-                            ->placeholder('-'),
-                        TextEntry::make('created_at')
-                            ->label('Created')
-                            ->dateTime(),
-                        TextEntry::make('updated_at')
-                            ->label('Updated')
-                            ->dateTime(),
-                    ])
-                    ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
-                    ->columnSpanFull(),
-                Section::make('Files')
-                    ->schema([
-                        TextEntry::make('original_filename')
-                            ->label('Original File')
-                            ->placeholder('-'),
-                        TextEntry::make('input_disk')
-                            ->label('Storage Disk')
-                            ->placeholder('-'),
-                        TextEntry::make('input_key')
-                            ->label('Storage Key')
-                            ->copyable()
-                            ->placeholder('-'),
-                    ])
-                    ->columns(2)
-                    ->columnSpan(['lg' => 2]),
-                Section::make('Client')
-                    ->schema([
                         TextEntry::make('user.name')
                             ->label('Client')
                             ->formatStateUsing(function ($state, VerificationOrder $record): string {
@@ -121,9 +87,46 @@ class VerificationOrderInfolist
                             ->copyable()
                             ->placeholder('-'),
                     ])
-                    ->columns(1)
-                    ->columnSpan(['lg' => 1]),
-                Section::make('Verification Job')
+                    ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
+                    ->columnSpanFull(),
+                Section::make('Order Item')
+                    ->description(__('What was ordered'))
+                    ->extraAttributes(['class' => 'admin-order-item'])
+                    ->footerActions(OrderActions::make())
+                    ->footerActionsAlignment(Alignment::Start)
+                    ->schema([
+                        TextEntry::make('pricingPlan.name')
+                            ->label('Pricing Plan')
+                            ->placeholder('-'),
+                        TextEntry::make('email_count')
+                            ->label('Email Count')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('amount_cents')
+                            ->label('Total Amount')
+                            ->formatStateUsing(function ($state, VerificationOrder $record): string {
+                                $currency = strtoupper((string) ($record->currency ?: 'usd'));
+                                $amount = $state !== null ? ((int) $state) / 100 : 0;
+
+                                return sprintf('%s %.2f', $currency, $amount);
+                            })
+                            ->size(TextSize::Large)
+                            ->weight(FontWeight::SemiBold),
+                        TextEntry::make('original_filename')
+                            ->label('Original File')
+                            ->placeholder('-'),
+                        TextEntry::make('input_disk')
+                            ->label('Storage Disk')
+                            ->placeholder('-'),
+                        TextEntry::make('input_key')
+                            ->label('Input Key')
+                            ->copyable()
+                            ->placeholder('-')
+                            ->columnSpanFull(),
+                    ])
+                    ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
+                    ->columnSpanFull(),
+                Section::make('Verification')
                     ->schema([
                         TextEntry::make('verification_job_id')
                             ->label('Job ID')
@@ -167,6 +170,26 @@ class VerificationOrderInfolist
                                     default => 'gray',
                                 };
                             }),
+                        TextEntry::make('job.total_emails')
+                            ->label('Total Emails')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('job.valid_count')
+                            ->label('Valid')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('job.invalid_count')
+                            ->label('Invalid')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('job.risky_count')
+                            ->label('Risky')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('job.unknown_count')
+                            ->label('Unknown')
+                            ->numeric()
+                            ->placeholder('-'),
                         TextEntry::make('job.started_at')
                             ->label('Started')
                             ->dateTime()
@@ -191,6 +214,10 @@ class VerificationOrderInfolist
                         TextEntry::make('checkout_intent_id')
                             ->label('Checkout Intent')
                             ->copyable()
+                            ->placeholder('-'),
+                        TextEntry::make('checkoutIntent.paid_at')
+                            ->label('Paid At')
+                            ->dateTime()
                             ->placeholder('-'),
                         TextEntry::make('refunded_at')
                             ->label('Refunded At')
@@ -250,7 +277,7 @@ class VerificationOrderInfolist
                             ->columns(['default' => 1, 'md' => 3])
                             ->placeholder('No activity yet.'),
                     ])
-                    ->columnSpan(['lg' => 2]),
+                    ->columnSpanFull(),
             ]);
     }
 }
