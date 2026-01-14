@@ -21,3 +21,29 @@
     --admin-highlight-border: rgba(30, 41, 59, 0.45);
     --admin-highlight-shadow: 0 6px 18px rgba(15, 23, 42, 0.25);
 }
+
+.admin-order-item {
+    background: linear-gradient(135deg, rgba(30, 124, 207, 0.12), #ffffff 55%);
+    border: 1px solid var(--border-light);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.admin-order-item .fi-section-header {
+    border-bottom: 1px dashed var(--border-light);
+    padding-bottom: 0.75rem;
+}
+
+.admin-order-item .fi-section-header-heading {
+    font-weight: 600;
+    font-size: 1.125rem;
+}
+
+.dark .admin-order-item {
+    background: linear-gradient(135deg, rgba(30, 124, 207, 0.2), #0f172a 55%);
+    border-color: rgba(30, 124, 207, 0.35);
+    box-shadow: 0 18px 40px rgba(2, 6, 23, 0.45);
+}
+
+.dark .admin-order-item .fi-section-header {
+    border-bottom-color: rgba(148, 163, 184, 0.25);
+}
