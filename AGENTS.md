@@ -266,6 +266,7 @@ Codex must:
 - Provide exact Sail commands to verify changes.
 - Keep app runnable on port 8082.
 - Update README/AGENTS only when rules/requirements change.
+- When DB migrations are added/changed, run `./vendor/bin/sail artisan migrate` and confirm migrations are done.
 
 Codex must NOT:
 - Change architecture, stack, or ports without PM approval.

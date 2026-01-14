@@ -28,6 +28,7 @@ class CheckoutIntent extends Model
         'pricing_plan_id',
         'stripe_session_id',
         'stripe_payment_intent_id',
+        'payment_method',
         'paid_at',
         'expires_at',
     ];

@@ -154,13 +154,15 @@ class CheckoutIntentService
                 'user_id' => $user->id,
                 'checkout_intent_id' => $intent->id,
                 'pricing_plan_id' => $intent->pricing_plan_id,
+                'order_number' => VerificationOrder::generateOrderNumber(),
                 'status' => VerificationOrderStatus::Pending,
                 'original_filename' => $intent->original_filename,
                 'email_count' => $intent->email_count,
                 'amount_cents' => $intent->amount_cents,
                 'currency' => $intent->currency,
             ]);
-            $order->id = (string) Str::uuid();
+            $order->save();
+
             $order->input_disk = $this->orderStorage->disk();
             $order->input_key = $this->orderStorage->inputKey($order, pathinfo((string) $intent->temp_key, PATHINFO_EXTENSION));
             $order->save();
