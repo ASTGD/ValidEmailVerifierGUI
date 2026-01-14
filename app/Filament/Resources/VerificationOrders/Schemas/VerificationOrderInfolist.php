@@ -35,6 +35,9 @@ class VerificationOrderInfolist
                         TextEntry::make('created_at')
                             ->label('Created')
                             ->dateTime(),
+                        TextEntry::make('updated_at')
+                            ->label('Updated')
+                            ->dateTime(),
                         TextEntry::make('status')
                             ->label('Order Status')
                             ->badge()
