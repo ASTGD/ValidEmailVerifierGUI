@@ -1,6 +1,10 @@
 <?php
 
 use App\Http\Controllers\Api\Verifier\VerifierHeartbeatController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkCompleteController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkDetailsController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkFailController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkLogController;
 use App\Http\Controllers\Api\Verifier\VerifierJobClaimController;
 use App\Http\Controllers\Api\Verifier\VerifierJobCompleteController;
 use App\Http\Controllers\Api\Verifier\VerifierJobDownloadController;
@@ -27,4 +31,19 @@ Route::middleware(['auth:sanctum', EnsureVerifierService::class, 'throttle:verif
         Route::get('jobs/{job}/download', VerifierJobDownloadController::class)
             ->whereUuid('job')
             ->name('jobs.download');
+
+        Route::prefix('chunks')->name('chunks.')->group(function () {
+            Route::get('{chunk}', VerifierChunkDetailsController::class)
+                ->whereUuid('chunk')
+                ->name('show');
+            Route::post('{chunk}/log', VerifierChunkLogController::class)
+                ->whereUuid('chunk')
+                ->name('log');
+            Route::post('{chunk}/fail', VerifierChunkFailController::class)
+                ->whereUuid('chunk')
+                ->name('fail');
+            Route::post('{chunk}/complete', VerifierChunkCompleteController::class)
+                ->whereUuid('chunk')
+                ->name('complete');
+        });
     });
