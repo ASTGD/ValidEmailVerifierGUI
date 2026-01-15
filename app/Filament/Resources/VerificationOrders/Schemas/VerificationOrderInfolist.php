@@ -3,14 +3,13 @@
 namespace App\Filament\Resources\VerificationOrders\Schemas;
 
 use App\Enums\VerificationJobStatus;
-use App\Enums\VerificationOrderStatus;
-use App\Filament\Resources\Customers\CustomerResource;
 use App\Filament\Resources\VerificationJobs\VerificationJobResource;
 use App\Filament\Resources\VerificationOrders\Actions\OrderActions;
 use App\Models\VerificationOrder;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Enums\FontWeight;
@@ -25,72 +24,8 @@ class VerificationOrderInfolist
             ->components([
                 Section::make('Order Summary')
                     ->schema([
-                        TextEntry::make('order_number')
-                            ->label('Order Number')
-                            ->copyable()
-                            ->tooltip(__('Click to copy order number')),
-                        TextEntry::make('id')
-                            ->label('Order ID')
-                            ->copyable(),
-                        TextEntry::make('created_at')
-                            ->label('Created')
-                            ->dateTime(),
-                        TextEntry::make('updated_at')
-                            ->label('Updated')
-                            ->dateTime(),
-                        TextEntry::make('status')
-                            ->label('Order Status')
-                            ->badge()
-                            ->formatStateUsing(function ($state): string {
-                                if ($state instanceof VerificationOrderStatus) {
-                                    return $state->label();
-                                }
-
-                                return ucfirst((string) $state);
-                            })
-                            ->color(function ($state): string {
-                                $value = $state instanceof VerificationOrderStatus ? $state->value : (string) $state;
-
-                                return match ($value) {
-                                    VerificationOrderStatus::Pending->value => 'warning',
-                                    VerificationOrderStatus::Processing->value => 'info',
-                                    VerificationOrderStatus::Delivered->value => 'success',
-                                    VerificationOrderStatus::Failed->value => 'danger',
-                                    VerificationOrderStatus::Cancelled->value => 'gray',
-                                    VerificationOrderStatus::Fraud->value => 'danger',
-                                    default => 'gray',
-                                };
-                            }),
-                        TextEntry::make('payment_status')
-                            ->label('Payment Status')
-                            ->badge()
-                            ->state(fn (VerificationOrder $record): string => $record->paymentStatusLabel())
-                            ->color(function (VerificationOrder $record): string {
-                                return match ($record->paymentStatusKey()) {
-                                    'paid' => 'success',
-                                    'failed' => 'danger',
-                                    'refunded' => 'warning',
-                                    default => 'gray',
-                                };
-                            }),
-                        TextEntry::make('user.name')
-                            ->label('Client')
-                            ->formatStateUsing(function ($state, VerificationOrder $record): string {
-                                return $record->user?->name ?: ($record->user?->email ?: '-');
-                            })
-                            ->url(function (VerificationOrder $record): ?string {
-                                if (! $record->user) {
-                                    return null;
-                                }
-
-                                return CustomerResource::getUrl('view', ['record' => $record->user]);
-                            }),
-                        TextEntry::make('user.email')
-                            ->label('Email')
-                            ->copyable()
-                            ->placeholder('-'),
+                        View::make('filament.admin.order-summary'),
                     ])
-                    ->columns(['default' => 1, 'md' => 2, 'xl' => 4])
                     ->columnSpanFull(),
                 Section::make('Order Item')
                     ->description(__('What was ordered'))

@@ -171,3 +171,4 @@ Purge completed/failed jobs older than the retention window:
 - Port is fixed to 8082 to avoid conflicts with other projects.
 - Always run PHP/Artisan/Composer/NPM through Sail.
 - Follow the rules in AGENTS.md for contribution and Codex behavior.
+- Deep verification architecture plan: `docs/DEEP_VERIFICATION_ENGINE_PLAN.md`
