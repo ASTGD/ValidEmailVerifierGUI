@@ -36,6 +36,13 @@ class ParseAndChunkJob implements ShouldQueue
     private int $cachedCount = 0;
     private int $unknownCount = 0;
     private int $chunksCreated = 0;
+    private array $cachedCounts = [
+        'valid' => 0,
+        'invalid' => 0,
+        'risky' => 0,
+    ];
+    private array $cachedStreams = [];
+    private array $cachedKeys = [];
 
     private ?VerificationJob $verificationJob = null;
     private ?EmailDedupeStore $deduper = null;
@@ -85,12 +92,16 @@ class ParseAndChunkJob implements ShouldQueue
 
             $this->flushBatch($cacheStore, $storage, $disk);
             $this->finalizeChunk($storage, $disk);
+            $this->finalizeCachedOutputs($storage, $disk);
 
             $this->verificationJob->update([
                 'total_emails' => $this->totalUnique,
                 'cached_count' => $this->cachedCount,
                 'unknown_count' => $this->unknownCount,
                 'prepared_at' => now(),
+                'cached_valid_key' => $this->cachedKeys['valid'] ?? null,
+                'cached_invalid_key' => $this->cachedKeys['invalid'] ?? null,
+                'cached_risky_key' => $this->cachedKeys['risky'] ?? null,
             ]);
 
             $this->verificationJob->addLog('parse_completed', 'Input parsing complete.', [
@@ -98,6 +109,7 @@ class ParseAndChunkJob implements ShouldQueue
                 'cached_count' => $this->cachedCount,
                 'unknown_count' => $this->unknownCount,
                 'chunks_created' => $this->chunksCreated,
+                'cached_counts' => $this->cachedCounts,
             ]);
         } catch (Throwable $exception) {
             $this->failJob('Failed to prepare verification job.', [
@@ -267,6 +279,7 @@ class ParseAndChunkJob implements ShouldQueue
         foreach ($this->batch as $email) {
             if (array_key_exists($email, $hits)) {
                 $this->cachedCount++;
+                $this->handleCacheHit($email, $hits[$email], $storage, $disk);
                 continue;
             }
 
@@ -317,6 +330,50 @@ class ParseAndChunkJob implements ShouldQueue
         $this->chunkNo++;
         $this->chunkStream = null;
         $this->chunkEmailCount = 0;
+    }
+
+    private function handleCacheHit(string $email, mixed $hit, JobStorage $storage, string $disk): void
+    {
+        if (! is_array($hit)) {
+            return;
+        }
+
+        $status = strtolower((string) ($hit['status'] ?? ''));
+
+        if (! in_array($status, ['valid', 'invalid', 'risky'], true)) {
+            return;
+        }
+
+        $line = (string) ($hit['row'] ?? $email);
+
+        $this->writeCached($status, $line, $storage, $disk);
+        $this->cachedCounts[$status]++;
+    }
+
+    private function writeCached(string $status, string $line, JobStorage $storage, string $disk): void
+    {
+        if (! isset($this->cachedStreams[$status])) {
+            $this->cachedStreams[$status] = tmpfile();
+            $this->cachedKeys[$status] = $storage->cachedResultKey($this->verificationJob, $status);
+        }
+
+        $normalizedLine = rtrim($line, "\r\n").PHP_EOL;
+        fwrite($this->cachedStreams[$status], $normalizedLine);
+    }
+
+    private function finalizeCachedOutputs(JobStorage $storage, string $disk): void
+    {
+        foreach ($this->cachedStreams as $status => $stream) {
+            $key = $this->cachedKeys[$status] ?? null;
+
+            if (! $key || ! is_resource($stream)) {
+                continue;
+            }
+
+            rewind($stream);
+            Storage::disk($disk)->put($key, $stream);
+            fclose($stream);
+        }
     }
 
     private function normalizeEmail(string $email): ?string

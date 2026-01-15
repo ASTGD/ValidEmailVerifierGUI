@@ -25,11 +25,37 @@
                 class="inline-flex items-center rounded-full px-3 py-1 text-xs font-black uppercase {{ $job->status->badgeClasses() }}">
                 {{ $job->status->label() }}
             </span>
-            @if ($job->status === \App\Enums\VerificationJobStatus::Completed && $job->output_key)
-                <a href="{{ route('portal.jobs.download', $job) }}"
-                    class="bg-[#1E7CCF] hover:bg-[#1866AD] text-white px-6 py-3 rounded-xl font-bold shadow-xl shadow-blue-100 transition-all flex items-center gap-2">
-                    <i data-lucide="download-cloud" class="w-5 h-5"></i> {{ __('Download Results') }}
-                </a>
+            @if ($job->status === \App\Enums\VerificationJobStatus::Completed)
+                @php
+                    $hasFinalKeys = $job->valid_key || $job->invalid_key || $job->risky_key;
+                @endphp
+                @if ($hasFinalKeys)
+                    <div class="flex flex-wrap items-center gap-2">
+                        @if ($job->valid_key || $job->output_key)
+                            <a href="{{ route('portal.jobs.download', $job) }}?type=valid"
+                                class="bg-[#1E7CCF] hover:bg-[#1866AD] text-white px-4 py-2 rounded-xl text-sm font-bold shadow-xl shadow-blue-100 transition-all flex items-center gap-2">
+                                <i data-lucide="download-cloud" class="w-4 h-4"></i> {{ __('Download Valid') }}
+                            </a>
+                        @endif
+                        @if ($job->invalid_key)
+                            <a href="{{ route('portal.jobs.download', $job) }}?type=invalid"
+                                class="bg-white border border-[#E2E8F0] text-[#0F172A] px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all flex items-center gap-2 hover:border-[#CBD5E1]">
+                                <i data-lucide="download-cloud" class="w-4 h-4"></i> {{ __('Download Invalid') }}
+                            </a>
+                        @endif
+                        @if ($job->risky_key)
+                            <a href="{{ route('portal.jobs.download', $job) }}?type=risky"
+                                class="bg-white border border-[#E2E8F0] text-[#0F172A] px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all flex items-center gap-2 hover:border-[#CBD5E1]">
+                                <i data-lucide="download-cloud" class="w-4 h-4"></i> {{ __('Download Risky') }}
+                            </a>
+                        @endif
+                    </div>
+                @elseif ($job->output_key)
+                    <a href="{{ route('portal.jobs.download', $job) }}"
+                        class="bg-[#1E7CCF] hover:bg-[#1866AD] text-white px-6 py-3 rounded-xl font-bold shadow-xl shadow-blue-100 transition-all flex items-center gap-2">
+                        <i data-lucide="download-cloud" class="w-5 h-5"></i> {{ __('Download Results') }}
+                    </a>
+                @endif
             @endif
         </div>
     </div>

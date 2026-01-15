@@ -25,6 +25,24 @@ class JobStorage
         return sprintf('results/%s/%s/cleaned.csv', $job->user_id, $job->id);
     }
 
+    public function finalResultKey(VerificationJob $job, string $type, string $extension = 'csv'): string
+    {
+        $type = strtolower($type);
+        $extension = strtolower($extension ?: 'csv');
+        $prefix = trim((string) config('engine.result_prefix', 'results/jobs'), '/');
+
+        return sprintf('%s/%s/%s.%s', $prefix, $job->id, $type, $extension);
+    }
+
+    public function cachedResultKey(VerificationJob $job, string $type, string $extension = 'csv'): string
+    {
+        $type = strtolower($type);
+        $extension = strtolower($extension ?: 'csv');
+        $prefix = trim((string) config('engine.result_prefix', 'results/jobs'), '/');
+
+        return sprintf('%s/%s/cached-%s.%s', $prefix, $job->id, $type, $extension);
+    }
+
     public function reportKey(VerificationJob $job): string
     {
         return sprintf('results/%s/%s/report.json', $job->user_id, $job->id);
