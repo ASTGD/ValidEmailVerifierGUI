@@ -4,7 +4,9 @@ use App\Http\Controllers\Api\Verifier\VerifierHeartbeatController;
 use App\Http\Controllers\Api\Verifier\VerifierChunkCompleteController;
 use App\Http\Controllers\Api\Verifier\VerifierChunkDetailsController;
 use App\Http\Controllers\Api\Verifier\VerifierChunkFailController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkInputUrlController;
 use App\Http\Controllers\Api\Verifier\VerifierChunkLogController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkOutputUrlsController;
 use App\Http\Controllers\Api\Verifier\VerifierJobClaimController;
 use App\Http\Controllers\Api\Verifier\VerifierJobCompleteController;
 use App\Http\Controllers\Api\Verifier\VerifierJobDownloadController;
@@ -45,5 +47,11 @@ Route::middleware(['auth:sanctum', EnsureVerifierService::class, 'throttle:verif
             Route::post('{chunk}/complete', VerifierChunkCompleteController::class)
                 ->whereUuid('chunk')
                 ->name('complete');
+            Route::get('{chunk}/input-url', VerifierChunkInputUrlController::class)
+                ->whereUuid('chunk')
+                ->name('input-url');
+            Route::post('{chunk}/output-urls', VerifierChunkOutputUrlsController::class)
+                ->whereUuid('chunk')
+                ->name('output-urls');
         });
     });
