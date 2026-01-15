@@ -30,6 +30,13 @@ class JobStorage
         return sprintf('results/%s/%s/report.json', $job->user_id, $job->id);
     }
 
+    public function chunkInputKey(VerificationJob $job, int $chunkNo, string $extension = 'txt'): string
+    {
+        $extension = strtolower($extension ?: 'txt');
+
+        return sprintf('chunks/%s/%s/input.%s', $job->id, $chunkNo, $extension);
+    }
+
     public function storeInput(UploadedFile $file, VerificationJob $job, ?string $disk = null, ?string $key = null): array
     {
         $disk = $disk ?: $this->disk();

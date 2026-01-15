@@ -48,6 +48,11 @@
                             {{ __('Total') }}</p>
                         <p class="text-3xl font-black text-[#0F172A]">{{ number_format($job->total_emails ?? 0) }}</p>
                     </div>
+                    <div class="p-6 bg-[#E9F2FB] rounded-2xl border border-[#1E7CCF]/10">
+                        <p class="text-[10px] font-black uppercase text-[#1E7CCF] tracking-widest mb-1">
+                            {{ __('Cached') }}</p>
+                        <p class="text-3xl font-black text-[#1E7CCF]">{{ number_format($job->cached_count ?? 0) }}</p>
+                    </div>
                     <div class="p-6 bg-[#DCFCE7] rounded-2xl border border-[#16A34A]/10">
                         <p class="text-[10px] font-black uppercase text-[#16A34A] tracking-widest mb-1">
                             {{ __('Valid') }}</p>
@@ -128,6 +133,11 @@
                                 <span class="text-[#64748B]">{{ __('Started') }}</span>
                                 <span
                                     class="font-bold text-[#0F172A]">{{ $job->started_at?->format('H:i, M d') ?? '--' }}</span>
+                            </li>
+                            <li class="flex justify-between text-sm">
+                                <span class="text-[#64748B]">{{ __('Prepared') }}</span>
+                                <span
+                                    class="font-bold text-[#0F172A]">{{ $job->prepared_at?->format('H:i, M d') ?? '--' }}</span>
                             </li>
                             <li class="flex justify-between text-sm">
                                 <span class="text-[#64748B]">{{ __('Finished') }}</span>
