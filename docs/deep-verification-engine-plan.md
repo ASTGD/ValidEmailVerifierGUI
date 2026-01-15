@@ -1,5 +1,7 @@
 # Deep Verification Engine Plan (Phase 0–1)
 
+For the stable worker API contract, see `docs/ENGINE_CONTRACT.md`.
+
 ## Purpose
 This document defines the Laravel-side scaffold that lets a deep verification engine (Go now, .NET/Node later) safely pull/claim work, send heartbeats, and report results. The design keeps Laravel as the control plane and ensures worker implementations stay replaceable without schema churn.
 

@@ -13,9 +13,18 @@ class VerifierJobCompleteController
     public function __invoke(CompleteJobRequest $request, VerificationJob $job, JobStorage $storage): JsonResponse
     {
         if ($job->status === VerificationJobStatus::Completed) {
+            if (! $this->payloadMatches($job, $request, $storage)) {
+                return response()->json([
+                    'message' => 'Job completion payload does not match existing data.',
+                ], 409);
+            }
+
             return response()->json([
-                'message' => 'Job is already completed.',
-            ], 409);
+                'data' => [
+                    'id' => (string) $job->id,
+                    'status' => $job->status->value,
+                ],
+            ]);
         }
 
         if ($job->status === VerificationJobStatus::Failed) {
@@ -69,5 +78,31 @@ class VerifierJobCompleteController
                 'status' => $job->status->value,
             ],
         ]);
+    }
+
+    private function payloadMatches(VerificationJob $job, CompleteJobRequest $request, JobStorage $storage): bool
+    {
+        $pairs = [
+            'output_disk' => $request->input('output_disk', $job->output_disk ?: $storage->disk()),
+            'output_key' => $request->input('output_key'),
+            'total_emails' => $request->input('total_emails'),
+            'valid_count' => $request->input('valid_count'),
+            'invalid_count' => $request->input('invalid_count'),
+            'risky_count' => $request->input('risky_count'),
+            'unknown_count' => $request->input('unknown_count'),
+            'engine_server_id' => $request->input('engine_server_id'),
+        ];
+
+        foreach ($pairs as $field => $value) {
+            if ($value === null) {
+                continue;
+            }
+
+            if ((string) $job->{$field} !== (string) $value) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

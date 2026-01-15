@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Contracts\EmailVerificationCacheStore;
+use App\Contracts\EngineStorageUrlSigner;
 use App\Models\VerificationJob;
 use App\Policies\VerificationJobPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -26,6 +27,10 @@ class AppServiceProvider extends ServiceProvider
             $storeClass = (string) config('verifier.cache_store');
 
             return $app->make($storeClass);
+        });
+
+        $this->app->bind(EngineStorageUrlSigner::class, function ($app) {
+            return $app->make(\App\Services\EngineStorage\StorageEngineUrlSigner::class);
         });
     }
 

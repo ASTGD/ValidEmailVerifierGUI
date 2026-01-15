@@ -33,8 +33,18 @@ class JobStorage
     public function chunkInputKey(VerificationJob $job, int $chunkNo, string $extension = 'txt'): string
     {
         $extension = strtolower($extension ?: 'txt');
+        $prefix = trim((string) config('engine.chunk_inputs_prefix', 'chunks'), '/');
 
-        return sprintf('chunks/%s/%s/input.%s', $job->id, $chunkNo, $extension);
+        return sprintf('%s/%s/%s/input.%s', $prefix, $job->id, $chunkNo, $extension);
+    }
+
+    public function chunkOutputKey(VerificationJob $job, int $chunkNo, string $type, string $extension = 'csv'): string
+    {
+        $extension = strtolower($extension ?: 'csv');
+        $type = strtolower($type);
+        $prefix = trim((string) config('engine.chunk_outputs_prefix', 'results/chunks'), '/');
+
+        return sprintf('%s/%s/%s/%s.%s', $prefix, $job->id, $chunkNo, $type, $extension);
     }
 
     public function storeInput(UploadedFile $file, VerificationJob $job, ?string $disk = null, ?string $key = null): array
