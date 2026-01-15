@@ -55,6 +55,31 @@ class VerificationJobInfolist
                             ->placeholder('-'),
                     ])
                     ->columns(2),
+                Section::make('Engine')
+                    ->schema([
+                        TextEntry::make('engineServer.name')
+                            ->label('Engine server')
+                            ->formatStateUsing(function ($state, $record): string {
+                                if (! $record?->engineServer) {
+                                    return '-';
+                                }
+
+                                return sprintf('%s (%s)', $record->engineServer->name, $record->engineServer->ip_address);
+                            }),
+                        TextEntry::make('engineServer.last_heartbeat_at')
+                            ->label('Last heartbeat')
+                            ->since()
+                            ->placeholder('-'),
+                        TextEntry::make('claimed_at')
+                            ->label('Claimed at')
+                            ->since()
+                            ->placeholder('-'),
+                        TextEntry::make('claim_expires_at')
+                            ->label('Lease expires')
+                            ->since()
+                            ->placeholder('-'),
+                    ])
+                    ->columns(2),
                 Section::make('Files')
                     ->schema([
                         TextEntry::make('original_filename')

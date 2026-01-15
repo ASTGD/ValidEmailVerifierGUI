@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Api\Verifier\VerifierHeartbeatController;
+use App\Http\Controllers\Api\Verifier\VerifierJobClaimController;
 use App\Http\Controllers\Api\Verifier\VerifierJobCompleteController;
 use App\Http\Controllers\Api\Verifier\VerifierJobDownloadController;
 use App\Http\Controllers\Api\Verifier\VerifierJobStatusController;
@@ -11,7 +13,11 @@ Route::middleware(['auth:sanctum', EnsureVerifierService::class, 'throttle:verif
     ->prefix('verifier')
     ->name('api.verifier.')
     ->group(function () {
+        Route::post('heartbeat', VerifierHeartbeatController::class)->name('heartbeat');
         Route::get('jobs', [VerifierJobsController::class, 'index'])->name('jobs.index');
+        Route::post('jobs/{job}/claim', VerifierJobClaimController::class)
+            ->whereUuid('job')
+            ->name('jobs.claim');
         Route::post('jobs/{job}/status', VerifierJobStatusController::class)
             ->whereUuid('job')
             ->name('jobs.status');

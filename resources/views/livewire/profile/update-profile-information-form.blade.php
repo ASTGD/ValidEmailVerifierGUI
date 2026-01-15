@@ -1,3 +1,53 @@
+<?php
+
+use App\Models\User;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Session;
+use Illuminate\Validation\Rule;
+
+use function Livewire\Volt\state;
+
+state([
+    'name' => fn () => auth()->user()->name,
+    'email' => fn () => auth()->user()->email,
+]);
+
+$updateProfileInformation = function () {
+    $user = Auth::user();
+
+    $validated = $this->validate([
+        'name' => ['required', 'string', 'max:255'],
+        'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique(User::class)->ignore($user->id)],
+    ]);
+
+    $user->fill($validated);
+
+    if ($user->isDirty('email')) {
+        $user->email_verified_at = null;
+    }
+
+    $user->save();
+
+    $this->dispatch('profile-updated', name: $user->name);
+};
+
+$sendVerification = function () {
+    $user = Auth::user();
+
+    if ($user->hasVerifiedEmail()) {
+        $this->redirectIntended(default: route('dashboard', absolute: false));
+
+        return;
+    }
+
+    $user->sendEmailVerificationNotification();
+
+    Session::flash('status', 'verification-link-sent');
+};
+
+?>
+
 <section class="bg-white p-8 md:p-10 rounded-[2.5rem] border border-[#E2E8F0] shadow-sm">
     <header class="mb-8">
         <h2 class="text-2xl font-black text-[#0F172A] tracking-tight">

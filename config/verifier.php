@@ -13,4 +13,5 @@ return [
     'checkout_intent_ttl_minutes' => (int) env('VERIFIER_CHECKOUT_TTL_MINUTES', 60),
     'allow_fake_payments' => (bool) env('VERIFIER_ALLOW_FAKE_PAYMENTS', false),
     'engine_heartbeat_minutes' => (int) env('VERIFIER_ENGINE_HEARTBEAT_MINUTES', 5),
+    'engine_claim_lease_seconds' => (int) env('VERIFIER_ENGINE_CLAIM_LEASE_SECONDS', 600),
 ];

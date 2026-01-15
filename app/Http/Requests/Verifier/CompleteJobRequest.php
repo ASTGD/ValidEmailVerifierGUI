@@ -16,6 +16,7 @@ class CompleteJobRequest extends FormRequest
         return [
             'output_key' => ['required', 'string', 'max:1024'],
             'output_disk' => ['nullable', 'string', 'max:64'],
+            'engine_server_id' => ['nullable', 'integer', 'exists:engine_servers,id'],
             'total_emails' => ['nullable', 'integer', 'min:0'],
             'valid_count' => ['nullable', 'integer', 'min:0'],
             'invalid_count' => ['nullable', 'integer', 'min:0'],
