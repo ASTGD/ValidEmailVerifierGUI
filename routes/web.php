@@ -17,7 +17,7 @@ use Illuminate\Http\Request;
 
 Route::get('/', [MarketingController::class, 'index'])->name('marketing.home');
 
-Route::post(config('cashier.path').'/webhook', [StripeWebhookController::class, 'handleWebhook'])
+Route::post(config('cashier.path') . '/webhook', [StripeWebhookController::class, 'handleWebhook'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
     ->name('stripe.webhook');
 
@@ -58,6 +58,9 @@ Route::middleware(['auth', 'verified'])
         Route::get('orders', OrdersIndex::class)->name('orders.index');
         Route::get('settings', Settings::class)->name('settings');
         Route::get('support', Support::class)->name('support');
+        // Add this line inside the portal route group
+        //Route::get('support/{ticket}', \App\Livewire\Portal\SupportDetail::class)->name('support.show');
+        Route::get('support/{ticket}', \App\Livewire\Portal\SupportDetail::class)->name('support.show');
     });
 
 Route::middleware(['auth', 'verified'])
@@ -70,4 +73,4 @@ Route::middleware(['auth', 'verified'])
         Route::get('cancel', [BillingController::class, 'cancel'])->name('cancel');
     });
 
-require __DIR__.'/auth.php';
+require __DIR__ . '/auth.php';

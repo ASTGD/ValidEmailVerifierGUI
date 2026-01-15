@@ -6,14 +6,15 @@ use App\Enums\SupportTicketPriority;
 use App\Enums\SupportTicketStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SupportTicket extends Model
 {
     protected $fillable = [
         'user_id',
-        'assigned_to',
+        'ticket_number',
         'subject',
-        'message',
+        'category',
         'status',
         'priority',
         'closed_at',
@@ -33,5 +34,24 @@ class SupportTicket extends Model
     public function assignedTo(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    /**
+     * Relationship to the chat messages.
+     */
+    public function messages(): HasMany
+    {
+        return $this->hasMany(SupportMessage::class);
+    }
+
+    /**
+     * Auto-generate a ticket number when creating.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+        static::creating(function ($model) {
+            $model->ticket_number = 'TK-' . strtoupper(bin2hex(random_bytes(3)));
+        });
     }
 }

@@ -1,12 +1,75 @@
-<div class="space-y-10">
-    <!-- HEADER SECTION -->
+<div class="space-y-10" x-data="{ showModal: false }">
+    <!-- 1. HEADER SECTION -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
             <h1 class="text-3xl font-black text-[#0F172A] tracking-tight">{{ __('Support Center') }}</h1>
-            <p class="text-[#64748B] font-medium mt-1">
-                {{ __('Get help with uploads, billing, or verification results.') }}</p>
+            <p class="text-[#64748B] font-medium mt-1">{{ __('Manage your tickets or reach out to our team.') }}</p>
         </div>
+        <!-- NEW ACTION BUTTON -->
+        <button @click="showModal = true"
+            class="bg-[#1E7CCF] hover:bg-[#1866AD] text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-blue-100 transition-all flex items-center gap-2">
+            <i data-lucide="plus-circle" class="w-5 h-5"></i> {{ __('Open New Ticket') }}
+        </button>
     </div>
+
+    <!-- 2. NEW TICKET LIST SECTION -->
+    <div class="bg-white rounded-[2.5rem] border border-[#E2E8F0] shadow-sm overflow-hidden">
+        <div class="px-8 py-6 border-b border-[#F8FAFC]">
+            <h3 class="text-xl font-black text-[#0F172A]">{{ __('My Recent Tickets') }}</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-[#F8FAFC] border-b border-[#E2E8F0]">
+                        <th class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
+                            {{ __('ID') }}</th>
+                        <th class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
+                            {{ __('Subject') }}</th>
+                        <th class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
+                            {{ __('Status') }}</th>
+                        <th
+                            class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest text-right">
+                            {{ __('Date') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-[#E2E8F0]">
+                    @forelse($tickets as $ticket)
+                        <tr class="hover:bg-[#F8FAFC] transition-colors cursor-pointer group"
+                            onclick="window.location.href='{{ route('portal.support.show', $ticket) }}'">
+                            <td class="px-8 py-5 font-mono text-xs font-bold text-[#1E7CCF]">
+                                #{{ $ticket->ticket_number }}</td>
+                            <td class="px-8 py-5">
+                                <p class="font-bold text-[#0F172A]">{{ $ticket->subject }}</p>
+                                <p class="text-[10px] text-[#94A3B8] font-bold uppercase">{{ $ticket->category }}</p>
+                            </td>
+                            <td class="px-8 py-5">
+                                <span
+                                    class="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-gray-100 text-gray-700">
+                                    {{ $ticket->status->label() }}
+                                </span>
+                            </td>
+                            <td class="px-8 py-5 text-right text-sm text-[#64748B] font-medium">
+                                {{ $ticket->created_at->format('M d, Y') }}
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="4" class="px-8 py-12 text-center text-[#94A3B8] italic">
+                                {{ __('No support tickets found.') }}
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+        @if ($tickets->hasPages())
+            <div class="p-6 border-t border-[#E2E8F0]">
+                {{ $tickets->links() }}
+            </div>
+        @endif
+    </div>
+
+    <!-- START OF YOUR ORIGINAL DESIGN (STAYED THE SAME) -->
 
     <!-- CONTACT HELP CARD -->
     <div class="bg-white p-8 rounded-[2.5rem] border border-[#E2E8F0] shadow-sm flex items-center gap-6">
@@ -31,27 +94,20 @@
                 <div class="flex items-center gap-3">
                     <i data-lucide="mail" class="text-[#1E7CCF] w-5 h-5"></i>
                     <a href="mailto:{{ $supportEmail }}"
-                        class="text-xl font-black text-[#0F172A] hover:text-[#1E7CCF] transition-colors">
-                        {{ $supportEmail }}
-                    </a>
+                        class="text-xl font-black text-[#0F172A] hover:text-[#1E7CCF] transition-colors">{{ $supportEmail }}</a>
                 </div>
-            @else
-                <p class="text-sm font-bold text-[#94A3B8] italic">{{ __('Support email not configured.') }}</p>
             @endif
         </div>
 
         <!-- Support Portal -->
         <div
             class="bg-white p-8 rounded-[2.5rem] border border-[#E2E8F0] shadow-sm group hover:border-[#1E7CCF] transition-all text-left">
-            <p class="text-[#64748B] text-xs font-bold uppercase tracking-widest mb-4">{{ __('Knowledge Base') }}
-            </p>
+            <p class="text-[#64748B] text-xs font-bold uppercase tracking-widest mb-4">{{ __('Knowledge Base') }}</p>
             @if ($supportUrl)
                 <a href="{{ $supportUrl }}" target="_blank" rel="noopener"
                     class="inline-flex items-center gap-3 text-xl font-black text-[#0F172A] hover:text-[#1E7CCF] transition-colors">
                     {{ __('Open support portal') }} <i data-lucide="external-link" class="w-5 h-5"></i>
                 </a>
-            @else
-                <p class="text-sm font-bold text-[#94A3B8] italic">{{ __('Support portal not configured.') }}</p>
             @endif
         </div>
     </div>
@@ -80,5 +136,125 @@
             </div>
         </div>
     </div>
-</div>
 
+    <!-- 3. NEW TICKET MODAL -->
+    <div x-show="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/50" x-cloak>
+        <div class="bg-white w-full max-w-2xl rounded-[2.5rem] p-10 shadow-2xl overflow-y-auto max-h-[90vh]"
+            @click.away="showModal = false">
+            <h2 class="text-2xl font-black text-[#0F172A] mb-8">{{ __('Create New Ticket') }}</h2>
+            {{-- <form wire:submit.prevent="createTicket" class="space-y-6">
+                <div>
+                    <label class="block text-sm font-bold text-[#334155] mb-2">Subject</label>
+                    <input type="text" wire:model="subject"
+                        class="w-full rounded-xl border-[#E2E8F0] focus:ring-[#1E7CCF]"
+                        placeholder="Summary of the issue">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-bold text-[#334155] mb-2">Category</label>
+                        <select wire:model="category" class="w-full rounded-xl border-[#E2E8F0]">
+                            <option value="Technical">Technical</option>
+                            <option value="Billing">Billing</option>
+                            <option value="Sales">Sales</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-[#334155] mb-2">Priority</label>
+                        <select wire:model="priority" class="w-full rounded-xl border-[#E2E8F0]">
+                            <option value="Low">Low</option>
+                            <option value="Normal">Normal</option>
+                            <option value="High">High</option>
+                            <option value="Urgent">Urgent</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-[#334155] mb-2">Message</label>
+                    <textarea wire:model="message" rows="5" class="w-full rounded-xl border-[#E2E8F0]"
+                        placeholder="Describe your problem..."></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-[#334155] mb-2">Attachment (Optional)</label>
+                    <input type="file" wire:model="attachment" class="text-sm">
+                </div>
+                <div class="flex justify-end gap-4 pt-4">
+                    <button type="button" @click="showModal = false"
+                        class="px-6 py-3 font-bold text-[#64748B]">{{ __('Cancel') }}</button>
+                    <button type="submit" @click="showModal = false"
+                        class="bg-[#1E7CCF] text-white px-10 py-3 rounded-xl font-bold shadow-lg shadow-blue-100 transition-all">
+                        {{ __('Open Ticket') }}
+                    </button>
+                </div>
+            </form> --}}
+            <form wire:submit.prevent="createTicket" class="space-y-6">
+                <!-- Subject -->
+                <div>
+                    <label class="block text-sm font-bold text-[#334155] mb-2">Subject</label>
+                    <input type="text" wire:model="subject"
+                        class="w-full rounded-xl border-[#E2E8F0] focus:ring-[#1E7CCF]">
+                    @error('subject')
+                        <span class="text-red-500 text-xs font-bold mt-1">{{ $message }}</span>
+                    @enderror
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <!-- Category -->
+                    <div>
+                        <label class="block text-sm font-bold text-[#334155] mb-2">Category</label>
+                        <select wire:model="category" class="w-full rounded-xl border-[#E2E8F0]">
+                            <option value="Technical">Technical</option>
+                            <option value="Billing">Billing</option>
+                            <option value="Sales">Sales</option>
+                        </select>
+                        @error('category')
+                            <span class="text-red-500 text-xs font-bold mt-1">{{ $message }}</span>
+                        @enderror
+                    </div>
+                    <!-- Priority -->
+                    <div>
+                        <label class="block text-sm font-bold text-[#334155] mb-2">Priority</label>
+                        <select wire:model="priority" class="w-full rounded-xl border-[#E2E8F0]">
+                            <option value="Low">Low</option>
+                            <option value="Normal">Normal</option>
+                            <option value="High">High</option>
+                            <option value="Urgent">Urgent</option>
+                        </select>
+                        @error('priority')
+                            <span class="text-red-500 text-xs font-bold mt-1">{{ $message }}</span>
+                        @enderror
+                    </div>
+                </div>
+
+                <!-- Message -->
+                <div>
+                    <label class="block text-sm font-bold text-[#334155] mb-2">Detailed Message</label>
+                    <textarea wire:model="message" rows="5" class="w-full rounded-xl border-[#E2E8F0]"
+                        placeholder="Describe your problem..."></textarea>
+                    @error('message')
+                        <span class="text-red-500 text-xs font-bold mt-1">{{ $message }}</span>
+                    @enderror
+                </div>
+
+                <!-- Attachment -->
+                <div>
+                    <label class="block text-sm font-bold text-[#334155] mb-2">Attachment (Optional)</label>
+                    <input type="file" wire:model="attachment" class="text-sm">
+                    @error('attachment')
+                        <span class="text-red-500 text-xs font-bold mt-1">{{ $message }}</span>
+                    @enderror
+                </div>
+
+                <!-- Submit Button -->
+                <div class="flex justify-end gap-4 pt-4">
+                    <button type="button"
+                        class="px-6 py-3 font-bold text-[#64748B]">{{ __('Cancel') }}</button>
+                    <button type="submit"
+                        class="bg-[#1E7CCF] text-white px-10 py-3 rounded-xl font-bold shadow-lg shadow-blue-100 transition-all">
+                        <span wire:loading.remove>{{ __('Open Ticket') }}</span>
+                        <span wire:loading>Processing...</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

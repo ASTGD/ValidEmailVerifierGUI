@@ -43,6 +43,12 @@ class SupportTicketResource extends Resource
     {
         return SupportTicketsTable::configure($table);
     }
+    public static function getRelations(): array
+    {
+        return [
+            \App\Filament\Resources\SupportTickets\RelationManagers\MessagesRelationManager::class,
+        ];
+    }
 
     public static function getPages(): array
     {

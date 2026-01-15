@@ -2,28 +2,30 @@
 
 namespace App\Filament\Resources\SupportTickets\Pages;
 
-use App\Enums\SupportTicketStatus;
 use App\Filament\Resources\SupportTickets\SupportTicketResource;
-use App\Support\AdminAuditLogger;
+use App\Models\SupportMessage;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateSupportTicket extends CreateRecord
 {
     protected static string $resource = SupportTicketResource::class;
 
-    protected function mutateFormDataBeforeCreate(array $data): array
-    {
-        if (($data['status'] ?? null) === SupportTicketStatus::Closed->value) {
-            $data['closed_at'] = now();
-        }
-
-        return $data;
-    }
-
+    /**
+     * This runs after the ticket is created in the database.
+     */
     protected function afterCreate(): void
     {
-        AdminAuditLogger::log('support_ticket_created', $this->record, [
-            'status' => $this->record->status?->value,
+        $ticket = $this->record;
+
+        // Get the message from the form data
+        $messageContent = $this->data['message'];
+
+        // Save it to the messages table
+        SupportMessage::create([
+            'support_ticket_id' => $ticket->id,
+            'user_id' => auth()->id(),
+            'content' => $messageContent,
+            'is_admin' => true,
         ]);
     }
 }
