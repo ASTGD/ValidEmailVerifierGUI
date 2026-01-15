@@ -23,9 +23,9 @@ class EngineServerResource extends Resource
 
     protected static ?string $navigationLabel = 'Engine Servers';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Operations';
+    protected static string|UnitEnum|null $navigationGroup = 'Engine';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 1;
 
     public static function form(Schema $schema): Schema
     {
