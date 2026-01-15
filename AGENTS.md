@@ -283,3 +283,6 @@ Codex must NOT:
 - Admin: http://localhost:8082/admin
 - Database: MySQL via Sail
 - Storage: local filesystem in dev, S3 later in production
+
+## Reference Docs
+- Deep verification architecture plan: `docs/DEEP_VERIFICATION_ENGINE_PLAN.md`
