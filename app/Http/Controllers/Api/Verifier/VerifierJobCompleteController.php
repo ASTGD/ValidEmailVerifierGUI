@@ -24,10 +24,19 @@ class VerifierJobCompleteController
             ], 409);
         }
 
+        $engineServerId = $job->engine_server_id;
+
+        if (! $engineServerId && $request->filled('engine_server_id')) {
+            $engineServerId = $request->integer('engine_server_id');
+        }
+
         $job->update([
             'status' => VerificationJobStatus::Completed,
             'output_disk' => $request->input('output_disk', $storage->disk()),
             'output_key' => $request->input('output_key'),
+            'engine_server_id' => $engineServerId,
+            'claim_expires_at' => null,
+            'claim_token' => null,
             'total_emails' => $request->input('total_emails'),
             'valid_count' => $request->input('valid_count'),
             'invalid_count' => $request->input('invalid_count'),
@@ -39,9 +48,10 @@ class VerifierJobCompleteController
         ]);
 
         $job->addLog(
-            'completed',
+            'completed_via_engine_api',
             'Job completed via verifier API.',
             [
+                'engine_server_id' => $job->engine_server_id,
                 'output_disk' => $job->output_disk,
                 'output_key' => $job->output_key,
                 'total_emails' => $job->total_emails,
