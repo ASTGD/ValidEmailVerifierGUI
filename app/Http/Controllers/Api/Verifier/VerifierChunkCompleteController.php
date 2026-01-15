@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Verifier;
 
+use App\Jobs\FinalizeVerificationJob;
 use App\Http\Requests\Verifier\ChunkCompleteRequest;
 use App\Models\VerificationJobChunk;
 use Illuminate\Http\JsonResponse;
@@ -63,6 +64,10 @@ class VerifierChunkCompleteController
             'invalid_count' => $chunk->invalid_count,
             'risky_count' => $chunk->risky_count,
         ], $request->user()?->id);
+
+        if ($chunk->job) {
+            FinalizeVerificationJob::dispatch($chunk->job->id);
+        }
 
         return response()->json([
             'data' => [

@@ -8,4 +8,7 @@ return [
     'signed_url_expiry_seconds' => (int) env('ENGINE_SIGNED_URL_EXPIRY_SECONDS', env('VERIFIER_SIGNED_URL_EXPIRY_SECONDS', 300)),
     'chunk_inputs_prefix' => env('ENGINE_CHUNK_INPUT_PREFIX', 'chunks'),
     'chunk_outputs_prefix' => env('ENGINE_CHUNK_OUTPUT_PREFIX', 'results/chunks'),
+    'result_prefix' => env('ENGINE_RESULT_PREFIX', 'results/jobs'),
+    'finalization_temp_disk' => env('ENGINE_FINALIZATION_TEMP_DISK', 'local'),
+    'finalization_write_mode' => env('ENGINE_FINALIZATION_WRITE_MODE', 'stream_to_temp_then_upload'),
 ];

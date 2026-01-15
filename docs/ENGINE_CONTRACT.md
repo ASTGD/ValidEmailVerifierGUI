@@ -18,6 +18,7 @@ This contract defines the language-agnostic API that deep verification workers (
 - Laravel stores only `disk` + `key` values (no absolute paths).
 - Workers must use signed URLs for I/O (S3 presigned URLs in production).
 - Workers should **not** access Laravel’s database directly.
+- Finalization (merge) happens in Laravel once all chunks are completed.
 
 ## Authentication
 All endpoints below require:
