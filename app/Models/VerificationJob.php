@@ -38,12 +38,14 @@ class VerificationJob extends Model
         'failure_source',
         'failure_code',
         'started_at',
+        'prepared_at',
         'finished_at',
         'total_emails',
         'valid_count',
         'invalid_count',
         'risky_count',
         'unknown_count',
+        'cached_count',
     ];
 
     protected $casts = [
@@ -51,6 +53,7 @@ class VerificationJob extends Model
         'claimed_at' => 'datetime',
         'claim_expires_at' => 'datetime',
         'started_at' => 'datetime',
+        'prepared_at' => 'datetime',
         'finished_at' => 'datetime',
         'engine_attempts' => 'integer',
         'total_emails' => 'integer',
@@ -58,6 +61,7 @@ class VerificationJob extends Model
         'invalid_count' => 'integer',
         'risky_count' => 'integer',
         'unknown_count' => 'integer',
+        'cached_count' => 'integer',
     ];
 
     public function scopeExcludeAdminFailures($query)
@@ -76,6 +80,11 @@ class VerificationJob extends Model
     public function logs(): HasMany
     {
         return $this->hasMany(VerificationJobLog::class, 'verification_job_id');
+    }
+
+    public function chunks(): HasMany
+    {
+        return $this->hasMany(VerificationJobChunk::class, 'verification_job_id');
     }
 
     public function engineServer(): BelongsTo

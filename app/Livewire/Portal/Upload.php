@@ -3,6 +3,7 @@
 namespace App\Livewire\Portal;
 
 use App\Enums\VerificationJobStatus;
+use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -77,6 +78,8 @@ class Upload extends Component
         $job->addLog('created', 'Job created via customer portal upload.', [
             'original_filename' => $job->original_filename,
         ], $user->id);
+
+        PrepareVerificationJob::dispatch($job->id);
 
         $this->reset('file');
 

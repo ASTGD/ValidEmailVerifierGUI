@@ -5,6 +5,7 @@ namespace App\Filament\Resources\VerificationOrders\Actions;
 use App\Enums\VerificationJobStatus;
 use App\Enums\VerificationOrderStatus;
 use App\Filament\Resources\VerificationJobs\VerificationJobResource;
+use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Models\VerificationOrder;
 use App\Services\JobStorage;
@@ -55,6 +56,8 @@ class OrderActions
                             'order_id' => $record->id,
                         ], auth()->id());
 
+                        PrepareVerificationJob::dispatch($record->job->id);
+
                         $record->update([
                             'status' => VerificationOrderStatus::Processing,
                         ]);
@@ -99,6 +102,8 @@ class OrderActions
                     $job->addLog('created', 'Job activated by admin.', [
                         'order_id' => $record->id,
                     ], auth()->id());
+
+                    PrepareVerificationJob::dispatch($job->id);
 
                     $record->update([
                         'verification_job_id' => $job->id,
@@ -222,6 +227,8 @@ class OrderActions
                         $record->job->addLog('reopened', 'Order moved back to pending by admin.', [
                             'order_id' => $record->id,
                         ], auth()->id());
+
+                        PrepareVerificationJob::dispatch($record->job->id);
                     }
 
                     $record->update([

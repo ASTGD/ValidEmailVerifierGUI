@@ -1,10 +1,11 @@
-# Deep Verification Engine Plan (Phase 0)
+# Deep Verification Engine Plan (Phase 0–1)
 
 ## Purpose
 This document defines the Laravel-side scaffold that lets a deep verification engine (Go now, .NET/Node later) safely pull/claim work, send heartbeats, and report results. The design keeps Laravel as the control plane and ensures worker implementations stay replaceable without schema churn.
 
 ## Entities (Laravel)
 - **VerificationJob**: the unit of work for email verification.
+- **VerificationJobChunk**: chunked input units created by the Laravel pipeline.
 - **EngineServer**: a verifier server tracked by heartbeat.
 
 ## Job Lifecycle (Phase 0)
@@ -12,6 +13,27 @@ This document defines the Laravel-side scaffold that lets a deep verification en
 2) Engine claims a job and receives a lease token.
 3) Job status becomes `processing` with claim metadata set.
 4) Engine completes the job and reports results.
+
+## Job Preparation Pipeline (Phase 1)
+Laravel prepares work for the deep verification engine by parsing, deduping, and chunking input files.
+
+### Stage 0–2 Steps
+1) **Parse + Normalize + Dedupe** (streaming)
+   - TXT: one email per line, plus tokens parsed from each line.
+   - CSV: first column preferred, plus any email-like tokens in the row.
+   - XLS/XLSX: read in row batches using PhpSpreadsheet (read-only, chunked).
+2) **Cache Lookup (stubbed)**
+   - Batch lookup via `EmailVerificationCacheStore::lookupMany`.
+   - Default implementation is a null cache (no hits).
+3) **Chunk Creation (pending for workers)**
+   - Unknown emails are written to chunk files on the configured disk.
+   - Chunk keys: `chunks/{job_uuid}/{chunk_no}/input.txt`.
+   - `verification_job_chunks` rows created with counts and linkage.
+
+### Phase 1 Notes
+- Parsing is streaming for TXT/CSV and row-batched for XLS/XLSX.
+- Max email limit is enforced via config (`VERIFIER_MAX_EMAILS_PER_UPLOAD`).
+- Deduping uses an in-memory set with SQLite fallback when limits are exceeded.
 
 ## Engine API Contract v1
 All endpoints are under `/api/verifier/*`, protected by:

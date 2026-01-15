@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\EmailVerificationCacheStore;
 use App\Models\VerificationJob;
 use App\Policies\VerificationJobPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -20,6 +21,12 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         Cashier::ignoreRoutes();
+
+        $this->app->bind(EmailVerificationCacheStore::class, function ($app) {
+            $storeClass = (string) config('verifier.cache_store');
+
+            return $app->make($storeClass);
+        });
     }
 
     /**
