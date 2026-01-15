@@ -9,18 +9,20 @@ use App\Models\SupportMessage;
 use App\Enums\SupportTicketStatus;
 use App\Enums\SupportTicketPriority;
 use Illuminate\Support\Facades\Auth;
+use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 #[Layout('layouts.portal')]
 class Support extends Component
 {
-    use WithPagination;
+    use WithFileUploads, WithPagination;
 
     // Form properties
     public string $subject = '';
     public string $message = '';
     public string $category = 'Technical';
-    public string $priority = 'Normal';
+    public string $priority = 'normal';
+    public $attachment;
 
     public function render()
     {
@@ -32,6 +34,7 @@ class Support extends Component
                 ->paginate(10),
         ]);
     }
+
     /**
      * Create a new support ticket and the first message.
      */
@@ -44,6 +47,7 @@ class Support extends Component
             'priority' => 'required',
             'attachment' => 'nullable|image|max:2048',
         ]);
+
         // 1. Create the Ticket Header
         $ticket = SupportTicket::create([
             'user_id' => Auth::id(),
@@ -63,10 +67,11 @@ class Support extends Component
             'attachment' => $path,
             'is_admin' => false,
         ]);
-        return redirect()->route('portal.support.show', $ticket);
 
         // Reset form and notify user
-        $this->reset(['subject', 'message']);
+        $this->reset(['subject', 'message', 'attachment']);
         session()->flash('status', 'Ticket created successfully.');
+
+        return redirect()->route('portal.support.show', $ticket);
     }
 }

@@ -138,54 +138,11 @@
     </div>
 
     <!-- 3. NEW TICKET MODAL -->
-    <div x-show="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/50" x-cloak>
+    <div x-show="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/50" x-cloak
+        @click.self="showModal = false">
         <div class="bg-white w-full max-w-2xl rounded-[2.5rem] p-10 shadow-2xl overflow-y-auto max-h-[90vh]"
-            @click.away="showModal = false">
+            @click.stop>
             <h2 class="text-2xl font-black text-[#0F172A] mb-8">{{ __('Create New Ticket') }}</h2>
-            {{-- <form wire:submit.prevent="createTicket" class="space-y-6">
-                <div>
-                    <label class="block text-sm font-bold text-[#334155] mb-2">Subject</label>
-                    <input type="text" wire:model="subject"
-                        class="w-full rounded-xl border-[#E2E8F0] focus:ring-[#1E7CCF]"
-                        placeholder="Summary of the issue">
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-bold text-[#334155] mb-2">Category</label>
-                        <select wire:model="category" class="w-full rounded-xl border-[#E2E8F0]">
-                            <option value="Technical">Technical</option>
-                            <option value="Billing">Billing</option>
-                            <option value="Sales">Sales</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-[#334155] mb-2">Priority</label>
-                        <select wire:model="priority" class="w-full rounded-xl border-[#E2E8F0]">
-                            <option value="Low">Low</option>
-                            <option value="Normal">Normal</option>
-                            <option value="High">High</option>
-                            <option value="Urgent">Urgent</option>
-                        </select>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-sm font-bold text-[#334155] mb-2">Message</label>
-                    <textarea wire:model="message" rows="5" class="w-full rounded-xl border-[#E2E8F0]"
-                        placeholder="Describe your problem..."></textarea>
-                </div>
-                <div>
-                    <label class="block text-sm font-bold text-[#334155] mb-2">Attachment (Optional)</label>
-                    <input type="file" wire:model="attachment" class="text-sm">
-                </div>
-                <div class="flex justify-end gap-4 pt-4">
-                    <button type="button" @click="showModal = false"
-                        class="px-6 py-3 font-bold text-[#64748B]">{{ __('Cancel') }}</button>
-                    <button type="submit" @click="showModal = false"
-                        class="bg-[#1E7CCF] text-white px-10 py-3 rounded-xl font-bold shadow-lg shadow-blue-100 transition-all">
-                        {{ __('Open Ticket') }}
-                    </button>
-                </div>
-            </form> --}}
             <form wire:submit.prevent="createTicket" class="space-y-6">
                 <!-- Subject -->
                 <div>
@@ -214,9 +171,9 @@
                     <div>
                         <label class="block text-sm font-bold text-[#334155] mb-2">Priority</label>
                         <select wire:model="priority" class="w-full rounded-xl border-[#E2E8F0]">
-                            <option value="Low">Low</option>
-                            <option value="Normal">Normal</option>
-                            <option value="High">High</option>
+                            <option value="low">Low</option>
+                            <option value="normal">Normal</option>
+                            <option value="high">High</option>
                             <option value="Urgent">Urgent</option>
                         </select>
                         @error('priority')
@@ -246,12 +203,12 @@
 
                 <!-- Submit Button -->
                 <div class="flex justify-end gap-4 pt-4">
-                    <button type="button"
+                    <button type="button" @click="showModal = false"
                         class="px-6 py-3 font-bold text-[#64748B]">{{ __('Cancel') }}</button>
                     <button type="submit"
                         class="bg-[#1E7CCF] text-white px-10 py-3 rounded-xl font-bold shadow-lg shadow-blue-100 transition-all">
-                        <span wire:loading.remove>{{ __('Open Ticket') }}</span>
-                        <span wire:loading>Processing...</span>
+                        <span wire:loading.remove wire:target="createTicket">{{ __('Open Ticket') }}</span>
+                        <span wire:loading wire:target="createTicket">Processing...</span>
                     </button>
                 </div>
             </form>
