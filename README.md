@@ -94,8 +94,11 @@ Core features:
 
 Admin features:
 - Manage users
-- Monitor jobs by status
-- Review failures and rerun operations (future)
+- Monitor jobs by status and engine assignments
+- Track engine servers (heartbeat/health)
+- View job chunks, leases, and retries
+- Finalization Health widget (failed chunks, missing outputs, stuck leases)
+- Ops controls: requeue failed/stuck chunks, manual finalize
 - Support downloads
 
 ### Billing (Stripe + Cashier)

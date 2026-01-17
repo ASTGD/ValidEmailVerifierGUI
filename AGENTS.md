@@ -237,8 +237,14 @@ Rules:
 - Maintain Filament resources:
   - Users
   - Verification Jobs
+  - Verification Job Chunks
+  - Engine Servers
   - Subscriptions (if needed)
   - Job Logs (optional)
+
+- Admin observability must include:
+  - Finalization Health widget (failed chunks, missing outputs, stuck leases)
+  - Safe ops actions (requeue failed/stuck chunks, manual finalize)
 
 Admin actions must never bypass authorization checks.
 

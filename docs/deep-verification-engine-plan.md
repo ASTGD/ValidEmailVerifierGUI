@@ -46,6 +46,7 @@ Before SMTP workers go live, admins need clear visibility and safe controls:
 - Job view exposes engine lease info, final outputs, cached artifacts, chunk summary, and recent logs.
 - “Finalization Health” widget surfaces failed chunks, missing outputs, finalization backlog, and stuck leases.
 - Ops actions requeue failed/stuck chunks and allow manual finalization with audit logs.
+- Filament resources cover Engine Servers and Verification Job Chunks for day-to-day ops.
 
 ## Engine API Contract v1
 All endpoints are under `/api/verifier/*`, protected by:
