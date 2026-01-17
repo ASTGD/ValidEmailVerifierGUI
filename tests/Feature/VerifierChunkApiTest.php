@@ -7,6 +7,7 @@ use App\Enums\VerificationJobStatus;
 use App\Models\User;
 use App\Models\VerificationJob;
 use App\Models\VerificationJobChunk;
+use App\Models\EngineServer;
 use App\Support\Roles;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -190,5 +191,69 @@ class VerifierChunkApiTest extends TestCase
                     ],
                 ],
             ]);
+    }
+
+    public function test_claim_next_returns_no_content_when_empty(): void
+    {
+        $this->actingAsVerifier();
+
+        $this->postJson(route('api.verifier.chunks.claim-next'), [
+            'engine_server' => [
+                'name' => 'engine-1',
+                'ip_address' => '127.0.0.1',
+                'environment' => 'test',
+                'region' => 'local',
+            ],
+            'worker_id' => 'worker-1',
+        ])->assertNoContent();
+    }
+
+    public function test_claim_next_returns_single_chunk_and_leases(): void
+    {
+        $this->actingAsVerifier();
+
+        $job = $this->makeJob();
+        $chunk = $this->makeChunk($job, [
+            'status' => 'pending',
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+        ]);
+
+        $response = $this->postJson(route('api.verifier.chunks.claim-next'), [
+            'engine_server' => [
+                'name' => 'engine-1',
+                'ip_address' => '127.0.0.1',
+                'environment' => 'test',
+                'region' => 'local',
+            ],
+            'worker_id' => 'worker-1',
+            'lease_seconds' => 120,
+        ])->assertOk();
+
+        $response->assertJsonFragment([
+            'chunk_id' => (string) $chunk->id,
+            'job_id' => (string) $job->id,
+            'chunk_no' => 1,
+        ]);
+
+        $chunk->refresh();
+        $this->assertSame('processing', $chunk->status);
+        $this->assertNotNull($chunk->claim_expires_at);
+        $this->assertSame('worker-1', $chunk->assigned_worker_id);
+        $this->assertNotNull($chunk->engine_server_id);
+
+        $server = EngineServer::find($chunk->engine_server_id);
+        $this->assertNotNull($server);
+
+        $this->postJson(route('api.verifier.chunks.claim-next'), [
+            'engine_server' => [
+                'name' => 'engine-1',
+                'ip_address' => '127.0.0.1',
+                'environment' => 'test',
+                'region' => 'local',
+            ],
+            'worker_id' => 'worker-1',
+        ])->assertNoContent();
     }
 }

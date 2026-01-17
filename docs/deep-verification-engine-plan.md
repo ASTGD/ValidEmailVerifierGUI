@@ -48,6 +48,12 @@ Before SMTP workers go live, admins need clear visibility and safe controls:
 - Ops actions requeue failed/stuck chunks and allow manual finalization with audit logs.
 - Filament resources cover Engine Servers and Verification Job Chunks for day-to-day ops.
 
+## Work Distribution / Queue Strategy (Phase 8A)
+“Workers pull work by calling claim-next; Laravel remains the source of truth and atomically leases chunks to workers. We may introduce a broker queue later, but the worker contract remains unchanged.”
+
+## Phase 8A — Worker Pull (Mock Verification)
+Workers poll `claim-next`, download inputs via signed URLs, generate mock outputs, upload via signed PUT URLs, and call `complete`/`fail`. No SMTP logic is executed in Laravel or in this phase.
+
 ## Engine API Contract v1
 All endpoints are under `/api/verifier/*`, protected by:
 - `auth:sanctum`

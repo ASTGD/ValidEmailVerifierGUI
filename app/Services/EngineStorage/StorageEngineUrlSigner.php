@@ -4,6 +4,7 @@ namespace App\Services\EngineStorage;
 
 use App\Contracts\EngineStorageUrlSigner;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use RuntimeException;
 
 class StorageEngineUrlSigner implements EngineStorageUrlSigner
@@ -13,10 +14,21 @@ class StorageEngineUrlSigner implements EngineStorageUrlSigner
         $filesystem = Storage::disk($disk);
 
         if (method_exists($filesystem, 'temporaryUrl')) {
-            return $filesystem->temporaryUrl($key, now()->addSeconds($expirySeconds));
+            try {
+                return $filesystem->temporaryUrl($key, now()->addSeconds($expirySeconds));
+            } catch (RuntimeException) {
+                // Fall back to a signed app URL for local/testing disks.
+            }
         }
 
-        throw new RuntimeException('Temporary download URLs are not supported for this disk.');
+        return URL::temporarySignedRoute(
+            'api.verifier.storage.download',
+            now()->addSeconds($expirySeconds),
+            [
+                'disk' => $disk,
+                'key' => $key,
+            ]
+        );
     }
 
     public function temporaryUploadUrl(string $disk, string $key, int $expirySeconds, ?string $contentType = null): string
@@ -30,15 +42,28 @@ class StorageEngineUrlSigner implements EngineStorageUrlSigner
                 $options['ContentType'] = $contentType;
             }
 
-            $url = $filesystem->temporaryUploadUrl($key, now()->addSeconds($expirySeconds), $options);
+            try {
+                $url = $filesystem->temporaryUploadUrl($key, now()->addSeconds($expirySeconds), $options);
+            } catch (RuntimeException) {
+                $url = null;
+            }
 
             if (is_array($url) && isset($url['url'])) {
                 return $url['url'];
             }
 
-            return (string) $url;
+            if (is_string($url) && $url !== '') {
+                return $url;
+            }
         }
 
-        throw new RuntimeException('Temporary upload URLs are not supported for this disk.');
+        return URL::temporarySignedRoute(
+            'api.verifier.storage.upload',
+            now()->addSeconds($expirySeconds),
+            [
+                'disk' => $disk,
+                'key' => $key,
+            ]
+        );
     }
 }

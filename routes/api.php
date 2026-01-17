@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Verifier\VerifierHeartbeatController;
 use App\Http\Controllers\Api\Verifier\VerifierChunkCompleteController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkClaimNextController;
 use App\Http\Controllers\Api\Verifier\VerifierChunkDetailsController;
 use App\Http\Controllers\Api\Verifier\VerifierChunkFailController;
 use App\Http\Controllers\Api\Verifier\VerifierChunkInputUrlController;
@@ -12,8 +13,18 @@ use App\Http\Controllers\Api\Verifier\VerifierJobCompleteController;
 use App\Http\Controllers\Api\Verifier\VerifierJobDownloadController;
 use App\Http\Controllers\Api\Verifier\VerifierJobStatusController;
 use App\Http\Controllers\Api\Verifier\VerifierJobsController;
+use App\Http\Controllers\Api\Verifier\VerifierStorageDownloadController;
+use App\Http\Controllers\Api\Verifier\VerifierStorageUploadController;
 use App\Http\Middleware\EnsureVerifierService;
 use Illuminate\Support\Facades\Route;
+
+Route::middleware('signed')
+    ->prefix('verifier/storage')
+    ->name('api.verifier.storage.')
+    ->group(function () {
+        Route::get('download', VerifierStorageDownloadController::class)->name('download');
+        Route::match(['put', 'post'], 'upload', VerifierStorageUploadController::class)->name('upload');
+    });
 
 Route::middleware(['auth:sanctum', EnsureVerifierService::class, 'throttle:verifier-api'])
     ->prefix('verifier')
@@ -35,6 +46,7 @@ Route::middleware(['auth:sanctum', EnsureVerifierService::class, 'throttle:verif
             ->name('jobs.download');
 
         Route::prefix('chunks')->name('chunks.')->group(function () {
+            Route::post('claim-next', VerifierChunkClaimNextController::class)->name('claim-next');
             Route::get('{chunk}', VerifierChunkDetailsController::class)
                 ->whereUuid('chunk')
                 ->name('show');

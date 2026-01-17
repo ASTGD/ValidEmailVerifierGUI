@@ -25,6 +25,9 @@ This contract defines the language-agnostic API that deep verification workers (
 - Laravel performs only parsing, normalization, dedupe, cache lookups, chunking, and final merge.
 - **MX/DNS/SMTP checks are never performed by Laravel** and must be done by the external engine workers.
 
+## Work Distribution / Queue Strategy
+“Workers pull work by calling claim-next; Laravel remains the source of truth and atomically leases chunks to workers. We may introduce a broker queue later, but the worker contract remains unchanged.”
+
 ## Authentication
 All endpoints below require:
 - `auth:sanctum`
@@ -78,6 +81,41 @@ Payload:
 ```json
 { "engine_server_id": 12, "lease_seconds": 600 }
 ```
+
+---
+
+### Chunk Claim-Next (worker pull)
+**POST** `/api/verifier/chunks/claim-next`
+
+Payload:
+```json
+{
+  "engine_server": {
+    "name": "engine-1",
+    "ip_address": "192.168.1.10",
+    "environment": "prod",
+    "region": "us-east-1",
+    "meta": { "version": "1.0.0" }
+  },
+  "worker_id": "engine-1:worker-1",
+  "lease_seconds": 600
+}
+```
+
+Response:
+```json
+{
+  "data": {
+    "chunk_id": "uuid",
+    "job_id": "uuid",
+    "chunk_no": 1,
+    "lease_expires_at": "2026-01-14T10:10:00Z",
+    "input": { "disk": "s3", "key": "chunks/{job}/{chunk}/input.txt" }
+  }
+}
+```
+
+If no chunk is available, the endpoint returns **204 No Content**.
 
 ---
 
@@ -218,3 +256,13 @@ Response:
   }
 }
 ```
+
+---
+
+## Reference Worker Flow (Phase 8A)
+1) Claim a chunk via `POST /api/verifier/chunks/claim-next`.
+2) Fetch `input-url` and download chunk input.
+3) Request signed `output-urls`.
+4) Upload outputs via signed PUT URLs.
+5) Call `complete` (or `fail`) for the chunk.
+6) Laravel finalizes the job when all chunks are completed.
