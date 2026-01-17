@@ -67,6 +67,7 @@ class ParseAndChunkJob implements ShouldQueue
         $this->configure();
         $this->deduper = new EmailDedupeStore($this->dedupeMemoryLimit);
 
+        // Control-plane only: avoid MX/DNS/SMTP checks here; engine workers handle those.
         try {
             $this->verificationJob->addLog('parse_started', 'Parsing input file for verification pipeline.');
 
