@@ -125,11 +125,22 @@ class ParseAndChunkJob implements ShouldQueue
 
     private function configure(): void
     {
-        $this->chunkSize = max(1, (int) config('verifier.chunk_size_default', 5000));
-        $this->maxEmails = max(0, (int) config('verifier.max_emails_per_upload', 0));
-        $this->cacheBatchSize = max(1, (int) config('verifier.cache_batch_size', 100));
-        $this->dedupeMemoryLimit = max(0, (int) config('verifier.dedupe_in_memory_limit', 100000));
-        $this->xlsxRowBatchSize = max(100, (int) config('verifier.xlsx_row_batch_size', 1000));
+        $this->chunkSize = max(1, (int) $this->engineConfig('chunk_size_default', 5000));
+        $this->maxEmails = max(0, (int) $this->engineConfig('max_emails_per_upload', 0));
+        $this->cacheBatchSize = max(1, (int) $this->engineConfig('cache_batch_size', 100));
+        $this->dedupeMemoryLimit = max(0, (int) $this->engineConfig('dedupe_in_memory_limit', 100000));
+        $this->xlsxRowBatchSize = max(100, (int) $this->engineConfig('xlsx_row_batch_size', 1000));
+    }
+
+    private function engineConfig(string $key, mixed $fallback = null): mixed
+    {
+        $value = config('engine.'.$key);
+
+        if ($value === null) {
+            $value = config('verifier.'.$key, $fallback);
+        }
+
+        return $value ?? $fallback;
     }
 
     private function detectExtension(): string
