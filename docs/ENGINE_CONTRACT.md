@@ -25,6 +25,27 @@ This contract defines the language-agnostic API that deep verification workers (
 - Laravel performs only parsing, normalization, dedupe, cache lookups, chunking, and final merge.
 - **MX/DNS/SMTP checks are never performed by Laravel** and must be done by the external engine workers.
 
+## Connectivity-Based Classification (Phase 8B)
+In Phase 8B the worker performs **DNS/MX + SMTP connectivity checks** (EHLO + QUIT only). No mailbox-level RCPT probing is performed.
+
+Classification meaning:
+- **valid**: the domain mail flow is reachable (`smtp_connect_ok`).
+- **invalid**: permanent issues (`syntax`, `mx_missing`, `smtp_unavailable`).
+- **risky**: transient/network issues (`dns_timeout`, `dns_servfail`, `smtp_connect_timeout`, `smtp_timeout`, `smtp_tempfail`).
+
+Reason codes (output CSV `email,reason`):
+| Category | Reason code |
+| --- | --- |
+| invalid | `syntax` |
+| invalid | `mx_missing` |
+| invalid | `smtp_unavailable` |
+| risky | `dns_timeout` |
+| risky | `dns_servfail` |
+| risky | `smtp_connect_timeout` |
+| risky | `smtp_timeout` |
+| risky | `smtp_tempfail` |
+| valid | `smtp_connect_ok` |
+
 ## Work Distribution / Queue Strategy
 “Workers pull work by calling claim-next; Laravel remains the source of truth and atomically leases chunks to workers. We may introduce a broker queue later, but the worker contract remains unchanged.”
 
@@ -259,10 +280,11 @@ Response:
 
 ---
 
-## Reference Worker Flow (Phase 8A)
+## Reference Worker Flow (Phase 8A/8B)
 1) Claim a chunk via `POST /api/verifier/chunks/claim-next`.
 2) Fetch `input-url` and download chunk input.
-3) Request signed `output-urls`.
-4) Upload outputs via signed PUT URLs.
-5) Call `complete` (or `fail`) for the chunk.
-6) Laravel finalizes the job when all chunks are completed.
+3) Perform verification in the worker (Phase 8B: DNS/MX + SMTP connectivity only).
+4) Request signed `output-urls`.
+5) Upload outputs via signed PUT URLs.
+6) Call `complete` (or `fail`) for the chunk.
+7) Laravel finalizes the job when all chunks are completed.
