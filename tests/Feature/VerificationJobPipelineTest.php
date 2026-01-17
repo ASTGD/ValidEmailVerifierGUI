@@ -23,10 +23,10 @@ class VerificationJobPipelineTest extends TestCase
 
         config([
             'verifier.storage_disk' => 'local',
-            'verifier.chunk_size_default' => 2,
-            'verifier.cache_batch_size' => 2,
-            'verifier.max_emails_per_upload' => 0,
-            'verifier.dedupe_in_memory_limit' => 1000,
+            'engine.chunk_size_default' => 2,
+            'engine.cache_batch_size' => 2,
+            'engine.max_emails_per_upload' => 0,
+            'engine.dedupe_in_memory_limit' => 1000,
         ]);
 
         $user = User::factory()->create();
@@ -78,10 +78,10 @@ class VerificationJobPipelineTest extends TestCase
 
         config([
             'verifier.storage_disk' => 'local',
-            'verifier.chunk_size_default' => 10,
-            'verifier.cache_batch_size' => 3,
-            'verifier.max_emails_per_upload' => 0,
-            'verifier.dedupe_in_memory_limit' => 1000,
+            'engine.chunk_size_default' => 10,
+            'engine.cache_batch_size' => 3,
+            'engine.max_emails_per_upload' => 0,
+            'engine.dedupe_in_memory_limit' => 1000,
         ]);
 
         $store = new class implements EmailVerificationCacheStore {
