@@ -7,6 +7,8 @@ use App\Filament\Resources\VerificationJobs\VerificationJobResource;
 use App\Models\EngineServer;
 use App\Models\VerificationJobChunk;
 use Filament\Actions\Action;
+use Filament\Actions\ViewAction;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
@@ -92,6 +94,12 @@ class VerificationJobChunksTable
                     ->query(fn (Builder $query) => $query
                         ->whereNotNull('claim_expires_at')
                         ->where('claim_expires_at', '>', now())),
+                Filter::make('lease_expired')
+                    ->label('Lease expired')
+                    ->query(fn (Builder $query) => $query
+                        ->where('status', 'processing')
+                        ->whereNotNull('claim_expires_at')
+                        ->where('claim_expires_at', '<', now())),
                 Filter::make('job_id')
                     ->form([
                         \Filament\Forms\Components\TextInput::make('job_id')
@@ -109,6 +117,8 @@ class VerificationJobChunksTable
                     }),
             ])
             ->actions([
+                ViewAction::make()
+                    ->label('Logs'),
                 Action::make('requeue')
                     ->label('Requeue')
                     ->color('warning')
@@ -137,6 +147,11 @@ class VerificationJobChunksTable
                             'chunk_no' => $record->chunk_no,
                             'attempts' => $record->attempts,
                         ], auth()->id());
+
+                        Notification::make()
+                            ->title('Chunk requeued.')
+                            ->success()
+                            ->send();
                     }),
                 Action::make('mark_failed')
                     ->label('Mark Failed')
@@ -159,6 +174,11 @@ class VerificationJobChunksTable
                             'chunk_no' => $record->chunk_no,
                             'attempts' => $record->attempts,
                         ], auth()->id());
+
+                        Notification::make()
+                            ->title('Chunk marked failed.')
+                            ->success()
+                            ->send();
                     }),
             ]);
     }

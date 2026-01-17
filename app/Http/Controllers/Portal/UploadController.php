@@ -1,47 +1,25 @@
 <?php
 
-namespace App\Livewire\Portal;
+namespace App\Http\Controllers\Portal;
 
 use App\Enums\VerificationJobStatus;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Portal\UploadVerificationJobRequest;
 use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
-use Livewire\Attributes\Layout;
-use Livewire\Component;
-use Livewire\WithFileUploads;
 
-#[Layout('layouts.portal')]
-class Upload extends Component
+class UploadController extends Controller
 {
     use AuthorizesRequests;
-    use WithFileUploads;
 
-    public $file;
-
-    protected function maxUploadKilobytes(): int
+    public function __invoke(UploadVerificationJobRequest $request, JobStorage $storage)
     {
-        $maxMb = (int) config('verifier.checkout_upload_max_mb', 10);
-
-        return max(1, $maxMb * 1024);
-    }
-
-    protected function rules(): array
-    {
-        return [
-            'file' => ['required', 'file', 'mimes:csv,txt', 'max:'.$this->maxUploadKilobytes()],
-        ];
-    }
-
-    public function save(JobStorage $storage)
-    {
-        $this->validate();
-
-        $user = Auth::user();
+        $user = $request->user();
 
         $rateKey = 'portal-upload|'.$user->id;
         $maxAttempts = (int) config('verifier.portal_upload_max_attempts', 10);
@@ -49,11 +27,12 @@ class Upload extends Component
 
         if (RateLimiter::tooManyAttempts($rateKey, $maxAttempts)) {
             $seconds = RateLimiter::availableIn($rateKey);
-            $this->addError('file', __('Too many upload attempts. Try again in :seconds seconds.', [
-                'seconds' => $seconds,
-            ]));
 
-            return;
+            return back()->withErrors([
+                'file' => __('Too many upload attempts. Try again in :seconds seconds.', [
+                    'seconds' => $seconds,
+                ]),
+            ]);
         }
 
         RateLimiter::hit($rateKey, $decaySeconds);
@@ -63,30 +42,32 @@ class Upload extends Component
             && method_exists($user, 'subscribed')
             && ! $user->subscribed('default')
         ) {
-            $this->addError('file', __('An active subscription is required to upload lists.'));
-
-            return;
+            return back()->withErrors([
+                'file' => __('An active subscription is required to upload lists.'),
+            ]);
         }
 
         try {
             $this->authorize('create', VerificationJob::class);
         } catch (AuthorizationException) {
-            $this->addError('file', __('You are not allowed to upload lists.'));
-
-            return;
+            return back()->withErrors([
+                'file' => __('You are not allowed to upload lists.'),
+            ]);
         }
+
+        $file = $request->file('file');
 
         $job = new VerificationJob([
             'user_id' => $user->id,
             'status' => VerificationJobStatus::Pending,
-            'original_filename' => $this->file->getClientOriginalName(),
+            'original_filename' => $file->getClientOriginalName(),
         ]);
 
         $job->id = (string) Str::uuid();
         $job->input_disk = $storage->disk();
         $job->input_key = $storage->inputKey($job);
 
-        $storage->storeInput($this->file, $job, $job->input_disk, $job->input_key);
+        $storage->storeInput($file, $job, $job->input_disk, $job->input_key);
 
         $job->save();
         $job->addLog('created', 'Job created via customer portal upload.', [
@@ -95,13 +76,8 @@ class Upload extends Component
 
         PrepareVerificationJob::dispatch($job->id);
 
-        $this->reset('file');
-
-        return $this->redirectRoute('portal.jobs.show', ['job' => $job->id], navigate: true);
-    }
-
-    public function render()
-    {
-        return view('livewire.portal.upload');
+        return redirect()
+            ->route('portal.jobs.show', ['job' => $job->id])
+            ->with('status', __('Upload received. Verification job created.'));
     }
 }

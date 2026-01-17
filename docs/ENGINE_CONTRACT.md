@@ -19,6 +19,11 @@ This contract defines the language-agnostic API that deep verification workers (
 - Workers must use signed URLs for I/O (S3 presigned URLs in production).
 - Workers should **not** access Laravel’s database directly.
 - Finalization (merge) happens in Laravel once all chunks are completed.
+- Admin observability lives in the Filament “Engine” and “Verification Jobs” screens.
+
+## Control Plane Boundary
+- Laravel performs only parsing, normalization, dedupe, cache lookups, chunking, and final merge.
+- **MX/DNS/SMTP checks are never performed by Laravel** and must be done by the external engine workers.
 
 ## Authentication
 All endpoints below require:

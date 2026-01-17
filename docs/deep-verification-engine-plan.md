@@ -5,6 +5,10 @@ For the stable worker API contract, see `docs/ENGINE_CONTRACT.md`.
 ## Purpose
 This document defines the Laravel-side scaffold that lets a deep verification engine (Go now, .NET/Node later) safely pull/claim work, send heartbeats, and report results. The design keeps Laravel as the control plane and ensures worker implementations stay replaceable without schema churn.
 
+Laravel is the control plane only:
+- **No MX/DNS/SMTP verification is performed in Laravel.**
+- Deep verification (MX/DNS/SMTP) happens exclusively in external engine workers.
+
 ## Entities (Laravel)
 - **VerificationJob**: the unit of work for email verification.
 - **VerificationJobChunk**: chunked input units created by the Laravel pipeline.
@@ -36,6 +40,12 @@ Laravel prepares work for the deep verification engine by parsing, deduping, and
 - Parsing is streaming for TXT/CSV and row-batched for XLS/XLSX.
 - Max email limit is enforced via config (`VERIFIER_MAX_EMAILS_PER_UPLOAD`).
 - Deduping uses an in-memory set with SQLite fallback when limits are exceeded.
+
+## Phase 7 — Admin Observability & Ops Controls
+Before SMTP workers go live, admins need clear visibility and safe controls:
+- Job view exposes engine lease info, final outputs, cached artifacts, chunk summary, and recent logs.
+- “Finalization Health” widget surfaces failed chunks, missing outputs, finalization backlog, and stuck leases.
+- Ops actions requeue failed/stuck chunks and allow manual finalization with audit logs.
 
 ## Engine API Contract v1
 All endpoints are under `/api/verifier/*`, protected by:

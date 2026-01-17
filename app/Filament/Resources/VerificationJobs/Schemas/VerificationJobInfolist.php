@@ -3,6 +3,10 @@
 namespace App\Filament\Resources\VerificationJobs\Schemas;
 
 use App\Enums\VerificationJobStatus;
+use App\Filament\Resources\VerificationJobChunks\VerificationJobChunkResource;
+use App\Models\VerificationJob;
+use App\Models\VerificationJobChunk;
+use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -55,7 +59,24 @@ class VerificationJobInfolist
                             ->placeholder('-'),
                     ])
                     ->columns(2),
-                Section::make('Engine')
+                Section::make('Files')
+                    ->schema([
+                        TextEntry::make('original_filename')
+                            ->label('Original filename')
+                            ->placeholder('-'),
+                        TextEntry::make('input_disk')
+                            ->label('Input disk')
+                            ->placeholder('-'),
+                        TextEntry::make('input_key')
+                            ->label('Input key')
+                            ->copyable(),
+                        TextEntry::make('output_key')
+                            ->label('Output key')
+                            ->placeholder('-')
+                            ->copyable(),
+                    ])
+                    ->columns(2),
+                Section::make('Engine & Outputs')
                     ->schema([
                         TextEntry::make('engineServer.name')
                             ->label('Engine server')
@@ -78,47 +99,178 @@ class VerificationJobInfolist
                             ->label('Lease expires')
                             ->since()
                             ->placeholder('-'),
-                    ])
-                    ->columns(2),
-                Section::make('Files')
-                    ->schema([
-                        TextEntry::make('original_filename')
-                            ->label('Original filename')
-                            ->placeholder('-'),
-                        TextEntry::make('input_disk')
-                            ->label('Input disk')
-                            ->placeholder('-'),
-                        TextEntry::make('input_key')
-                            ->label('Input key')
-                            ->copyable(),
+                        TextEntry::make('finalization_status')
+                            ->label('Finalization status')
+                            ->badge()
+                            ->state(fn (VerificationJob $record): string => self::finalizationStatus($record))
+                            ->formatStateUsing(fn (string $state): string => ucfirst($state))
+                            ->color(fn (VerificationJob $record): string => self::finalizationColor(self::finalizationStatus($record))),
                         TextEntry::make('output_disk')
                             ->label('Output disk')
                             ->placeholder('-'),
-                        TextEntry::make('output_key')
-                            ->label('Output key')
+                        TextEntry::make('valid_key')
+                            ->label('Valid key')
                             ->placeholder('-')
                             ->copyable(),
-                    ])
-                    ->columns(2),
-                Section::make('Results')
-                    ->schema([
+                        TextEntry::make('invalid_key')
+                            ->label('Invalid key')
+                            ->placeholder('-')
+                            ->copyable(),
+                        TextEntry::make('risky_key')
+                            ->label('Risky key')
+                            ->placeholder('-')
+                            ->copyable(),
                         TextEntry::make('total_emails')
                             ->label('Total emails')
+                            ->numeric()
                             ->placeholder('-'),
                         TextEntry::make('valid_count')
                             ->label('Valid')
+                            ->numeric()
                             ->placeholder('-'),
                         TextEntry::make('invalid_count')
                             ->label('Invalid')
+                            ->numeric()
                             ->placeholder('-'),
                         TextEntry::make('risky_count')
                             ->label('Risky')
+                            ->numeric()
                             ->placeholder('-'),
-                        TextEntry::make('unknown_count')
-                            ->label('Unknown')
+                        TextEntry::make('finished_at')
+                            ->label('Finished')
+                            ->dateTime()
                             ->placeholder('-'),
                     ])
                     ->columns(3),
+                Section::make('Cached Artifacts')
+                    ->schema([
+                        TextEntry::make('cached_count')
+                            ->label('Cached count')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('cached_valid_key')
+                            ->label('Cached valid key')
+                            ->placeholder('-')
+                            ->copyable(),
+                        TextEntry::make('cached_invalid_key')
+                            ->label('Cached invalid key')
+                            ->placeholder('-')
+                            ->copyable(),
+                        TextEntry::make('cached_risky_key')
+                            ->label('Cached risky key')
+                            ->placeholder('-')
+                            ->copyable(),
+                        TextEntry::make('cached_notice')
+                            ->label('Cached files')
+                            ->state(function (VerificationJob $record): string {
+                                $hasKeys = filled($record->cached_valid_key)
+                                    || filled($record->cached_invalid_key)
+                                    || filled($record->cached_risky_key);
+
+                                return $hasKeys ? __('Cached files stored.') : __('No cached result files (counts only).');
+                            })
+                            ->visible(function (VerificationJob $record): bool {
+                                return empty($record->cached_valid_key)
+                                    && empty($record->cached_invalid_key)
+                                    && empty($record->cached_risky_key);
+                            }),
+                    ])
+                    ->columns(2),
+                Section::make('Chunk Summary')
+                    ->schema([
+                        TextEntry::make('chunk_total')
+                            ->label('Total chunks')
+                            ->state(fn (VerificationJob $record): int => self::chunkSummary($record)['total'])
+                            ->numeric(),
+                        TextEntry::make('chunk_completed')
+                            ->label('Completed')
+                            ->state(fn (VerificationJob $record): int => self::chunkSummary($record)['completed'])
+                            ->numeric(),
+                        TextEntry::make('chunk_pending')
+                            ->label('Pending')
+                            ->state(fn (VerificationJob $record): int => self::chunkSummary($record)['pending'])
+                            ->numeric(),
+                        TextEntry::make('chunk_processing')
+                            ->label('Processing')
+                            ->state(fn (VerificationJob $record): int => self::chunkSummary($record)['processing'])
+                            ->numeric(),
+                        TextEntry::make('chunk_failed')
+                            ->label('Failed')
+                            ->state(fn (VerificationJob $record): int => self::chunkSummary($record)['failed'])
+                            ->numeric(),
+                        TextEntry::make('chunk_link')
+                            ->label('Chunks')
+                            ->state(__('View all chunks'))
+                            ->url(function (VerificationJob $record): string {
+                                return VerificationJobChunkResource::getUrl('index', [
+                                    'tableFilters' => [
+                                        'job_id' => [
+                                            'job_id' => (string) $record->id,
+                                        ],
+                                    ],
+                                ]);
+                            })
+                            ->openUrlInNewTab(),
+                    ])
+                    ->columns(3),
+                Section::make('Recent Logs')
+                    ->schema([
+                        RepeatableEntry::make('activity')
+                            ->label('Recent Logs')
+                            ->state(function (VerificationJob $record): array {
+                                $logs = $record->logs()
+                                    ->latest()
+                                    ->limit(50)
+                                    ->get();
+
+                                if (! $logs) {
+                                    return [];
+                                }
+
+                                return $logs->map(function ($log): array {
+                                    return [
+                                        'level' => data_get($log->context, 'level', __('info')),
+                                        'event' => $log->event,
+                                        'message' => $log->message,
+                                        'context' => $log->context,
+                                        'actor' => $log->user?->email ?: __('System'),
+                                        'created_at' => $log->created_at,
+                                    ];
+                                })->all();
+                            })
+                            ->schema([
+                                TextEntry::make('created_at')
+                                    ->label('Time')
+                                    ->dateTime(),
+                                TextEntry::make('level')
+                                    ->label('Level')
+                                    ->badge(),
+                                TextEntry::make('event')
+                                    ->label('Event')
+                                    ->badge(),
+                                TextEntry::make('message')
+                                    ->label('Message')
+                                    ->placeholder('-')
+                                    ->columnSpan(['md' => 2]),
+                                TextEntry::make('context')
+                                    ->label('Context')
+                                    ->formatStateUsing(function ($state): string {
+                                        if (empty($state)) {
+                                            return '-';
+                                        }
+
+                                        return json_encode($state, JSON_UNESCAPED_SLASHES);
+                                    })
+                                    ->limit(80)
+                                    ->columnSpan(['md' => 2]),
+                                TextEntry::make('actor')
+                                    ->label('Actor')
+                                    ->placeholder('-'),
+                            ])
+                            ->columns(['default' => 1, 'md' => 3])
+                            ->placeholder('No logs recorded yet.'),
+                    ])
+                    ->columnSpanFull(),
                 Section::make('Error')
                     ->schema([
                         TextEntry::make('error_message')
@@ -127,5 +279,65 @@ class VerificationJobInfolist
                     ])
                     ->visible(fn ($record): bool => filled($record?->error_message)),
             ]);
+    }
+
+    private static function finalizationStatus(VerificationJob $record): string
+    {
+        $hasFinalKeys = filled($record->valid_key)
+            && filled($record->invalid_key)
+            && filled($record->risky_key);
+
+        if ($record->status === VerificationJobStatus::Failed) {
+            return 'failed';
+        }
+
+        if ($record->status === VerificationJobStatus::Completed) {
+            return $hasFinalKeys ? 'completed' : 'incomplete';
+        }
+
+        if ($record->status === VerificationJobStatus::Processing) {
+            return 'waiting';
+        }
+
+        return 'pending';
+    }
+
+    private static function finalizationColor(string $status): string
+    {
+        return match ($status) {
+            'completed' => 'success',
+            'failed' => 'danger',
+            'incomplete' => 'warning',
+            'waiting' => 'info',
+            default => 'gray',
+        };
+    }
+
+    private static function chunkSummary(VerificationJob $record): array
+    {
+        static $cache = [];
+
+        $jobId = (string) $record->id;
+
+        if (isset($cache[$jobId])) {
+            return $cache[$jobId];
+        }
+
+        $counts = VerificationJobChunk::query()
+            ->where('verification_job_id', $record->id)
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw("SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed")
+            ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending")
+            ->selectRaw("SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as processing")
+            ->selectRaw("SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed")
+            ->first();
+
+        return $cache[$jobId] = [
+            'total' => (int) ($counts->total ?? 0),
+            'completed' => (int) ($counts->completed ?? 0),
+            'pending' => (int) ($counts->pending ?? 0),
+            'processing' => (int) ($counts->processing ?? 0),
+            'failed' => (int) ($counts->failed ?? 0),
+        ];
     }
 }

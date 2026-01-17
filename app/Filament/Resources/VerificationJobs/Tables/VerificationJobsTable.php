@@ -10,9 +10,11 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class VerificationJobsTable
 {
@@ -102,6 +104,30 @@ class VerificationJobsTable
                         return sprintf('%s (%s)', $record->name, $record->ip_address);
                     })
                     ->searchable(),
+                Filter::make('failed_chunks')
+                    ->label('Failed chunks')
+                    ->query(fn (Builder $query) => $query
+                        ->whereHas('chunks', fn ($chunkQuery) => $chunkQuery->where('status', 'failed'))),
+                Filter::make('missing_outputs')
+                    ->label('Missing outputs')
+                    ->query(fn (Builder $query) => $query
+                        ->where('status', VerificationJobStatus::Completed)
+                        ->where(function ($inner) {
+                            $inner->whereNull('valid_key')
+                                ->orWhereNull('invalid_key')
+                                ->orWhereNull('risky_key');
+                        })),
+                Filter::make('ready_for_finalization')
+                    ->label('Ready for finalization')
+                    ->query(fn (Builder $query) => $query
+                        ->where('status', VerificationJobStatus::Processing)
+                        ->whereHas('chunks')
+                        ->whereDoesntHave('chunks', fn ($chunkQuery) => $chunkQuery->where('status', '!=', 'completed'))
+                        ->where(function ($inner) {
+                            $inner->whereNull('valid_key')
+                                ->orWhereNull('invalid_key')
+                                ->orWhereNull('risky_key');
+                        })),
             ])
             ->emptyStateHeading('No verification jobs yet')
             ->emptyStateDescription('Jobs will appear here once customers upload lists.')
