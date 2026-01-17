@@ -13,6 +13,7 @@ import (
     "time"
 
     "engine-worker-go/internal/api"
+    "engine-worker-go/internal/verifier"
 )
 
 type Config struct {
@@ -22,6 +23,7 @@ type Config struct {
     MaxConcurrency    int
     Server            api.EngineServerPayload
     WorkerID          string
+    Verifier          verifier.Verifier
 }
 
 type Worker struct {
@@ -136,7 +138,7 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
     }
     defer reader.Close()
 
-    outputs, err := buildMockOutputs(reader)
+    outputs, err := buildOutputs(ctx, reader, w.cfg.Verifier)
     if err != nil {
         return w.failChunk(ctx, chunkID, "failed to parse input", err, false)
     }
@@ -174,7 +176,7 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
     _ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
         "level":   "info",
         "event":   "chunk_completed",
-        "message": "Chunk completed by mock worker.",
+        "message": "Chunk completed by worker.",
         "context": map[string]interface{}{
             "chunk_no":    details.Data.ChunkNo,
             "email_count": outputs.EmailCount,
@@ -245,7 +247,11 @@ func uploadSigned(ctx context.Context, url string, data []byte) error {
     return nil
 }
 
-func buildMockOutputs(reader io.Reader) (*chunkOutputs, error) {
+func buildOutputs(ctx context.Context, reader io.Reader, verifier verifier.Verifier) (*chunkOutputs, error) {
+    if verifier == nil {
+        return nil, fmt.Errorf("verifier not configured")
+    }
+
     validBuf := &bytes.Buffer{}
     invalidBuf := &bytes.Buffer{}
     riskyBuf := &bytes.Buffer{}
@@ -275,18 +281,25 @@ func buildMockOutputs(reader io.Reader) (*chunkOutputs, error) {
         }
 
         output.EmailCount++
-        category, reason := classify(line)
+        result := verifier.Verify(ctx, line)
 
-        switch category {
-        case "invalid":
+        switch result.Category {
+        case verifier.CategoryInvalid:
             output.InvalidCount++
-            _ = invalidWriter.Write([]string{line, reason})
-        case "risky":
+            _ = invalidWriter.Write([]string{line, result.Reason})
+        case verifier.CategoryRisky:
             output.RiskyCount++
-            _ = riskyWriter.Write([]string{line, reason})
-        default:
+            _ = riskyWriter.Write([]string{line, result.Reason})
+        case verifier.CategoryValid:
             output.ValidCount++
-            _ = validWriter.Write([]string{line, reason})
+            _ = validWriter.Write([]string{line, result.Reason})
+        default:
+            output.RiskyCount++
+            reason := result.Reason
+            if reason == "" {
+                reason = "unknown"
+            }
+            _ = riskyWriter.Write([]string{line, reason})
         }
     }
 
@@ -307,24 +320,6 @@ func buildMockOutputs(reader io.Reader) (*chunkOutputs, error) {
     output.RiskyData = riskyBuf.Bytes()
 
     return output, nil
-}
-
-func classify(email string) (string, string) {
-    if !strings.Contains(email, "@") {
-        return "invalid", "syntax"
-    }
-
-    parts := strings.SplitN(email, "@", 2)
-    if len(parts) != 2 {
-        return "invalid", "syntax"
-    }
-
-    domain := strings.ToLower(parts[1])
-    if strings.Contains(domain, "example") {
-        return "risky", "mock_risky_domain"
-    }
-
-    return "valid", "mock_valid"
 }
 
 func isHeaderLine(line string) bool {
