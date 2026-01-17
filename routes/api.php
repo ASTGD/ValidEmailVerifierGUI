@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Verifier\VerifierHeartbeatController;
 use App\Http\Controllers\Api\Verifier\VerifierChunkCompleteController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkClaimNextController;
 use App\Http\Controllers\Api\Verifier\VerifierChunkDetailsController;
 use App\Http\Controllers\Api\Verifier\VerifierChunkFailController;
 use App\Http\Controllers\Api\Verifier\VerifierChunkInputUrlController;
@@ -35,6 +36,7 @@ Route::middleware(['auth:sanctum', EnsureVerifierService::class, 'throttle:verif
             ->name('jobs.download');
 
         Route::prefix('chunks')->name('chunks.')->group(function () {
+            Route::post('claim-next', VerifierChunkClaimNextController::class)->name('claim-next');
             Route::get('{chunk}', VerifierChunkDetailsController::class)
                 ->whereUuid('chunk')
                 ->name('show');
