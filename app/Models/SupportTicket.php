@@ -21,8 +21,8 @@ class SupportTicket extends Model
     ];
 
     protected $casts = [
-        'status' => SupportTicketStatus::class,
-        'priority' => SupportTicketPriority::class,
+        'status' => \App\Enums\SupportTicketStatus::class,
+        'priority' => \App\Enums\SupportTicketPriority::class,
         'closed_at' => 'datetime',
     ];
 
@@ -53,5 +53,17 @@ class SupportTicket extends Model
         static::creating(function ($model) {
             $model->ticket_number = 'TK-' . strtoupper(bin2hex(random_bytes(3)));
         });
+    }
+    /**
+     * Get the color classes based on the department/category.
+     */
+    public function getCategoryBadgeClasses(): string
+    {
+        return match ($this->category) {
+            'Technical' => 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+            'Billing'   => 'bg-teal-50 text-teal-700 border border-teal-200',
+            'Sales'     => 'bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200',
+            default     => 'bg-slate-50 text-slate-600 border border-slate-200',
+        };
     }
 }

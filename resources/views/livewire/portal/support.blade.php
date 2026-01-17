@@ -22,14 +22,17 @@
                 <thead>
                     <tr class="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                         <th class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
-                            {{ __('ID') }}</th>
+                            {{ __('Ticket ID') }}</th>
                         <th class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
                             {{ __('Subject') }}</th>
-                        <th class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
+                        <th class="px-8 py-5 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
+                            {{ __('Department') }}</th>
+                        <th
+                            class="px-8 py-5 text-[11px] font-black text-[#64748B] uppercase tracking-widest text-center">
                             {{ __('Status') }}</th>
                         <th
-                            class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest text-right">
-                            {{ __('Date') }}</th>
+                            class="px-8 py-5 text-[11px] font-black text-[#64748B] uppercase tracking-widest text-right">
+                            {{ __('Last Updated') }}</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#E2E8F0]">
@@ -40,16 +43,24 @@
                                 #{{ $ticket->ticket_number }}</td>
                             <td class="px-8 py-5">
                                 <p class="font-bold text-[#0F172A]">{{ $ticket->subject }}</p>
-                                <p class="text-[10px] text-[#94A3B8] font-bold uppercase">{{ $ticket->category }}</p>
                             </td>
-                            <td class="px-8 py-5">
+                            <td class="px-8 py-6">
                                 <span
-                                    class="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-gray-100 text-gray-700">
-                                    {{ $ticket->status->label() }}
+                                    class="inline-flex items-center px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest {{ $ticket->getCategoryBadgeClasses() }}">
+                                    {{ $ticket->category }}
                                 </span>
                             </td>
-                            <td class="px-8 py-5 text-right text-sm text-[#64748B] font-medium">
-                                {{ $ticket->created_at->format('M d, Y') }}
+                            <td class="px-8 py-6 text-center">
+                                <div class="flex justify-center">
+                                    <span
+                                        class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter {{ $ticket->status->badgeClasses() }}">
+                                        <span class="w-1.5 h-1.5 rounded-full mr-1.5 bg-current opacity-70"></span>
+                                        {{ $ticket->status->label() }}
+                                    </span>
+                                </div>
+                            </td>
+                            <td class="px-8 py-6 text-right text-sm font-medium text-[#64748B]">
+                                {{ $ticket->updated_at->format('l, F jS, Y (H:i)') }}
                             </td>
                         </tr>
                     @empty
@@ -62,11 +73,42 @@
                 </tbody>
             </table>
         </div>
-        @if ($tickets->hasPages())
-            <div class="p-6 border-t border-[#E2E8F0]">
+        <!-- SINGLE UNIFIED PAGINATION SECTION -->
+        <div
+            class="px-8 py-6 bg-[#F8FAFC] border-t border-[#E2E8F0] flex flex-col md:flex-row items-center justify-between gap-4">
+
+            <!-- 1. Left Side: Showing results (Keep this one) -->
+            <div class="text-sm text-[#64748B] font-medium">
+                {{ __('Showing') }} {{ $tickets->firstItem() ?? 0 }} {{ __('to') }}
+                {{ $tickets->lastItem() ?? 0 }} {{ __('of') }} {{ $tickets->total() }} {{ __('results') }}
+            </div>
+
+            <!-- 2. Middle: Per Page Selector -->
+            <div class="flex items-center bg-white border border-[#E2E8F0] rounded-xl overflow-hidden shadow-sm">
+                <span
+                    class="px-4 py-2 text-[10px] font-black text-[#64748B] uppercase tracking-widest border-r border-[#E2E8F0] bg-[#F8FAFC]">
+                    {{ __('Per page') }}
+                </span>
+                <select wire:model.live="perPage"
+                    class="pl-4 pr-10 py-1.5 border-none text-sm font-bold text-[#0F172A] focus:ring-0 cursor-pointer">
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                </select>
+            </div>
+
+            <!-- 3. Right Side: Navigation Buttons ONLY -->
+            <div class="pagination-simple">
                 {{ $tickets->links() }}
             </div>
-        @endif
+        </div>
+
+        <style>
+            /* This CSS removes the extra "Showing results" text that Laravel puts inside the pagination buttons */
+            .pagination-simple nav div:first-child {
+                display: none !important;
+            }
+        </style>
     </div>
 
     <!-- START OF YOUR ORIGINAL DESIGN (STAYED THE SAME) -->

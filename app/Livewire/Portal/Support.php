@@ -11,6 +11,7 @@ use App\Enums\SupportTicketPriority;
 use Illuminate\Support\Facades\Auth;
 use Livewire\WithFileUploads;
 use Livewire\WithPagination;
+use Livewire\Attributes\Url;
 
 #[Layout('layouts.portal')]
 class Support extends Component
@@ -23,6 +24,10 @@ class Support extends Component
     public string $category = 'Technical';
     public string $priority = 'normal';
     public $attachment;
+    #[Url(history: true)]
+    public $perPage = 10;
+    #[Url(history: true)]
+    public $page = 1;
 
     public function render()
     {
@@ -31,7 +36,7 @@ class Support extends Component
             'supportUrl' => config('support.url'),
             'tickets' => SupportTicket::where('user_id', Auth::id())
                 ->latest()
-                ->paginate(10),
+                ->paginate($this->perPage),
         ]);
     }
 
