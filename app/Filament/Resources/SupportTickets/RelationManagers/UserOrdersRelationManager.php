@@ -8,6 +8,7 @@ use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
 // The correct import for your project structure
 use Filament\Actions\Action;
+use App\Enums\VerificationOrderStatus;
 
 class UserOrdersRelationManager extends RelationManager
 {
@@ -51,11 +52,25 @@ class UserOrdersRelationManager extends RelationManager
 
                 TextColumn::make('status')
                     ->badge()
-                    ->color(fn(string $state): string => match ($state) {
-                        'pending' => 'warning',
-                        'completed' => 'success',
-                        'failed' => 'danger',
-                        default => 'gray',
+                    ->formatStateUsing(function ($state): string {
+                        if ($state instanceof VerificationOrderStatus) {
+                            return $state->label();
+                        }
+
+                        return ucfirst((string) $state);
+                    })
+                    ->color(function ($state): string {
+                        $value = $state instanceof VerificationOrderStatus ? $state->value : (string) $state;
+
+                        return match ($value) {
+                            VerificationOrderStatus::Pending->value => 'warning',
+                            VerificationOrderStatus::Processing->value => 'info',
+                            VerificationOrderStatus::Delivered->value => 'success',
+                            VerificationOrderStatus::Failed->value => 'danger',
+                            VerificationOrderStatus::Cancelled->value => 'gray',
+                            VerificationOrderStatus::Fraud->value => 'danger',
+                            default => 'gray',
+                        };
                     }),
 
                 TextColumn::make('amount_cents')
