@@ -108,5 +108,12 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute($limit)->by('verifier-api|' . $key);
         });
+
+        RateLimiter::for('feedback-api', function (Request $request): Limit {
+            $limit = (int) config('engine.feedback_rate_limit_per_minute', 30);
+            $key = $request->user()?->id ?: $request->ip();
+
+            return Limit::perMinute($limit)->by('feedback-api|' . $key);
+        });
     }
 }

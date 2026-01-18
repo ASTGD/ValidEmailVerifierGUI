@@ -49,6 +49,13 @@ Laravel prepares work for the deep verification engine by parsing, deduping, and
    - Batch lookup via `EmailVerificationCacheStore::lookupMany`.
    - Database-backed cache store uses hashed emails for lookup.
    - Freshness window enforced by `engine.cache_freshness_days`.
+   - Outcomes ingestion is rate limited and size capped by `engine.feedback_*` limits.
+
+## SG4 Production Hardening (Phase 11)
+- Feedback API kill switch via `engine.feedback_api_enabled`.
+- Rate limits: `engine.feedback_rate_limit_per_minute`.
+- Payload limits: `engine.feedback_max_items_per_request`, `engine.feedback_max_payload_kb`.
+- Retention jobs prune outcomes (`engine.feedback_retention_days`) and imports (`engine.feedback_import_retention_days`).
 3) **Chunk Creation (pending for workers)**
    - Unknown emails are written to chunk files on the configured disk.
    - Chunk keys: `chunks/{job_uuid}/{chunk_no}/input.txt`.

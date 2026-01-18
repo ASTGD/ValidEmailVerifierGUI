@@ -70,7 +70,7 @@ Route::middleware(['auth:sanctum', EnsureVerifierService::class, 'throttle:verif
         });
     });
 
-Route::middleware(['auth:sanctum', EnsureFeedbackIngestor::class, 'throttle:verifier-api'])
+Route::middleware(['auth:sanctum', EnsureFeedbackIngestor::class, 'throttle:feedback-api'])
     ->prefix('feedback')
     ->name('api.feedback.')
     ->group(function () {
