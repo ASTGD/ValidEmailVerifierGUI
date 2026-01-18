@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Enums\VerificationJobStatus;
+use App\Enums\VerificationMode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Portal\UploadVerificationJobRequest;
 use App\Jobs\PrepareVerificationJob;
@@ -56,10 +57,12 @@ class UploadController extends Controller
         }
 
         $file = $request->file('file');
+        $mode = data_get($request->validated(), 'verification_mode', VerificationMode::Standard->value);
 
         $job = new VerificationJob([
             'user_id' => $user->id,
             'status' => VerificationJobStatus::Pending,
+            'verification_mode' => $mode,
             'original_filename' => $file->getClientOriginalName(),
         ]);
 
@@ -72,6 +75,11 @@ class UploadController extends Controller
         $job->save();
         $job->addLog('created', 'Job created via customer portal upload.', [
             'original_filename' => $job->original_filename,
+        ], $user->id);
+        $job->addLog('verification_mode_set', 'Verification mode set at job creation.', [
+            'from' => null,
+            'to' => $mode,
+            'actor_id' => $user->id,
         ], $user->id);
 
         PrepareVerificationJob::dispatch($job->id);

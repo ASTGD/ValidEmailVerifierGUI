@@ -51,7 +51,7 @@ Safety controls:
 ## Verification Modes
 Workers must honor the `verification_mode` supplied by Laravel:
 - `standard` (default): Signal Groups 1–4.
-- `enhanced` (opt-in): mailbox-level signals (TBD), guarded and auditable.
+- `enhanced` (opt-in): gated and currently behaves like Standard until mailbox-level signals are implemented.
 
 Field:
 - `verification_mode` (string): `standard` or `enhanced`. Returned in claim-next and chunk details.
