@@ -21,7 +21,9 @@
     <!-- 2. MAIN UPLOAD CARD -->
     <div class="max-w-4xl mx-auto">
         <div class="bg-white p-4 rounded-[2.5rem] border border-[#E2E8F0] shadow-2xl shadow-blue-900/5">
-            <form wire:submit.prevent="save" enctype="multipart/form-data">
+            <form wire:submit.prevent="save" method="POST" action="{{ route('portal.upload.store') }}"
+                enctype="multipart/form-data">
+                @csrf
 
                 <!-- THE INTERACTIVE DROP ZONE -->
                 <div
@@ -48,7 +50,7 @@
 
                     <!-- THE ACTUAL INPUT (Styled to look like a pro button) -->
                     <div class="relative max-w-sm mx-auto">
-                        <input id="file" type="file" wire:model="file"
+                        <input id="file" name="file" type="file" wire:model="file"
                             class="block w-full text-sm text-[#64748B]
                             file:mr-4 file:py-3 file:px-6
                             file:rounded-xl file:border-0
@@ -70,7 +72,7 @@
                     </div>
 
                     <div class="flex items-center gap-4 w-full md:w-auto">
-                        <button type="submit" wire:loading.attr="disabled"
+                        <button type="submit" wire:loading.attr="disabled" wire:target="save,file"
                             class="w-full md:w-auto bg-[#1E7CCF] hover:bg-[#1866AD] text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
                             <span wire:loading.remove wire:target="save">{{ __('Start Verification') }}</span>
                             <span wire:loading wire:target="save" class="flex items-center gap-2">

@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Filament\Widgets\AdminDashboardHighlights;
 use App\Filament\Widgets\AdminQuickLinks;
 use App\Filament\Widgets\AdminStatsOverview;
+use App\Filament\Widgets\FinalizationHealth;
 use Filament\Support\Assets\Css;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -48,6 +49,7 @@ class AdminPanelProvider extends PanelProvider
             ->widgets([
                 AdminDashboardHighlights::class,
                 AdminStatsOverview::class,
+                FinalizationHealth::class,
                 AccountWidget::class,
                 AdminQuickLinks::class,
             ])

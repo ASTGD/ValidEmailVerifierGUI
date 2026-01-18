@@ -1,17 +1,40 @@
 <?php
 
+use App\Http\Controllers\Api\Verifier\VerifierHeartbeatController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkCompleteController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkClaimNextController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkDetailsController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkFailController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkInputUrlController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkLogController;
+use App\Http\Controllers\Api\Verifier\VerifierChunkOutputUrlsController;
+use App\Http\Controllers\Api\Verifier\VerifierJobClaimController;
 use App\Http\Controllers\Api\Verifier\VerifierJobCompleteController;
 use App\Http\Controllers\Api\Verifier\VerifierJobDownloadController;
 use App\Http\Controllers\Api\Verifier\VerifierJobStatusController;
 use App\Http\Controllers\Api\Verifier\VerifierJobsController;
+use App\Http\Controllers\Api\Verifier\VerifierStorageDownloadController;
+use App\Http\Controllers\Api\Verifier\VerifierStorageUploadController;
 use App\Http\Middleware\EnsureVerifierService;
 use Illuminate\Support\Facades\Route;
+
+Route::middleware('signed')
+    ->prefix('verifier/storage')
+    ->name('api.verifier.storage.')
+    ->group(function () {
+        Route::get('download', VerifierStorageDownloadController::class)->name('download');
+        Route::match(['put', 'post'], 'upload', VerifierStorageUploadController::class)->name('upload');
+    });
 
 Route::middleware(['auth:sanctum', EnsureVerifierService::class, 'throttle:verifier-api'])
     ->prefix('verifier')
     ->name('api.verifier.')
     ->group(function () {
+        Route::post('heartbeat', VerifierHeartbeatController::class)->name('heartbeat');
         Route::get('jobs', [VerifierJobsController::class, 'index'])->name('jobs.index');
+        Route::post('jobs/{job}/claim', VerifierJobClaimController::class)
+            ->whereUuid('job')
+            ->name('jobs.claim');
         Route::post('jobs/{job}/status', VerifierJobStatusController::class)
             ->whereUuid('job')
             ->name('jobs.status');
@@ -21,4 +44,26 @@ Route::middleware(['auth:sanctum', EnsureVerifierService::class, 'throttle:verif
         Route::get('jobs/{job}/download', VerifierJobDownloadController::class)
             ->whereUuid('job')
             ->name('jobs.download');
+
+        Route::prefix('chunks')->name('chunks.')->group(function () {
+            Route::post('claim-next', VerifierChunkClaimNextController::class)->name('claim-next');
+            Route::get('{chunk}', VerifierChunkDetailsController::class)
+                ->whereUuid('chunk')
+                ->name('show');
+            Route::post('{chunk}/log', VerifierChunkLogController::class)
+                ->whereUuid('chunk')
+                ->name('log');
+            Route::post('{chunk}/fail', VerifierChunkFailController::class)
+                ->whereUuid('chunk')
+                ->name('fail');
+            Route::post('{chunk}/complete', VerifierChunkCompleteController::class)
+                ->whereUuid('chunk')
+                ->name('complete');
+            Route::get('{chunk}/input-url', VerifierChunkInputUrlController::class)
+                ->whereUuid('chunk')
+                ->name('input-url');
+            Route::post('{chunk}/output-urls', VerifierChunkOutputUrlsController::class)
+                ->whereUuid('chunk')
+                ->name('output-urls');
+        });
     });

@@ -29,27 +29,45 @@ class VerificationJob extends Model
         'input_key',
         'output_disk',
         'output_key',
+        'valid_key',
+        'invalid_key',
+        'risky_key',
+        'cached_valid_key',
+        'cached_invalid_key',
+        'cached_risky_key',
+        'engine_server_id',
+        'claimed_at',
+        'claim_expires_at',
+        'claim_token',
+        'engine_attempts',
         'error_message',
         'failure_source',
         'failure_code',
         'started_at',
+        'prepared_at',
         'finished_at',
         'total_emails',
         'valid_count',
         'invalid_count',
         'risky_count',
         'unknown_count',
+        'cached_count',
     ];
 
     protected $casts = [
         'status' => VerificationJobStatus::class,
+        'claimed_at' => 'datetime',
+        'claim_expires_at' => 'datetime',
         'started_at' => 'datetime',
+        'prepared_at' => 'datetime',
         'finished_at' => 'datetime',
+        'engine_attempts' => 'integer',
         'total_emails' => 'integer',
         'valid_count' => 'integer',
         'invalid_count' => 'integer',
         'risky_count' => 'integer',
         'unknown_count' => 'integer',
+        'cached_count' => 'integer',
     ];
 
     public function scopeExcludeAdminFailures($query)
@@ -68,6 +86,16 @@ class VerificationJob extends Model
     public function logs(): HasMany
     {
         return $this->hasMany(VerificationJobLog::class, 'verification_job_id');
+    }
+
+    public function chunks(): HasMany
+    {
+        return $this->hasMany(VerificationJobChunk::class, 'verification_job_id');
+    }
+
+    public function engineServer(): BelongsTo
+    {
+        return $this->belongsTo(EngineServer::class);
     }
 
     public function order(): HasOne

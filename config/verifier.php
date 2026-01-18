@@ -13,4 +13,13 @@ return [
     'checkout_intent_ttl_minutes' => (int) env('VERIFIER_CHECKOUT_TTL_MINUTES', 60),
     'allow_fake_payments' => (bool) env('VERIFIER_ALLOW_FAKE_PAYMENTS', false),
     'engine_heartbeat_minutes' => (int) env('VERIFIER_ENGINE_HEARTBEAT_MINUTES', 5),
+    'engine_claim_lease_seconds' => (int) env('VERIFIER_ENGINE_CLAIM_LEASE_SECONDS', 600),
+    'chunk_size_default' => (int) env('VERIFIER_CHUNK_SIZE', 5000),
+    'max_emails_per_upload' => (int) env('VERIFIER_MAX_EMAILS_PER_UPLOAD', 100000),
+    'cache_batch_size' => (int) env('VERIFIER_CACHE_BATCH_SIZE', 100),
+    'cache_freshness_days' => (int) env('VERIFIER_CACHE_FRESHNESS_DAYS', 30),
+    'signed_url_expiry_seconds' => (int) env('VERIFIER_SIGNED_URL_EXPIRY_SECONDS', 300),
+    'dedupe_in_memory_limit' => (int) env('VERIFIER_DEDUPE_IN_MEMORY_LIMIT', 100000),
+    'cache_store' => env('VERIFIER_CACHE_STORE', \App\Services\EmailVerificationCache\NullCacheStore::class),
+    'xlsx_row_batch_size' => (int) env('VERIFIER_XLSX_ROW_BATCH_SIZE', 1000),
 ];
