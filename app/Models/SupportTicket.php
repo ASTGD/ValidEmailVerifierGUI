@@ -66,4 +66,12 @@ class SupportTicket extends Model
             default     => 'bg-slate-50 text-slate-600 border border-slate-200',
         };
     }
+    /**
+     * Get all orders belonging to the user of this ticket.
+     */
+    public function userOrders(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        // This looks at the user of the ticket and finds their verification orders
+        return $this->hasMany(VerificationOrder::class, 'user_id', 'user_id');
+    }
 }

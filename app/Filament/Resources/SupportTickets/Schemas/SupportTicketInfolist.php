@@ -25,8 +25,8 @@ class SupportTicketInfolist
                             ->copyable(),
                         TextEntry::make('status')
                             ->badge()
-                            ->formatStateUsing(fn ($state) => $state->label())
-                            ->color(fn ($state) => match ($state->value) {
+                            ->formatStateUsing(fn($state) => $state->label())
+                            ->color(fn($state) => match ($state->value) {
                                 'open' => 'info',
                                 'pending' => 'warning',
                                 'resolved' => 'success',
@@ -35,8 +35,8 @@ class SupportTicketInfolist
                             }),
                         TextEntry::make('priority')
                             ->badge()
-                            ->formatStateUsing(fn ($state) => $state->label())
-                            ->color(fn ($state) => match ($state->value) {
+                            ->formatStateUsing(fn($state) => $state->label())
+                            ->color(fn($state) => match ($state->value) {
                                 'Urgent' => 'danger',
                                 'high' => 'warning',
                                 'normal' => 'info',
@@ -48,19 +48,27 @@ class SupportTicketInfolist
                     ])->columns(4),
 
                 Section::make('Customer Context')
+                    ->collapsed() // Keeps page clean
                     ->schema([
-                        TextEntry::make('user.name')->label('Account Name')->icon('heroicon-m-user'),
+                        TextEntry::make('user.name')
+                            ->label('Account Name')
+                            ->icon('heroicon-m-user')
+                            // This links to the Customer List and filters by their email
+                            ->url(fn($record) => "/admin/customers?tableSearch=" . urlencode($record->user->email))
+                            ->openUrlInNewTab()
+                            ->color('primary')
+                            ->weight('bold'),
                         TextEntry::make('user.email')->label('Email Address')->icon('heroicon-m-envelope')->copyable(),
                         TextEntry::make('created_at')->label('Date Opened')->dateTime('M d, Y (H:i)'),
                         TextEntry::make('updated_at')->label('Last Activity')->since(),
                     ])->columns(4),
 
-                // Section::make('Initial Customer Request')
-                //     ->collapsed() // Keeps page clean
-                //     ->schema([
-                //         TextEntry::make('subject')->weight('bold')->size('lg'),
-                //         TextEntry::make('message')->label('Original Content')->prose()->markdown(),
-                //     ]),
+                Section::make('Initial Customer Request')
+                    ->collapsed() // Keeps page clean
+                    ->schema([
+                        TextEntry::make('subject')->weight('bold')->size('lg'),
+                        TextEntry::make('message')->label('Original Content')->prose()->markdown(),
+                    ]),
             ]);
     }
 }

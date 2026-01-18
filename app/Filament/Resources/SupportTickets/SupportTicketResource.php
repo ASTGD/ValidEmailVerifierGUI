@@ -9,6 +9,7 @@ use App\Filament\Resources\SupportTickets\Pages\ViewSupportTicket;
 use App\Filament\Resources\SupportTickets\Schemas\SupportTicketForm;
 use App\Filament\Resources\SupportTickets\Schemas\SupportTicketInfolist;
 use App\Filament\Resources\SupportTickets\Tables\SupportTicketsTable;
+use Filament\Resources\RelationManagers\RelationGroup;
 use App\Models\SupportTicket;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -22,14 +23,11 @@ use App\Enums\SupportTicketStatus;
 class SupportTicketResource extends Resource
 {
     protected static ?string $model = SupportTicket::class;
-
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftEllipsis;
-
     protected static ?string $navigationLabel = 'Support Tickets';
-
     protected static string|UnitEnum|null $navigationGroup = 'Support';
-
     protected static ?int $navigationSort = 1;
+    protected static ?string $relationsAppearance = 'sections';
 
     public static function form(Schema $schema): Schema
     {
@@ -48,7 +46,11 @@ class SupportTicketResource extends Resource
     public static function getRelations(): array
     {
         return [
-            \App\Filament\Resources\SupportTickets\RelationManagers\MessagesRelationManager::class,
+            // We use a RelationGroup to align the tabs to the left
+            RelationGroup::make('Ticket Data', [
+                \App\Filament\Resources\SupportTickets\RelationManagers\UserOrdersRelationManager::class,
+                \App\Filament\Resources\SupportTickets\RelationManagers\MessagesRelationManager::class,
+            ]),
         ];
     }
 
