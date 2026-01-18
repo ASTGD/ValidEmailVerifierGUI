@@ -247,8 +247,8 @@ func uploadSigned(ctx context.Context, url string, data []byte) error {
     return nil
 }
 
-func buildOutputs(ctx context.Context, reader io.Reader, verifier verifier.Verifier) (*chunkOutputs, error) {
-    if verifier == nil {
+func buildOutputs(ctx context.Context, reader io.Reader, engineVerifier verifier.Verifier) (*chunkOutputs, error) {
+    if engineVerifier == nil {
         return nil, fmt.Errorf("verifier not configured")
     }
 
@@ -281,7 +281,7 @@ func buildOutputs(ctx context.Context, reader io.Reader, verifier verifier.Verif
         }
 
         output.EmailCount++
-        result := verifier.Verify(ctx, line)
+        result := engineVerifier.Verify(ctx, line)
 
         switch result.Category {
         case verifier.CategoryInvalid:
