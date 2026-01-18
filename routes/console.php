@@ -3,6 +3,8 @@
 use App\Enums\VerificationJobStatus;
 use App\Models\User;
 use App\Models\VerificationJob;
+use App\Models\EmailVerificationOutcome;
+use App\Models\EmailVerificationOutcomeImport;
 use App\Services\JobStorage;
 use App\Support\RetentionSettings;
 use App\Support\Roles;
@@ -168,3 +170,82 @@ Artisan::command('app:purge-verification-jobs
 
     return 0;
 })->purpose('Purge completed/failed verification jobs and their stored files');
+
+Artisan::command('prune:email-outcomes
+    {--days= : Prune outcomes observed before this many days ago}
+    {--dry-run : Show what would be deleted without removing anything}
+', function () {
+    $daysOption = $this->option('days');
+    $days = is_null($daysOption) ? (int) config('engine.feedback_retention_days', 180) : (int) $daysOption;
+    if ($days < 0) {
+        $this->error('Retention days must be zero or greater.');
+        return 1;
+    }
+
+    $cutoff = now()->subDays($days);
+    $query = EmailVerificationOutcome::query()->where('observed_at', '<=', $cutoff);
+    $count = $query->count();
+
+    if ($count === 0) {
+        $this->info('No email outcomes to prune.');
+        return 0;
+    }
+
+    $dryRun = (bool) $this->option('dry-run');
+    $deleted = $dryRun ? 0 : $query->delete();
+
+    $message = $dryRun
+        ? sprintf('Dry run complete. %d outcome(s) would be pruned.', $count)
+        : sprintf('Prune complete. %d outcome(s) deleted.', $deleted);
+
+    $this->info($message);
+
+    return 0;
+})->purpose('Prune email verification outcomes older than retention window');
+
+Artisan::command('prune:feedback-imports
+    {--days= : Prune imports created before this many days ago}
+    {--dry-run : Show what would be deleted without removing anything}
+', function () {
+    $daysOption = $this->option('days');
+    $days = is_null($daysOption) ? (int) config('engine.feedback_import_retention_days', 90) : (int) $daysOption;
+    if ($days < 0) {
+        $this->error('Retention days must be zero or greater.');
+        return 1;
+    }
+
+    $cutoff = now()->subDays($days);
+    $imports = EmailVerificationOutcomeImport::query()
+        ->where('created_at', '<=', $cutoff)
+        ->get();
+
+    if ($imports->isEmpty()) {
+        $this->info('No feedback imports to prune.');
+        return 0;
+    }
+
+    $dryRun = (bool) $this->option('dry-run');
+    $deleted = 0;
+
+    foreach ($imports as $import) {
+        if (! $dryRun && $import->file_disk && $import->file_key) {
+            if (Storage::disk($import->file_disk)->exists($import->file_key)) {
+                Storage::disk($import->file_disk)->delete($import->file_key);
+            }
+        }
+
+        if (! $dryRun) {
+            $import->delete();
+        }
+
+        $deleted++;
+    }
+
+    $message = $dryRun
+        ? sprintf('Dry run complete. %d import(s) would be pruned.', $deleted)
+        : sprintf('Prune complete. %d import(s) deleted.', $deleted);
+
+    $this->info($message);
+
+    return 0;
+})->purpose('Prune feedback imports and stored files older than retention window');

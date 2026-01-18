@@ -17,6 +17,8 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withSchedule(function (Schedule $schedule): void {
         $schedule->command('app:purge-verification-jobs')->daily();
+        $schedule->command('prune:email-outcomes')->daily();
+        $schedule->command('prune:feedback-imports')->daily();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
