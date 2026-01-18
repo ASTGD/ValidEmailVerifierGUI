@@ -30,6 +30,9 @@ Workers must honor the `verification_mode` supplied by Laravel:
 - `standard` (default): Signal Groups 1–4.
 - `enhanced` (opt-in): mailbox-level signals (TBD), guarded and auditable.
 
+Field:
+- `verification_mode` (string): `standard` or `enhanced`. Returned in claim-next and chunk details.
+
 Guardrails for `enhanced` mode (design-level):
 - Opt-in only (plan-gated) with explicit audit logs.
 - Strict rate limits and safety thresholds.
@@ -54,7 +57,13 @@ Reason codes (output CSV `email,reason`):
 | risky | `smtp_connect_timeout` |
 | risky | `smtp_timeout` |
 | risky | `smtp_tempfail` |
+| risky | `disposable_domain` |
+| risky | `role_account` |
+| risky | `domain_typo_suspected:suggest=<domain>` |
 | valid | `smtp_connect_ok` |
+
+Notes:
+- `domain_typo_suspected` includes the suggested domain in the reason string.
 
 ## Work Distribution / Queue Strategy
 “Workers pull work by calling claim-next; Laravel remains the source of truth and atomically leases chunks to workers. We may introduce a broker queue later, but the worker contract remains unchanged.”
