@@ -20,7 +20,7 @@ Enhanced mode is a separate opt-in pathway exposed in the Admin + Customer porta
 - **SG1 Domain health:** DNS/MX availability and domain-level health signals.
 - **SG2 SMTP connectivity/policy:** EHLO + QUIT connectivity checks (no mailbox probing).
 - **SG3 Enrichment:** role/disposable/typo/IDN heuristics and enrichment.
-- **SG4 Feedback loop + cache:** NoSQL cache freshness and historical feedback signals.
+- **SG4 Feedback loop + cache:** outcomes ingestion + freshness-aware cache lookups (MySQL-first, NoSQL-ready).
 
 ## Portal Placement (Design)
 - **Customer portal:** mode selector on upload/checkout (plan-gated).
@@ -45,9 +45,10 @@ Laravel prepares work for the deep verification engine by parsing, deduping, and
    - TXT: one email per line, plus tokens parsed from each line.
    - CSV: first column preferred, plus any email-like tokens in the row.
    - XLS/XLSX: read in row batches using PhpSpreadsheet (read-only, chunked).
-2) **Cache Lookup (stubbed)**
+2) **Cache Lookup (SG4 feedback loop)**
    - Batch lookup via `EmailVerificationCacheStore::lookupMany`.
-   - Default implementation is a null cache (no hits).
+   - Database-backed cache store uses hashed emails for lookup.
+   - Freshness window enforced by `engine.cache_freshness_days`.
 3) **Chunk Creation (pending for workers)**
    - Unknown emails are written to chunk files on the configured disk.
    - Chunk keys: `chunks/{job_uuid}/{chunk_no}/input.txt`.

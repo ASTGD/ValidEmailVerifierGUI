@@ -25,6 +25,23 @@ This contract defines the language-agnostic API that deep verification workers (
 - Laravel performs only parsing, normalization, dedupe, cache lookups, chunking, and final merge.
 - **MX/DNS/SMTP checks are never performed by Laravel** and must be done by the external engine workers.
 
+## SG4 Feedback Loop (Outcomes Cache)
+Laravel can short-circuit verification using cached outcomes to reduce SMTP work.
+
+Stored outcome fields:
+- `email_hash` (sha256 hex of normalized email)
+- `outcome` (`valid`, `invalid`, `risky`)
+- `reason_code` (optional)
+- `observed_at`
+- `source` (optional)
+
+Freshness behavior:
+- Outcomes are only treated as cache hits when `observed_at` is within `engine.cache_freshness_days`.
+
+Ingestion:
+- Admin CSV import (Filament “Feedback Imports”).
+- Optional API: `POST /api/feedback/outcomes` (auth:sanctum + admin/service token).
+
 ## Verification Modes
 Workers must honor the `verification_mode` supplied by Laravel:
 - `standard` (default): Signal Groups 1–4.
