@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Feedback;
 
 use App\Http\Requests\Feedback\StoreFeedbackOutcomesRequest;
+use App\Models\EmailVerificationOutcomeIngestion;
 use App\Services\EmailVerificationOutcomes\OutcomeIngestor;
 use App\Support\AdminAuditLogger;
 use Illuminate\Http\JsonResponse;
@@ -33,8 +34,21 @@ class FeedbackOutcomesController
             $request->user()?->id
         );
 
+        EmailVerificationOutcomeIngestion::create([
+            'type' => EmailVerificationOutcomeIngestion::TYPE_API,
+            'source' => $defaultSource,
+            'item_count' => $itemCount,
+            'imported_count' => $result['imported'],
+            'skipped_count' => $result['skipped'],
+            'error_count' => $result['skipped'],
+            'user_id' => $request->user()?->id,
+            'token_name' => $request->user()?->currentAccessToken()?->name,
+            'ip_address' => $request->ip(),
+        ]);
+
         AdminAuditLogger::log('feedback_outcomes_ingested', null, [
             'source' => $defaultSource,
+            'item_count' => $itemCount,
             'imported_count' => $result['imported'],
             'skipped_count' => $result['skipped'],
         ]);

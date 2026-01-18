@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\EmailVerificationOutcomeImport;
+use App\Models\EmailVerificationOutcomeIngestion;
 use App\Services\EmailVerificationOutcomes\OutcomeIngestor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -61,6 +62,7 @@ class ImportEmailVerificationOutcomesFromCsv implements ShouldQueue
             $imported = 0;
             $skipped = 0;
             $errors = [];
+            $itemCount = 0;
 
             while (($row = fgetcsv($stream)) !== false) {
                 $item = $this->rowToItem($row, $columns);
@@ -69,6 +71,7 @@ class ImportEmailVerificationOutcomesFromCsv implements ShouldQueue
                     continue;
                 }
 
+                $itemCount++;
                 $items[] = $item;
 
                 if (count($items) >= self::CHUNK_SIZE) {
@@ -96,11 +99,34 @@ class ImportEmailVerificationOutcomesFromCsv implements ShouldQueue
                 'error_sample' => $errors ?: null,
                 'finished_at' => now(),
             ]);
+
+            EmailVerificationOutcomeIngestion::create([
+                'type' => EmailVerificationOutcomeIngestion::TYPE_IMPORT,
+                'source' => $import->source,
+                'item_count' => $itemCount,
+                'imported_count' => $imported,
+                'skipped_count' => $skipped,
+                'error_count' => $skipped,
+                'user_id' => $import->user_id,
+                'import_id' => $import->id,
+            ]);
         } catch (Throwable $exception) {
             $import->update([
                 'status' => EmailVerificationOutcomeImport::STATUS_FAILED,
                 'error_message' => $exception->getMessage(),
                 'finished_at' => now(),
+            ]);
+
+            EmailVerificationOutcomeIngestion::create([
+                'type' => EmailVerificationOutcomeIngestion::TYPE_IMPORT,
+                'source' => $import->source,
+                'item_count' => 0,
+                'imported_count' => 0,
+                'skipped_count' => 0,
+                'error_count' => 1,
+                'user_id' => $import->user_id,
+                'import_id' => $import->id,
+                'error_message' => $exception->getMessage(),
             ]);
         }
     }
