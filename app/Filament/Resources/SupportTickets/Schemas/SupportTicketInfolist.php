@@ -25,8 +25,8 @@ class SupportTicketInfolist
                             ->copyable(),
                         TextEntry::make('status')
                             ->badge()
-                            ->formatStateUsing(fn($state) => $state->label())
-                            ->color(fn($state) => match ($state->value) {
+                            ->formatStateUsing(fn ($state) => $state->label())
+                            ->color(fn ($state) => match ($state->value) {
                                 'open' => 'info',
                                 'pending' => 'warning',
                                 'resolved' => 'success',
@@ -35,8 +35,8 @@ class SupportTicketInfolist
                             }),
                         TextEntry::make('priority')
                             ->badge()
-                            ->formatStateUsing(fn($state) => $state->label())
-                            ->color(fn($state) => match ($state->value) {
+                            ->formatStateUsing(fn ($state) => $state->label())
+                            ->color(fn ($state) => match ($state->value) {
                                 'Urgent' => 'danger',
                                 'high' => 'warning',
                                 'normal' => 'info',
@@ -53,8 +53,9 @@ class SupportTicketInfolist
                         TextEntry::make('user.name')
                             ->label('Account Name')
                             ->icon('heroicon-m-user')
-                            // This links to the Customer List and filters by their email
-                            ->url(fn($record) => "/admin/customers?tableSearch=" . urlencode($record->user->email))
+                            ->url(fn ($record) => route('filament.admin.resources.customers.index', [
+                                'tableSearch' => $record->user->email,
+                            ]))
                             ->openUrlInNewTab()
                             ->color('primary')
                             ->weight('bold'),

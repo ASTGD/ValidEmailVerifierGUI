@@ -3,14 +3,18 @@
 namespace App\Filament\Resources\VerificationJobs\Tables;
 
 use App\Enums\VerificationJobStatus;
+use App\Models\EngineServer;
 use App\Models\VerificationJob;
 use App\Support\AdminAuditLogger;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class VerificationJobsTable
 {
@@ -53,6 +57,28 @@ class VerificationJobsTable
                     ->label('Created')
                     ->dateTime()
                     ->sortable(),
+                TextColumn::make('engine_server')
+                    ->label('Engine Server')
+                    ->getStateUsing(function (VerificationJob $record): string {
+                        if (! $record->engineServer) {
+                            return '-';
+                        }
+
+                        return sprintf('%s (%s)', $record->engineServer->name, $record->engineServer->ip_address);
+                    })
+                    ->toggleable(),
+                TextColumn::make('claimed_at')
+                    ->label('Claimed')
+                    ->since()
+                    ->placeholder('-')
+                    ->sortable()
+                    ->toggleable(),
+                TextColumn::make('claim_expires_at')
+                    ->label('Lease expires')
+                    ->since()
+                    ->placeholder('-')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('input_key')
                     ->label('Input Key')
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -63,6 +89,45 @@ class VerificationJobsTable
             ->filters([
                 SelectFilter::make('status')
                     ->options(self::statusOptions()),
+                TernaryFilter::make('claimed')
+                    ->label('Claimed')
+                    ->trueLabel('Claimed')
+                    ->falseLabel('Unclaimed')
+                    ->queries(
+                        true: fn ($query) => $query->whereNotNull('claimed_at'),
+                        false: fn ($query) => $query->whereNull('claimed_at')
+                    ),
+                SelectFilter::make('engine_server_id')
+                    ->label('Engine server')
+                    ->relationship('engineServer', 'name')
+                    ->getOptionLabelFromRecordUsing(function (EngineServer $record): string {
+                        return sprintf('%s (%s)', $record->name, $record->ip_address);
+                    })
+                    ->searchable(),
+                Filter::make('failed_chunks')
+                    ->label('Failed chunks')
+                    ->query(fn (Builder $query) => $query
+                        ->whereHas('chunks', fn ($chunkQuery) => $chunkQuery->where('status', 'failed'))),
+                Filter::make('missing_outputs')
+                    ->label('Missing outputs')
+                    ->query(fn (Builder $query) => $query
+                        ->where('status', VerificationJobStatus::Completed)
+                        ->where(function ($inner) {
+                            $inner->whereNull('valid_key')
+                                ->orWhereNull('invalid_key')
+                                ->orWhereNull('risky_key');
+                        })),
+                Filter::make('ready_for_finalization')
+                    ->label('Ready for finalization')
+                    ->query(fn (Builder $query) => $query
+                        ->where('status', VerificationJobStatus::Processing)
+                        ->whereHas('chunks')
+                        ->whereDoesntHave('chunks', fn ($chunkQuery) => $chunkQuery->where('status', '!=', 'completed'))
+                        ->where(function ($inner) {
+                            $inner->whereNull('valid_key')
+                                ->orWhereNull('invalid_key')
+                                ->orWhereNull('risky_key');
+                        })),
             ])
             ->emptyStateHeading('No verification jobs yet')
             ->emptyStateDescription('Jobs will appear here once customers upload lists.')

@@ -1,3 +1,25 @@
+<?php
+
+use App\Livewire\Actions\Logout;
+use Illuminate\Support\Facades\Auth;
+
+use function Livewire\Volt\rules;
+use function Livewire\Volt\state;
+
+state(['password' => '']);
+
+rules(['password' => ['required', 'string', 'current_password']]);
+
+$deleteUser = function (Logout $logout) {
+    $this->validate();
+
+    tap(Auth::user(), $logout(...))->delete();
+
+    $this->redirect('/', navigate: true);
+};
+
+?>
+
 <section class="bg-white p-8 md:p-10 rounded-[2.5rem] border-2 border-dashed border-[#FEE2E2]">
     <header class="mb-8">
         <h2 class="text-2xl font-black text-[#DC2626] tracking-tight">

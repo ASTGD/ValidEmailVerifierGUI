@@ -7,6 +7,7 @@ use App\Enums\VerificationJobStatus;
 use App\Enums\VerificationOrderStatus;
 use App\Filament\Resources\Customers\CustomerResource;
 use App\Filament\Resources\VerificationOrders\VerificationOrderResource;
+use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Models\VerificationOrder;
 use App\Services\JobStorage;
@@ -350,6 +351,8 @@ class VerificationOrdersTable
                         $job->addLog('created', 'Job activated by admin.', [
                             'order_id' => $record->id,
                         ], auth()->id());
+
+                        PrepareVerificationJob::dispatch($job->id);
 
                         $record->update([
                             'verification_job_id' => $job->id,

@@ -37,7 +37,7 @@ class VerificationJobsTest extends TestCase
 
         $this->assertNotNull($job);
         $this->assertSame($user->id, $job->user_id);
-        $this->assertSame(VerificationJobStatus::Pending, $job->status);
+        $this->assertSame(VerificationJobStatus::Processing, $job->status);
         Storage::disk('local')->assertExists($job->input_key);
     }
 

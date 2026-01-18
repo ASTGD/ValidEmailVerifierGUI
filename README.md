@@ -94,8 +94,11 @@ Core features:
 
 Admin features:
 - Manage users
-- Monitor jobs by status
-- Review failures and rerun operations (future)
+- Monitor jobs by status and engine assignments
+- Track engine servers (heartbeat/health)
+- View job chunks, leases, and retries
+- Finalization Health widget (failed chunks, missing outputs, stuck leases)
+- Ops controls: requeue failed/stuck chunks, manual finalize
 - Support downloads
 
 ### Billing (Stripe + Cashier)
@@ -171,3 +174,4 @@ Purge completed/failed jobs older than the retention window:
 - Port is fixed to 8082 to avoid conflicts with other projects.
 - Always run PHP/Artisan/Composer/NPM through Sail.
 - Follow the rules in AGENTS.md for contribution and Codex behavior.
+- Deep verification architecture plan: `docs/DEEP_VERIFICATION_ENGINE_PLAN.md`

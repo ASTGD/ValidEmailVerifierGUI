@@ -3,8 +3,10 @@
 namespace App\Livewire\Portal;
 
 use App\Enums\VerificationJobStatus;
+use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
@@ -21,10 +23,17 @@ class Upload extends Component
 
     public $file;
 
+    protected function maxUploadKilobytes(): int
+    {
+        $maxMb = (int) config('verifier.checkout_upload_max_mb', 10);
+
+        return max(1, $maxMb * 1024);
+    }
+
     protected function rules(): array
     {
         return [
-            'file' => ['required', 'file', 'mimes:csv,txt', 'max:10240'],
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:'.$this->maxUploadKilobytes()],
         ];
     }
 
@@ -33,8 +42,6 @@ class Upload extends Component
         $this->validate();
 
         $user = Auth::user();
-
-        $this->authorize('create', VerificationJob::class);
 
         $rateKey = 'portal-upload|'.$user->id;
         $maxAttempts = (int) config('verifier.portal_upload_max_attempts', 10);
@@ -61,6 +68,14 @@ class Upload extends Component
             return;
         }
 
+        try {
+            $this->authorize('create', VerificationJob::class);
+        } catch (AuthorizationException) {
+            $this->addError('file', __('You are not allowed to upload lists.'));
+
+            return;
+        }
+
         $job = new VerificationJob([
             'user_id' => $user->id,
             'status' => VerificationJobStatus::Pending,
@@ -78,9 +93,11 @@ class Upload extends Component
             'original_filename' => $job->original_filename,
         ], $user->id);
 
+        PrepareVerificationJob::dispatch($job->id);
+
         $this->reset('file');
 
-        return redirect()->route('portal.jobs.show', $job);
+        return $this->redirectRoute('portal.jobs.show', ['job' => $job->id], navigate: true);
     }
 
     public function render()

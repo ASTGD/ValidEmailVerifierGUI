@@ -1,3 +1,44 @@
+<?php
+
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
+
+use function Livewire\Volt\rules;
+use function Livewire\Volt\state;
+
+state([
+    'current_password' => '',
+    'password' => '',
+    'password_confirmation' => '',
+]);
+
+rules([
+    'current_password' => ['required', 'string', 'current_password'],
+    'password' => ['required', 'string', Password::defaults(), 'confirmed'],
+]);
+
+$updatePassword = function () {
+    try {
+        $validated = $this->validate();
+    } catch (ValidationException $e) {
+        $this->reset('current_password', 'password', 'password_confirmation');
+
+        throw $e;
+    }
+
+    Auth::user()->update([
+        'password' => Hash::make($validated['password']),
+    ]);
+
+    $this->reset('current_password', 'password', 'password_confirmation');
+
+    $this->dispatch('password-updated');
+};
+
+?>
+
 <section class="bg-white p-8 md:p-10 rounded-[2.5rem] border border-[#E2E8F0] shadow-sm">
     <header class="mb-8">
         <h2 class="text-2xl font-black text-[#0F172A] tracking-tight">

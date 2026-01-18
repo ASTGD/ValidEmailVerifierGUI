@@ -3,6 +3,7 @@
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\MarketingController;
+use App\Http\Controllers\Portal\UploadController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\Portal\VerificationJobDownloadController;
 use App\Livewire\Portal\Dashboard;
@@ -48,6 +49,7 @@ Route::middleware(['auth', 'verified'])
     ->group(function () {
         Route::get('dashboard', Dashboard::class)->name('dashboard');
         Route::get('upload', Upload::class)->name('upload');
+        Route::post('upload', UploadController::class)->name('upload.store');
         Route::get('jobs', JobsIndex::class)->name('jobs.index');
         Route::get('jobs/{job}', JobShow::class)
             ->whereUuid('job')
