@@ -11,10 +11,10 @@ Laravel is the control plane only:
 
 ## Verification Modes
 Two verification modes are supported at the product level:
-- **Standard (default):** uses Signal Groups 1–4.
+- **Standard (default):** uses Signal Groups 1–4 and is the current shipping mode.
 - **Enhanced (opt-in):** mailbox-level signals (TBD), guarded and auditable. Pricing is TBD.
 
-Enhanced mode is a separate opt-in pathway exposed in the Admin + Customer portals. It must be explicitly enabled and is not part of the default verification flow.
+Enhanced mode is a separate opt-in pathway exposed in the Admin + Customer portals. It must be explicitly enabled, is not part of the default verification flow, and is not implemented in the worker yet (requests run in standard mode).
 
 ## Signal Groups 1–4 (Standard)
 - **SG1 Domain health:** DNS/MX availability and domain-level health signals.

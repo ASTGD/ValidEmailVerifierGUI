@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Contracts\EngineStorageUrlSigner;
 use App\Enums\VerificationJobStatus;
+use App\Enums\VerificationMode;
 use App\Models\User;
 use App\Models\VerificationJob;
 use App\Models\VerificationJobChunk;
@@ -235,6 +236,7 @@ class VerifierChunkApiTest extends TestCase
             'chunk_id' => (string) $chunk->id,
             'job_id' => (string) $job->id,
             'chunk_no' => 1,
+            'verification_mode' => VerificationMode::Standard->value,
         ]);
 
         $chunk->refresh();

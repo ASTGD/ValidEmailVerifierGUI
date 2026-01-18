@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\VerificationJobStatus;
+use App\Enums\VerificationMode;
 use App\Livewire\Portal\Upload;
 use App\Models\User;
 use App\Models\VerificationJob;
@@ -38,7 +39,22 @@ class VerificationJobsTest extends TestCase
         $this->assertNotNull($job);
         $this->assertSame($user->id, $job->user_id);
         $this->assertSame(VerificationJobStatus::Processing, $job->status);
+        $this->assertSame(VerificationMode::Standard, $job->verification_mode);
         Storage::disk('local')->assertExists($job->input_key);
+    }
+
+    public function test_verification_mode_defaults_to_standard(): void
+    {
+        $user = User::factory()->create();
+
+        $job = VerificationJob::create([
+            'user_id' => $user->id,
+            'status' => VerificationJobStatus::Pending,
+            'original_filename' => 'emails.csv',
+            'input_key' => 'uploads/'.$user->id.'/job/input.csv',
+        ]);
+
+        $this->assertSame(VerificationMode::Standard, $job->verification_mode);
     }
 
     public function test_customer_can_download_completed_job(): void

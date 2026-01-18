@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Verifier;
 
+use App\Enums\VerificationMode;
 use App\Models\VerificationJobChunk;
 use Illuminate\Http\JsonResponse;
 
@@ -16,6 +17,7 @@ class VerifierChunkDetailsController
                 'chunk_no' => $chunk->chunk_no,
                 'status' => $chunk->status,
                 'attempts' => $chunk->attempts,
+                'verification_mode' => $chunk->job?->verification_mode?->value ?? VerificationMode::Standard->value,
                 'input' => [
                     'disk' => $chunk->input_disk,
                     'key' => $chunk->input_key,

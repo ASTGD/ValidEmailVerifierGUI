@@ -33,11 +33,12 @@ type ClaimNextRequest struct {
 
 type ClaimNextResponse struct {
 	Data struct {
-		ChunkID        string `json:"chunk_id"`
-		JobID          string `json:"job_id"`
-		ChunkNo        int    `json:"chunk_no"`
-		LeaseExpiresAt string `json:"lease_expires_at"`
-		Input          struct {
+		ChunkID          string `json:"chunk_id"`
+		JobID            string `json:"job_id"`
+		ChunkNo          int    `json:"chunk_no"`
+		VerificationMode string `json:"verification_mode"`
+		LeaseExpiresAt   string `json:"lease_expires_at"`
+		Input            struct {
 			Disk string `json:"disk"`
 			Key  string `json:"key"`
 		} `json:"input"`
@@ -46,11 +47,12 @@ type ClaimNextResponse struct {
 
 type ChunkDetailsResponse struct {
 	Data struct {
-		ChunkID string `json:"chunk_id"`
-		JobID   string `json:"job_id"`
-		ChunkNo int    `json:"chunk_no"`
-		Status  string `json:"status"`
-		Input   struct {
+		ChunkID          string `json:"chunk_id"`
+		JobID            string `json:"job_id"`
+		ChunkNo          int    `json:"chunk_no"`
+		Status           string `json:"status"`
+		VerificationMode string `json:"verification_mode"`
+		Input            struct {
 			Disk string `json:"disk"`
 			Key  string `json:"key"`
 		} `json:"input"`

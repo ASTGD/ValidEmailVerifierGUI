@@ -28,4 +28,7 @@ type Config struct {
 	HeloName                string
 	PerDomainConcurrency    int
 	SMTPRateLimitPerMinute  int
+	DisposableDomains       map[string]struct{}
+	RoleAccounts            map[string]struct{}
+	DomainTypos             map[string]string
 }

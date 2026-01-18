@@ -122,6 +122,18 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 		},
 	})
 
+	mode := normalizeVerificationMode(claim.Data.VerificationMode)
+	if mode == "enhanced" {
+		_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
+			"level":   "warning",
+			"event":   "enhanced_mode_requested_but_not_enabled",
+			"message": "Enhanced mode requested but not enabled; running standard pipeline.",
+			"context": map[string]interface{}{
+				"verification_mode": mode,
+			},
+		})
+	}
+
 	details, err := w.client.ChunkDetails(ctx, chunkID)
 	if err != nil {
 		return w.failChunk(ctx, chunkID, "failed to load chunk details", err, true)
@@ -345,4 +357,13 @@ func firstError(errors ...error) error {
 	}
 
 	return nil
+}
+
+func normalizeVerificationMode(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "enhanced" {
+		return "enhanced"
+	}
+
+	return "standard"
 }

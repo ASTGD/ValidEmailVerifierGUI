@@ -3,18 +3,24 @@ package verifier
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/net/idna"
 )
 
 type PipelineVerifier struct {
-	resolver    MXResolver
-	smtpChecker SMTPChecker
-	limiter     *DomainLimiter
-	rateLimiter *RateLimiter
-	config      Config
+	resolver          MXResolver
+	smtpChecker       SMTPChecker
+	limiter           *DomainLimiter
+	rateLimiter       *RateLimiter
+	config            Config
+	disposableDomains map[string]struct{}
+	roleAccounts      map[string]struct{}
+	domainTypos       map[string]string
 }
 
 func NewPipelineVerifier(config Config, resolver MXResolver, smtpChecker SMTPChecker) *PipelineVerifier {
@@ -32,32 +38,52 @@ func NewPipelineVerifier(config Config, resolver MXResolver, smtpChecker SMTPChe
 		}
 	}
 
+	disposableDomains := config.DisposableDomains
+	if disposableDomains == nil {
+		disposableDomains = map[string]struct{}{}
+	}
+
+	roleAccounts := config.RoleAccounts
+	if roleAccounts == nil {
+		roleAccounts = map[string]struct{}{}
+	}
+
+	domainTypos := config.DomainTypos
+	if domainTypos == nil {
+		domainTypos = map[string]string{}
+	}
+
 	return &PipelineVerifier{
-		resolver:    resolver,
-		smtpChecker: smtpChecker,
-		limiter:     limiter,
-		rateLimiter: rateLimiter,
-		config:      config,
+		resolver:          resolver,
+		smtpChecker:       smtpChecker,
+		limiter:           limiter,
+		rateLimiter:       rateLimiter,
+		config:            config,
+		disposableDomains: disposableDomains,
+		roleAccounts:      roleAccounts,
+		domainTypos:       domainTypos,
 	}
 }
 
 func (p *PipelineVerifier) Verify(ctx context.Context, email string) Result {
-	normalized := normalizeEmail(email)
-	if normalized == "" || !strings.Contains(normalized, "@") {
-		return Result{Category: CategoryInvalid, Reason: "syntax"}
+	parsed, parseResult := parseEmail(email)
+	if parseResult.Reason != "" {
+		return parseResult
 	}
 
-	parts := strings.SplitN(normalized, "@", 2)
-	if len(parts) != 2 || parts[1] == "" {
-		return Result{Category: CategoryInvalid, Reason: "syntax"}
+	if suggestion, ok := p.domainTypos[parsed.domain]; ok {
+		return Result{Category: CategoryRisky, Reason: fmt.Sprintf("domain_typo_suspected:suggest=%s", suggestion)}
 	}
 
-	domain := strings.ToLower(strings.TrimSpace(parts[1]))
-	if domain == "" {
-		return Result{Category: CategoryInvalid, Reason: "syntax"}
+	if p.isDisposableDomain(parsed.domain) {
+		return Result{Category: CategoryRisky, Reason: "disposable_domain"}
 	}
 
-	mxRecords, dnsResult := p.lookupMX(ctx, domain)
+	if _, ok := p.roleAccounts[parsed.local]; ok {
+		return Result{Category: CategoryRisky, Reason: "role_account"}
+	}
+
+	mxRecords, dnsResult := p.lookupMX(ctx, parsed.domain)
 	if dnsResult.Reason != "" {
 		return dnsResult
 	}
@@ -69,7 +95,7 @@ func (p *PipelineVerifier) Verify(ctx context.Context, email string) Result {
 		return mxRecords[i].Pref < mxRecords[j].Pref
 	})
 
-	return p.checkSMTP(ctx, domain, mxRecords)
+	return p.checkSMTP(ctx, parsed.domain, mxRecords)
 }
 
 func (p *PipelineVerifier) lookupMX(ctx context.Context, domain string) ([]*net.MX, Result) {
@@ -175,8 +201,63 @@ func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host strin
 	return last
 }
 
-func normalizeEmail(email string) string {
-	return strings.TrimSpace(strings.ToLower(email))
+type parsedEmail struct {
+	local  string
+	domain string
+}
+
+func parseEmail(email string) (parsedEmail, Result) {
+	normalized := strings.TrimSpace(strings.ToLower(email))
+	if normalized == "" || !strings.Contains(normalized, "@") {
+		return parsedEmail{}, Result{Category: CategoryInvalid, Reason: "syntax"}
+	}
+
+	parts := strings.SplitN(normalized, "@", 2)
+	if len(parts) != 2 {
+		return parsedEmail{}, Result{Category: CategoryInvalid, Reason: "syntax"}
+	}
+
+	local := strings.TrimSpace(parts[0])
+	domain := strings.TrimSpace(parts[1])
+	if local == "" || domain == "" {
+		return parsedEmail{}, Result{Category: CategoryInvalid, Reason: "syntax"}
+	}
+
+	asciiDomain, err := idna.Lookup.ToASCII(domain)
+	if err != nil {
+		return parsedEmail{}, Result{Category: CategoryInvalid, Reason: "syntax"}
+	}
+
+	asciiDomain = strings.ToLower(strings.TrimSuffix(asciiDomain, "."))
+	if asciiDomain == "" {
+		return parsedEmail{}, Result{Category: CategoryInvalid, Reason: "syntax"}
+	}
+
+	return parsedEmail{
+		local:  local,
+		domain: asciiDomain,
+	}, Result{}
+}
+
+func (p *PipelineVerifier) isDisposableDomain(domain string) bool {
+	if len(p.disposableDomains) == 0 || domain == "" {
+		return false
+	}
+
+	if _, ok := p.disposableDomains[domain]; ok {
+		return true
+	}
+
+	for {
+		dot := strings.Index(domain, ".")
+		if dot == -1 || dot+1 >= len(domain) {
+			return false
+		}
+		domain = domain[dot+1:]
+		if _, ok := p.disposableDomains[domain]; ok {
+			return true
+		}
+	}
 }
 
 func isRetryableDNSError(err error) bool {

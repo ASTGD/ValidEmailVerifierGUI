@@ -39,8 +39,8 @@ func (timeoutError) Error() string   { return "timeout" }
 func (timeoutError) Timeout() bool   { return true }
 func (timeoutError) Temporary() bool { return true }
 
-func newVerifier(resolver MXResolver, smtp SMTPChecker, maxMX int) *PipelineVerifier {
-	return NewPipelineVerifier(Config{
+func baseConfig(maxMX int) Config {
+	return Config{
 		DNSTimeout:              1,
 		SMTPConnectTimeout:      1,
 		SMTPReadTimeout:         1,
@@ -51,7 +51,14 @@ func newVerifier(resolver MXResolver, smtp SMTPChecker, maxMX int) *PipelineVeri
 		HeloName:                "worker.test",
 		PerDomainConcurrency:    0,
 		SMTPRateLimitPerMinute:  0,
-	}, resolver, smtp)
+		DisposableDomains:       map[string]struct{}{},
+		RoleAccounts:            map[string]struct{}{},
+		DomainTypos:             map[string]string{},
+	}
+}
+
+func newVerifier(resolver MXResolver, smtp SMTPChecker, maxMX int) *PipelineVerifier {
+	return NewPipelineVerifier(baseConfig(maxMX), resolver, smtp)
 }
 
 func TestPipelineSyntaxInvalid(t *testing.T) {
@@ -136,5 +143,61 @@ func TestPipelineMaxAttemptsStopsEarly(t *testing.T) {
 	res := v.Verify(context.Background(), "user@limit.local")
 	if res.Category != CategoryRisky || res.Reason != "smtp_timeout" {
 		t.Fatalf("expected risky after first MX, got %s/%s", res.Category, res.Reason)
+	}
+}
+
+func TestPipelineDomainTypoSuspected(t *testing.T) {
+	config := baseConfig(1)
+	config.DomainTypos["gmail.con"] = "gmail.com"
+
+	v := NewPipelineVerifier(config, &fakeResolver{}, &fakeSMTP{})
+	res := v.Verify(context.Background(), "user@gmail.con")
+
+	if res.Category != CategoryRisky || res.Reason != "domain_typo_suspected:suggest=gmail.com" {
+		t.Fatalf("expected domain typo risky, got %s/%s", res.Category, res.Reason)
+	}
+}
+
+func TestPipelineDisposableDomain(t *testing.T) {
+	config := baseConfig(1)
+	config.DisposableDomains["mailinator.com"] = struct{}{}
+
+	resolver := &fakeResolver{errs: map[string]error{"mailinator.com": errors.New("SERVFAIL")}}
+	v := NewPipelineVerifier(config, resolver, &fakeSMTP{})
+	res := v.Verify(context.Background(), "user@mailinator.com")
+
+	if res.Category != CategoryRisky || res.Reason != "disposable_domain" {
+		t.Fatalf("expected disposable domain risky, got %s/%s", res.Category, res.Reason)
+	}
+}
+
+func TestPipelineRoleAccount(t *testing.T) {
+	config := baseConfig(1)
+	config.RoleAccounts["admin"] = struct{}{}
+
+	resolver := &fakeResolver{errs: map[string]error{"example.local": errors.New("SERVFAIL")}}
+	v := NewPipelineVerifier(config, resolver, &fakeSMTP{})
+	res := v.Verify(context.Background(), "admin@example.local")
+
+	if res.Category != CategoryRisky || res.Reason != "role_account" {
+		t.Fatalf("expected role account risky, got %s/%s", res.Category, res.Reason)
+	}
+}
+
+func TestPipelineIDNNormalization(t *testing.T) {
+	config := baseConfig(1)
+	domain := "xn--bcher-kva.de"
+	resolver := &fakeResolver{records: map[string][]*net.MX{
+		domain: {{Host: "mx.idn.local", Pref: 10}},
+	}}
+	smtp := &fakeSMTP{results: map[string]Result{
+		"mx.idn.local": {Category: CategoryValid, Reason: "smtp_connect_ok"},
+	}}
+
+	v := NewPipelineVerifier(config, resolver, smtp)
+	res := v.Verify(context.Background(), "user@b\u00fccher.de")
+
+	if res.Category != CategoryValid || res.Reason != "smtp_connect_ok" {
+		t.Fatalf("expected idn normalization to resolve, got %s/%s", res.Category, res.Reason)
 	}
 }
