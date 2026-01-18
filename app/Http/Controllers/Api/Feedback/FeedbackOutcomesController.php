@@ -13,6 +13,14 @@ class FeedbackOutcomesController
     public function __invoke(StoreFeedbackOutcomesRequest $request, OutcomeIngestor $ingestor): JsonResponse
     {
         $payload = $request->validated();
+        $maxItems = (int) config('engine.feedback_max_items_per_request', 500);
+        $itemCount = count($payload['items'] ?? []);
+        if ($maxItems > 0 && $itemCount > $maxItems) {
+            return response()->json([
+                'message' => 'Feedback items exceed the maximum allowed.',
+            ], 422);
+        }
+
         $defaultSource = $payload['source'] ?? 'api_feedback';
         $defaultObservedAt = isset($payload['observed_at'])
             ? Carbon::parse($payload['observed_at'])

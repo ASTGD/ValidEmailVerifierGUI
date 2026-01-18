@@ -19,4 +19,13 @@ return [
     'health_window_days' => (int) env('ENGINE_HEALTH_WINDOW_DAYS', 7),
     'enhanced_mode_enabled' => env('ENGINE_ENHANCED_MODE_ENABLED', false),
     'feedback_imports_prefix' => env('ENGINE_FEEDBACK_IMPORTS_PREFIX', 'feedback/imports'),
+    'feedback_api_enabled' => (bool) env(
+        'ENGINE_FEEDBACK_API_ENABLED',
+        in_array(env('APP_ENV'), ['local', 'testing'], true)
+    ),
+    'feedback_max_items_per_request' => (int) env('ENGINE_FEEDBACK_MAX_ITEMS_PER_REQUEST', 500),
+    'feedback_max_payload_kb' => (int) env('ENGINE_FEEDBACK_MAX_PAYLOAD_KB', 512),
+    'feedback_rate_limit_per_minute' => (int) env('ENGINE_FEEDBACK_RATE_LIMIT_PER_MINUTE', 30),
+    'feedback_retention_days' => (int) env('ENGINE_FEEDBACK_RETENTION_DAYS', 180),
+    'feedback_import_retention_days' => (int) env('ENGINE_FEEDBACK_IMPORT_RETENTION_DAYS', 90),
 ];
