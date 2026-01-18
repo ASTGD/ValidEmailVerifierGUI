@@ -286,7 +286,19 @@ class ParseAndChunkJob implements ShouldQueue
             return;
         }
 
+        $batchSize = count($this->batch);
+
+        $this->verificationJob?->addLog('cache_lookup_started', 'Cache lookup started.', [
+            'batch_size' => $batchSize,
+        ]);
+
         $hits = $cacheStore->lookupMany($this->batch);
+        $hitCount = count($hits);
+
+        $this->verificationJob?->addLog('cache_hits_found', 'Cache hits found.', [
+            'batch_size' => $batchSize,
+            'hit_count' => $hitCount,
+        ]);
 
         foreach ($this->batch as $email) {
             if (array_key_exists($email, $hits)) {
@@ -299,6 +311,11 @@ class ParseAndChunkJob implements ShouldQueue
         }
 
         $this->batch = [];
+
+        $this->verificationJob?->addLog('cache_lookup_completed', 'Cache lookup completed.', [
+            'batch_size' => $batchSize,
+            'hit_count' => $hitCount,
+        ]);
     }
 
     private function writeToChunk(string $email, JobStorage $storage, string $disk): void
@@ -350,13 +367,15 @@ class ParseAndChunkJob implements ShouldQueue
             return;
         }
 
-        $status = strtolower((string) ($hit['status'] ?? ''));
+        $status = strtolower((string) ($hit['status'] ?? $hit['outcome'] ?? ''));
 
         if (! in_array($status, ['valid', 'invalid', 'risky'], true)) {
             return;
         }
 
-        $line = (string) ($hit['row'] ?? $email);
+        $reason = trim((string) ($hit['reason_code'] ?? ''));
+        $fallbackLine = $reason !== '' ? $email.','.$reason : $email.',';
+        $line = (string) ($hit['row'] ?? $fallbackLine);
 
         $this->writeCached($status, $line, $storage, $disk);
         $this->cachedCounts[$status]++;
@@ -367,6 +386,7 @@ class ParseAndChunkJob implements ShouldQueue
         if (! isset($this->cachedStreams[$status])) {
             $this->cachedStreams[$status] = tmpfile();
             $this->cachedKeys[$status] = $storage->cachedResultKey($this->verificationJob, $status);
+            fwrite($this->cachedStreams[$status], "email,reason\n");
         }
 
         $normalizedLine = rtrim($line, "\r\n").PHP_EOL;
