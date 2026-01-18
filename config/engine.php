@@ -18,4 +18,5 @@ return [
     'finalization_write_mode' => env('ENGINE_FINALIZATION_WRITE_MODE', 'stream_to_temp_then_upload'),
     'health_window_days' => (int) env('ENGINE_HEALTH_WINDOW_DAYS', 7),
     'enhanced_mode_enabled' => env('ENGINE_ENHANCED_MODE_ENABLED', false),
+    'feedback_imports_prefix' => env('ENGINE_FEEDBACK_IMPORTS_PREFIX', 'feedback/imports'),
 ];

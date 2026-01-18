@@ -15,6 +15,8 @@ use App\Http\Controllers\Api\Verifier\VerifierJobStatusController;
 use App\Http\Controllers\Api\Verifier\VerifierJobsController;
 use App\Http\Controllers\Api\Verifier\VerifierStorageDownloadController;
 use App\Http\Controllers\Api\Verifier\VerifierStorageUploadController;
+use App\Http\Controllers\Api\Feedback\FeedbackOutcomesController;
+use App\Http\Middleware\EnsureFeedbackIngestor;
 use App\Http\Middleware\EnsureVerifierService;
 use Illuminate\Support\Facades\Route;
 
@@ -66,4 +68,11 @@ Route::middleware(['auth:sanctum', EnsureVerifierService::class, 'throttle:verif
                 ->whereUuid('chunk')
                 ->name('output-urls');
         });
+    });
+
+Route::middleware(['auth:sanctum', EnsureFeedbackIngestor::class, 'throttle:verifier-api'])
+    ->prefix('feedback')
+    ->name('api.feedback.')
+    ->group(function () {
+        Route::post('outcomes', FeedbackOutcomesController::class)->name('outcomes.store');
     });

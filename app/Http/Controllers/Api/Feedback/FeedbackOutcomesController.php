@@ -1,0 +1,42 @@
+<?php
+
+namespace App\Http\Controllers\Api\Feedback;
+
+use App\Http\Requests\Feedback\StoreFeedbackOutcomesRequest;
+use App\Services\EmailVerificationOutcomes\OutcomeIngestor;
+use App\Support\AdminAuditLogger;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Carbon;
+
+class FeedbackOutcomesController
+{
+    public function __invoke(StoreFeedbackOutcomesRequest $request, OutcomeIngestor $ingestor): JsonResponse
+    {
+        $payload = $request->validated();
+        $defaultSource = $payload['source'] ?? 'api_feedback';
+        $defaultObservedAt = isset($payload['observed_at'])
+            ? Carbon::parse($payload['observed_at'])
+            : now();
+
+        $result = $ingestor->ingest(
+            $payload['items'],
+            $defaultSource,
+            $defaultObservedAt,
+            $request->user()?->id
+        );
+
+        AdminAuditLogger::log('feedback_outcomes_ingested', null, [
+            'source' => $defaultSource,
+            'imported_count' => $result['imported'],
+            'skipped_count' => $result['skipped'],
+        ]);
+
+        return response()->json([
+            'data' => [
+                'imported_count' => $result['imported'],
+                'skipped_count' => $result['skipped'],
+                'error_sample' => $result['errors'],
+            ],
+        ]);
+    }
+}
