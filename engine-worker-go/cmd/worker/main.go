@@ -6,9 +6,11 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
+	workerdata "engine-worker-go/data"
 	"engine-worker-go/internal/api"
 	"engine-worker-go/internal/verifier"
 	"engine-worker-go/internal/worker"
@@ -37,6 +39,9 @@ func main() {
 	backoffMs := envInt("BACKOFF_MS_BASE", 200)
 	perDomainConcurrency := envInt("PER_DOMAIN_CONCURRENCY", 2)
 	smtpRateLimit := envInt("SMTP_RATE_LIMIT_PER_MINUTE", 0)
+	roleAccounts := parseRoleAccounts(os.Getenv("ROLE_ACCOUNTS"))
+	domainTypos := parseDomainTypos(os.Getenv("DOMAIN_TYPOS"))
+	disposableDomains := parseDisposableDomains(workerdata.DisposableDomains)
 
 	var leaseSeconds *int
 	if val := os.Getenv("LEASE_SECONDS"); val != "" {
@@ -61,6 +66,9 @@ func main() {
 		HeloName:                heloName,
 		PerDomainConcurrency:    perDomainConcurrency,
 		SMTPRateLimitPerMinute:  smtpRateLimit,
+		DisposableDomains:       disposableDomains,
+		RoleAccounts:            roleAccounts,
+		DomainTypos:             domainTypos,
 	}
 
 	v := verifier.NewPipelineVerifier(verifierConfig, verifier.NetMXResolver{}, nil)
@@ -134,4 +142,71 @@ func hostname() string {
 	}
 
 	return name
+}
+
+func parseRoleAccounts(value string) map[string]struct{} {
+	if value == "" {
+		return mapFromSlice([]string{"info", "admin", "support", "sales", "contact", "hello", "hr"})
+	}
+
+	return mapFromSlice(strings.Split(value, ","))
+}
+
+func parseDomainTypos(value string) map[string]string {
+	output := map[string]string{}
+	if value == "" {
+		return output
+	}
+
+	for _, pair := range strings.Split(value, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		typo := strings.ToLower(strings.TrimSpace(parts[0]))
+		suggestion := strings.ToLower(strings.TrimSpace(parts[1]))
+		if typo == "" || suggestion == "" {
+			continue
+		}
+
+		output[typo] = suggestion
+	}
+
+	return output
+}
+
+func parseDisposableDomains(data string) map[string]struct{} {
+	output := map[string]struct{}{}
+
+	for _, line := range strings.Split(data, "\n") {
+		line = strings.ToLower(strings.TrimSpace(line))
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		output[line] = struct{}{}
+	}
+
+	return output
+}
+
+func mapFromSlice(values []string) map[string]struct{} {
+	output := map[string]struct{}{}
+
+	for _, value := range values {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value == "" {
+			continue
+		}
+
+		output[value] = struct{}{}
+	}
+
+	return output
 }
