@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\VerificationJobs\Schemas;
 
 use App\Enums\VerificationJobStatus;
+use App\Enums\VerificationMode;
 use App\Filament\Resources\VerificationJobChunks\VerificationJobChunkResource;
 use App\Models\VerificationJob;
 use App\Models\VerificationJobChunk;
@@ -46,6 +47,17 @@ class VerificationJobInfolist
                                     default => 'gray',
                                 };
                             }),
+                        TextEntry::make('verification_mode')
+                            ->label('Mode')
+                            ->badge()
+                            ->formatStateUsing(function ($state): string {
+                                if ($state instanceof VerificationMode) {
+                                    return $state->label();
+                                }
+
+                                return ucfirst((string) $state);
+                            })
+                            ->color(fn (): string => 'gray'),
                         TextEntry::make('created_at')
                             ->label('Created')
                             ->dateTime(),

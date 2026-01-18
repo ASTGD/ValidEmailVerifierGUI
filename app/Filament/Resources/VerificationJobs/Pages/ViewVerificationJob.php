@@ -3,11 +3,13 @@
 namespace App\Filament\Resources\VerificationJobs\Pages;
 
 use App\Enums\VerificationJobStatus;
+use App\Enums\VerificationMode;
 use App\Filament\Resources\VerificationJobs\VerificationJobResource;
 use App\Jobs\FinalizeVerificationJob;
 use App\Models\VerificationJob;
 use App\Support\AdminAuditLogger;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +24,62 @@ class ViewVerificationJob extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('change_mode')
+                ->label('Change Mode')
+                ->form([
+                    Select::make('verification_mode')
+                        ->label('Verification mode')
+                        ->options(function (): array {
+                            $options = [];
+
+                            foreach (VerificationMode::cases() as $mode) {
+                                $options[$mode->value] = $mode->label();
+                            }
+
+                            return $options;
+                        })
+                        ->required(),
+                ])
+                ->fillForm(function (VerificationJob $record): array {
+                    return [
+                        'verification_mode' => $record->verification_mode?->value ?? VerificationMode::Standard->value,
+                    ];
+                })
+                ->action(function (array $data): void {
+                    if (! config('engine.enhanced_mode_enabled')
+                        && $data['verification_mode'] === VerificationMode::Enhanced->value) {
+                        Notification::make()
+                            ->title('Enhanced mode is coming soon.')
+                            ->warning()
+                            ->send();
+
+                        return;
+                    }
+
+                    $record = $this->record;
+                    $from = $record->verification_mode?->value ?? VerificationMode::Standard->value;
+
+                    $record->update([
+                        'verification_mode' => $data['verification_mode'],
+                    ]);
+
+                    $record->addLog('mode_updated', 'Verification mode updated by admin.', [
+                        'from' => $from,
+                        'to' => $data['verification_mode'],
+                    ], auth()->id());
+
+                    AdminAuditLogger::log('job_mode_updated', $record, [
+                        'from' => $from,
+                        'to' => $data['verification_mode'],
+                    ]);
+
+                    Notification::make()
+                        ->title('Verification mode updated.')
+                        ->success()
+                        ->send();
+                })
+                ->disabled(fn (): bool => ! config('engine.enhanced_mode_enabled'))
+                ->tooltip(fn (): ?string => config('engine.enhanced_mode_enabled') ? null : 'Coming soon'),
             Action::make('finalize')
                 ->label('Finalize')
                 ->action(function (): void {

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\VerificationJobs\Tables;
 
 use App\Enums\VerificationJobStatus;
+use App\Enums\VerificationMode;
 use App\Models\EngineServer;
 use App\Models\VerificationJob;
 use App\Support\AdminAuditLogger;
@@ -53,6 +54,18 @@ class VerificationJobsTable
                             default => 'gray',
                         };
                     }),
+                TextColumn::make('verification_mode')
+                    ->label('Mode')
+                    ->badge()
+                    ->formatStateUsing(function ($state): string {
+                        if ($state instanceof VerificationMode) {
+                            return $state->label();
+                        }
+
+                        return ucfirst((string) $state);
+                    })
+                    ->color(fn (): string => 'gray')
+                    ->toggleable(),
                 TextColumn::make('created_at')
                     ->label('Created')
                     ->dateTime()

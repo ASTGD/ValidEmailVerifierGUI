@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\VerificationJobStatus;
+use App\Enums\VerificationMode;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -24,6 +25,7 @@ class VerificationJob extends Model
     protected $fillable = [
         'user_id',
         'status',
+        'verification_mode',
         'original_filename',
         'input_disk',
         'input_key',
@@ -56,6 +58,7 @@ class VerificationJob extends Model
 
     protected $casts = [
         'status' => VerificationJobStatus::class,
+        'verification_mode' => VerificationMode::class,
         'claimed_at' => 'datetime',
         'claim_expires_at' => 'datetime',
         'started_at' => 'datetime',
@@ -68,6 +71,10 @@ class VerificationJob extends Model
         'risky_count' => 'integer',
         'unknown_count' => 'integer',
         'cached_count' => 'integer',
+    ];
+
+    protected $attributes = [
+        'verification_mode' => VerificationMode::Standard->value,
     ];
 
     public function scopeExcludeAdminFailures($query)

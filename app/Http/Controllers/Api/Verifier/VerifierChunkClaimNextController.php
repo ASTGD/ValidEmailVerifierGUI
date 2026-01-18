@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Verifier;
 
+use App\Enums\VerificationMode;
 use App\Http\Requests\Verifier\ChunkClaimNextRequest;
 use App\Models\EngineServer;
 use App\Models\VerificationJobChunk;
@@ -91,6 +92,7 @@ class VerifierChunkClaimNextController
                 'chunk_id' => (string) $chunk->id,
                 'job_id' => (string) $chunk->verification_job_id,
                 'chunk_no' => $chunk->chunk_no,
+                'verification_mode' => $chunk->job?->verification_mode?->value ?? VerificationMode::Standard->value,
                 'lease_expires_at' => $chunk->claim_expires_at?->toIso8601String(),
                 'input' => [
                     'disk' => $chunk->input_disk,
