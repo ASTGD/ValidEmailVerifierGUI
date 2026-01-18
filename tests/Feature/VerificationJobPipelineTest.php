@@ -6,8 +6,10 @@ use App\Contracts\EmailVerificationCacheStore;
 use App\Enums\VerificationJobStatus;
 use App\Jobs\ParseAndChunkJob;
 use App\Jobs\PrepareVerificationJob;
+use App\Models\EmailVerificationOutcome;
 use App\Models\User;
 use App\Models\VerificationJob;
+use App\Support\EmailHashing;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Storage;
@@ -137,5 +139,66 @@ class VerificationJobPipelineTest extends TestCase
         $this->assertSame(3, count($store->batches[0]));
         $this->assertSame(3, count($store->batches[1]));
         $this->assertSame(1, count($store->batches[2]));
+    }
+
+    public function test_pipeline_uses_database_cache_hits(): void
+    {
+        Storage::fake('local');
+
+        config([
+            'verifier.storage_disk' => 'local',
+            'engine.cache_store_driver' => 'database',
+            'engine.cache_freshness_days' => 30,
+            'engine.chunk_size_default' => 10,
+            'engine.cache_batch_size' => 10,
+            'engine.max_emails_per_upload' => 0,
+            'engine.dedupe_in_memory_limit' => 1000,
+        ]);
+
+        $user = User::factory()->create();
+        $job = VerificationJob::create([
+            'user_id' => $user->id,
+            'status' => VerificationJobStatus::Processing,
+            'original_filename' => 'input.txt',
+            'input_disk' => 'local',
+            'input_key' => 'uploads/'.$user->id.'/job/input.txt',
+        ]);
+
+        EmailVerificationOutcome::create([
+            'email_hash' => EmailHashing::hashEmail('cached@example.com'),
+            'email_normalized' => 'cached@example.com',
+            'outcome' => 'valid',
+            'reason_code' => 'delivered',
+            'observed_at' => now()->subHour(),
+        ]);
+
+        $content = implode("\n", [
+            'cached@example.com',
+            'new@example.com',
+        ]);
+
+        Storage::disk('local')->put($job->input_key, $content);
+
+        app()->call([new ParseAndChunkJob($job->id), 'handle']);
+        $job->refresh();
+
+        $this->assertSame(2, $job->total_emails);
+        $this->assertSame(1, $job->cached_count);
+        $this->assertSame(1, $job->unknown_count);
+
+        $chunks = $job->chunks()->get();
+        $this->assertCount(1, $chunks);
+
+        $chunk = $chunks->first();
+        $this->assertNotNull($chunk);
+
+        $chunkContent = Storage::disk('local')->get($chunk->input_key);
+        $this->assertStringContainsString('new@example.com', $chunkContent);
+        $this->assertStringNotContainsString('cached@example.com', $chunkContent);
+
+        $this->assertNotNull($job->cached_valid_key);
+        $cachedContent = Storage::disk('local')->get($job->cached_valid_key);
+        $this->assertStringContainsString("email,reason\n", $cachedContent);
+        $this->assertStringContainsString('cached@example.com,delivered', $cachedContent);
     }
 }
