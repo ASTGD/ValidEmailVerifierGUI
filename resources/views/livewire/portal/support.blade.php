@@ -39,8 +39,12 @@
                     @forelse($tickets as $ticket)
                         <tr class="hover:bg-[#F8FAFC] transition-colors cursor-pointer group"
                             onclick="window.location.href='{{ route('portal.support.show', $ticket) }}'">
-                            <td class="px-8 py-5 font-mono text-xs font-bold text-[#1E7CCF]">
-                                #{{ $ticket->ticket_number }}</td>
+                            <td class="px-8 py-6 bg-[#F8FAFC] border-r border-[#F1F5F9]">
+                                <span
+                                    class="inline-flex items-center px-3 py-1 bg-[#E9F2FB] text-[#1E7CCF] rounded-lg font-mono text-[11px] font-black border border-[#1E7CCF]/20 shadow-sm group-hover:bg-[#1E7CCF] group-hover:text-white transition-all">
+                                    #{{ $ticket->ticket_number }}
+                                </span>
+                            </td>
                             <td class="px-8 py-5">
                                 <p class="font-bold text-[#0F172A]">{{ $ticket->subject }}</p>
                             </td>
@@ -59,9 +63,23 @@
                                     </span>
                                 </div>
                             </td>
-                            <td class="px-8 py-6 text-right text-sm font-medium text-[#64748B]">
-                                {{ $ticket->updated_at->format('l, F jS, Y (H:i)') }}
+                            <td class="px-8 py-6 text-right bg-[#F8FAFC] border-l border-[#F1F5F9]">
+                                <div class="flex flex-col items-end">
+                                    <!-- Highlighted Time Ago in a soft Indigo -->
+                                    <span
+                                        class="text-xs font-black text-[#6366F1] group-hover:text-[#1E7CCF] transition-colors">
+                                        {{ $ticket->updated_at->diffForHumans() }}
+                                    </span>
+                                    <!-- Muted technical date string -->
+                                    <span
+                                        class="text-[11px] font-extrabold text-[#94A3B8] uppercase tracking-tighter mt-1">
+                                        {{ $ticket->updated_at->format('M d, Y • H:i') }}
+                                    </span>
+                                </div>
                             </td>
+                            {{-- <td class="px-8 py-6 text-right text-sm font-medium text-[#64748B]">
+                                {{ $ticket->updated_at->format('l, F jS, Y (H:i)') }}
+                            </td> --}}
                         </tr>
                     @empty
                         <tr>
