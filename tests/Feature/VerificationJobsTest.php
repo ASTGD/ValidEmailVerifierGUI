@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\VerificationJobStatus;
 use App\Enums\VerificationMode;
 use App\Filament\Resources\VerificationJobs\Pages\ViewVerificationJob;
+use App\Models\EngineSetting;
 use App\Livewire\Portal\Upload;
 use App\Models\User;
 use App\Models\VerificationJob;
@@ -106,7 +107,7 @@ class VerificationJobsTest extends TestCase
             'input_key' => 'uploads/'.$user->id.'/job/input.csv',
         ]);
 
-        config(['engine.enhanced_mode_enabled' => false]);
+        EngineSetting::query()->update(['enhanced_mode_enabled' => false]);
 
         $this->actingAs($admin);
 
@@ -120,7 +121,7 @@ class VerificationJobsTest extends TestCase
             'event' => 'verification_mode_changed',
         ]);
 
-        config(['engine.enhanced_mode_enabled' => true]);
+        EngineSetting::query()->update(['enhanced_mode_enabled' => true]);
 
         Livewire::test(ViewVerificationJob::class, ['record' => $job->id])
             ->callAction('change_mode', ['verification_mode' => VerificationMode::Enhanced->value]);

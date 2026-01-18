@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class EngineServer extends Model
 {
@@ -13,12 +14,16 @@ class EngineServer extends Model
         'region',
         'last_heartbeat_at',
         'is_active',
+        'drain_mode',
+        'max_concurrency',
         'notes',
     ];
 
     protected $casts = [
         'last_heartbeat_at' => 'datetime',
         'is_active' => 'boolean',
+        'drain_mode' => 'boolean',
+        'max_concurrency' => 'integer',
     ];
 
     public function isOnline(): bool
@@ -30,5 +35,10 @@ class EngineServer extends Model
         $threshold = max(1, (int) config('verifier.engine_heartbeat_minutes', 5));
 
         return $this->last_heartbeat_at->greaterThan(now()->subMinutes($threshold));
+    }
+
+    public function chunks(): HasMany
+    {
+        return $this->hasMany(VerificationJobChunk::class);
     }
 }

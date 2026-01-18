@@ -137,6 +137,54 @@ Response:
 
 ---
 
+### Policy
+**GET** `/api/verifier/policy`
+
+Response:
+```json
+{
+  "data": {
+    "contract_version": "v1",
+    "engine_paused": false,
+    "enhanced_mode_enabled": false,
+    "policies": {
+      "standard": {
+        "mode": "standard",
+        "enabled": true,
+        "dns_timeout_ms": 2000,
+        "smtp_connect_timeout_ms": 2000,
+        "smtp_read_timeout_ms": 2000,
+        "max_mx_attempts": 2,
+        "max_concurrency_default": 1,
+        "per_domain_concurrency": 2,
+        "global_connects_per_minute": null,
+        "tempfail_backoff_seconds": null,
+        "circuit_breaker_tempfail_rate": null
+      },
+      "enhanced": {
+        "mode": "enhanced",
+        "enabled": false,
+        "dns_timeout_ms": 2000,
+        "smtp_connect_timeout_ms": 2000,
+        "smtp_read_timeout_ms": 2000,
+        "max_mx_attempts": 2,
+        "max_concurrency_default": 1,
+        "per_domain_concurrency": 2,
+        "global_connects_per_minute": null,
+        "tempfail_backoff_seconds": null,
+        "circuit_breaker_tempfail_rate": null
+      }
+    }
+  }
+}
+```
+
+Behavior:
+- When `engine_paused` is true, workers should idle and `claim-next` returns 204.
+- When `enhanced_mode_enabled` is false, enhanced requests run in standard mode with a warning log.
+
+---
+
 ### Job Claim (legacy – optional)
 **POST** `/api/verifier/jobs/{job}/claim`
 

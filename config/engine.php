@@ -1,5 +1,23 @@
 <?php
 
+$policyDefaults = [
+    'dns_timeout_ms' => (int) env('ENGINE_POLICY_DNS_TIMEOUT_MS', 2000),
+    'smtp_connect_timeout_ms' => (int) env('ENGINE_POLICY_SMTP_CONNECT_TIMEOUT_MS', 2000),
+    'smtp_read_timeout_ms' => (int) env('ENGINE_POLICY_SMTP_READ_TIMEOUT_MS', 2000),
+    'max_mx_attempts' => (int) env('ENGINE_POLICY_MAX_MX_ATTEMPTS', 2),
+    'max_concurrency_default' => (int) env('ENGINE_POLICY_MAX_CONCURRENCY_DEFAULT', 1),
+    'per_domain_concurrency' => (int) env('ENGINE_POLICY_PER_DOMAIN_CONCURRENCY', 2),
+    'global_connects_per_minute' => env('ENGINE_POLICY_GLOBAL_CONNECTS_PER_MINUTE') !== null
+        ? (int) env('ENGINE_POLICY_GLOBAL_CONNECTS_PER_MINUTE')
+        : null,
+    'tempfail_backoff_seconds' => env('ENGINE_POLICY_TEMPFAIL_BACKOFF_SECONDS') !== null
+        ? (int) env('ENGINE_POLICY_TEMPFAIL_BACKOFF_SECONDS')
+        : null,
+    'circuit_breaker_tempfail_rate' => env('ENGINE_POLICY_CIRCUIT_BREAKER_TEMPFAIL_RATE') !== null
+        ? (float) env('ENGINE_POLICY_CIRCUIT_BREAKER_TEMPFAIL_RATE')
+        : null,
+];
+
 return [
     'lease_seconds' => (int) env('ENGINE_LEASE_SECONDS', env('VERIFIER_ENGINE_CLAIM_LEASE_SECONDS', 600)),
     'max_attempts' => (int) env('ENGINE_MAX_ATTEMPTS', 3),
@@ -17,7 +35,17 @@ return [
     'finalization_temp_disk' => env('ENGINE_FINALIZATION_TEMP_DISK', 'local'),
     'finalization_write_mode' => env('ENGINE_FINALIZATION_WRITE_MODE', 'stream_to_temp_then_upload'),
     'health_window_days' => (int) env('ENGINE_HEALTH_WINDOW_DAYS', 7),
+    'engine_paused' => (bool) env('ENGINE_PAUSED', false),
     'enhanced_mode_enabled' => env('ENGINE_ENHANCED_MODE_ENABLED', false),
+    'policy_contract_version' => env('ENGINE_POLICY_CONTRACT_VERSION', 'v1'),
+    'policy_defaults' => [
+        'standard' => array_merge($policyDefaults, [
+            'enabled' => true,
+        ]),
+        'enhanced' => array_merge($policyDefaults, [
+            'enabled' => (bool) env('ENGINE_POLICY_ENHANCED_ENABLED', false),
+        ]),
+    ],
     'feedback_imports_prefix' => env('ENGINE_FEEDBACK_IMPORTS_PREFIX', 'feedback/imports'),
     'feedback_api_enabled' => (bool) env(
         'ENGINE_FEEDBACK_API_ENABLED',

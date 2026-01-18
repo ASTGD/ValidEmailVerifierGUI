@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"engine-worker-go/internal/api"
@@ -17,20 +18,46 @@ import (
 )
 
 type Config struct {
-	PollInterval      time.Duration
-	HeartbeatInterval time.Duration
-	LeaseSeconds      *int
-	MaxConcurrency    int
-	Server            api.EngineServerPayload
-	WorkerID          string
-	Verifier          verifier.Verifier
+	PollInterval       time.Duration
+	HeartbeatInterval  time.Duration
+	LeaseSeconds       *int
+	MaxConcurrency     int
+	PolicyRefresh      time.Duration
+	Server             api.EngineServerPayload
+	WorkerID           string
+	BaseVerifierConfig verifier.Config
 }
 
 type Worker struct {
-	client *api.Client
-	cfg    Config
-	sem    chan struct{}
-	wg     sync.WaitGroup
+	client          *api.Client
+	cfg             Config
+	wg              sync.WaitGroup
+	active          int64
+	maxConcurrency  int64
+	policyMu        sync.RWMutex
+	policy          policyState
+	lastPolicyFetch time.Time
+}
+
+type policyState struct {
+	loaded              bool
+	enginePaused        bool
+	enhancedModeEnabled bool
+	standard            policyConfig
+	enhanced            policyConfig
+}
+
+type policyConfig struct {
+	Enabled                    bool
+	DNSTimeoutMs               int
+	SMTPConnectTimeoutMs       int
+	SMTPReadTimeoutMs          int
+	MaxMXAttempts              int
+	MaxConcurrencyDefault      int
+	PerDomainConcurrency       int
+	GlobalConnectsPerMinute    *int
+	TempfailBackoffSeconds     *int
+	CircuitBreakerTempfailRate *float64
 }
 
 type chunkOutputs struct {
@@ -50,9 +77,9 @@ func New(client *api.Client, cfg Config) *Worker {
 	}
 
 	return &Worker{
-		client: client,
-		cfg:    cfg,
-		sem:    make(chan struct{}, max),
+		client:         client,
+		cfg:            cfg,
+		maxConcurrency: int64(max),
 	}
 }
 
@@ -60,6 +87,8 @@ func (w *Worker) Run(ctx context.Context) error {
 	lastHeartbeat := time.Time{}
 
 	for {
+		now := time.Now()
+
 		select {
 		case <-ctx.Done():
 			w.wg.Wait()
@@ -67,14 +96,21 @@ func (w *Worker) Run(ctx context.Context) error {
 		default:
 		}
 
-		if time.Since(lastHeartbeat) >= w.cfg.HeartbeatInterval {
+		if now.Sub(lastHeartbeat) >= w.cfg.HeartbeatInterval {
 			if err := w.client.Heartbeat(ctx, w.cfg.Server); err != nil {
 				fmt.Printf("heartbeat error: %v\n", err)
 			}
-			lastHeartbeat = time.Now()
+			lastHeartbeat = now
 		}
 
-		if len(w.sem) >= cap(w.sem) {
+		w.refreshPolicyIfNeeded(ctx, now)
+
+		if w.enginePaused() {
+			time.Sleep(w.cfg.PollInterval)
+			continue
+		}
+
+		if w.activeCount() >= w.currentMaxConcurrency() {
 			time.Sleep(w.cfg.PollInterval)
 			continue
 		}
@@ -96,11 +132,11 @@ func (w *Worker) Run(ctx context.Context) error {
 			continue
 		}
 
-		w.sem <- struct{}{}
 		w.wg.Add(1)
+		w.incrementActive()
 		go func(claim *api.ClaimNextResponse) {
 			defer w.wg.Done()
-			defer func() { <-w.sem }()
+			defer w.decrementActive()
 
 			if err := w.processChunk(ctx, claim); err != nil {
 				fmt.Printf("chunk %s error: %v\n", claim.Data.ChunkID, err)
@@ -123,7 +159,9 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 	})
 
 	mode := normalizeVerificationMode(claim.Data.VerificationMode)
-	if mode == "enhanced" {
+	policy, hasPolicy := w.policyForMode(mode)
+	enhancedAllowed := hasPolicy && w.policyEnhancedAllowed() && policy.Enabled
+	if mode == "enhanced" && !enhancedAllowed {
 		_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
 			"level":   "warning",
 			"event":   "enhanced_mode_requested_but_not_enabled",
@@ -132,6 +170,8 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 				"verification_mode": mode,
 			},
 		})
+		mode = "standard"
+		policy, hasPolicy = w.policyForMode(mode)
 	}
 
 	details, err := w.client.ChunkDetails(ctx, chunkID)
@@ -150,7 +190,8 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 	}
 	defer reader.Close()
 
-	outputs, err := buildOutputs(ctx, reader, w.cfg.Verifier)
+	engineVerifier := w.verifierForMode(mode, policy, hasPolicy)
+	outputs, err := buildOutputs(ctx, reader, engineVerifier)
 	if err != nil {
 		return w.failChunk(ctx, chunkID, "failed to parse input", err, false)
 	}
@@ -357,6 +398,191 @@ func firstError(errors ...error) error {
 	}
 
 	return nil
+}
+
+func (w *Worker) refreshPolicyIfNeeded(ctx context.Context, now time.Time) {
+	if w.cfg.PolicyRefresh <= 0 {
+		return
+	}
+
+	if !w.lastPolicyFetch.IsZero() && now.Sub(w.lastPolicyFetch) < w.cfg.PolicyRefresh {
+		return
+	}
+
+	w.lastPolicyFetch = now
+
+	resp, err := w.client.Policy(ctx)
+	if err != nil {
+		fmt.Printf("policy fetch error: %v\n", err)
+		return
+	}
+
+	state := policyStateFrom(resp)
+
+	w.policyMu.Lock()
+	w.policy = state
+	w.policyMu.Unlock()
+
+	w.updateMaxConcurrency(state)
+}
+
+func policyStateFrom(resp *api.PolicyResponse) policyState {
+	state := policyState{
+		loaded:              true,
+		enginePaused:        resp.Data.EnginePaused,
+		enhancedModeEnabled: resp.Data.EnhancedModeEnabled,
+	}
+
+	if policy, ok := resp.Data.Policies["standard"]; ok {
+		state.standard = policyConfigFrom(policy)
+	}
+	if policy, ok := resp.Data.Policies["enhanced"]; ok {
+		state.enhanced = policyConfigFrom(policy)
+	}
+
+	return state
+}
+
+func policyConfigFrom(policy api.Policy) policyConfig {
+	return policyConfig{
+		Enabled:                    policy.Enabled,
+		DNSTimeoutMs:               policy.DNSTimeoutMs,
+		SMTPConnectTimeoutMs:       policy.SMTPConnectTimeoutMs,
+		SMTPReadTimeoutMs:          policy.SMTPReadTimeoutMs,
+		MaxMXAttempts:              policy.MaxMXAttempts,
+		MaxConcurrencyDefault:      policy.MaxConcurrencyDefault,
+		PerDomainConcurrency:       policy.PerDomainConcurrency,
+		GlobalConnectsPerMinute:    policy.GlobalConnectsPerMinute,
+		TempfailBackoffSeconds:     policy.TempfailBackoffSeconds,
+		CircuitBreakerTempfailRate: policy.CircuitBreakerTempfailRate,
+	}
+}
+
+func (w *Worker) enginePaused() bool {
+	state := w.policySnapshot()
+	if !state.loaded {
+		return false
+	}
+
+	return state.enginePaused
+}
+
+func (w *Worker) policyEnhancedAllowed() bool {
+	state := w.policySnapshot()
+	if !state.loaded {
+		return false
+	}
+
+	return state.enhancedModeEnabled
+}
+
+func (w *Worker) policyForMode(mode string) (policyConfig, bool) {
+	state := w.policySnapshot()
+	if !state.loaded {
+		return policyConfig{}, false
+	}
+
+	if mode == "enhanced" {
+		return state.enhanced, true
+	}
+
+	return state.standard, true
+}
+
+func (w *Worker) policySnapshot() policyState {
+	w.policyMu.RLock()
+	defer w.policyMu.RUnlock()
+
+	return w.policy
+}
+
+func (w *Worker) verifierForMode(mode string, policy policyConfig, hasPolicy bool) verifier.Verifier {
+	config := w.cfg.BaseVerifierConfig
+
+	if hasPolicy {
+		config = applyPolicy(config, policy)
+	}
+
+	return verifier.NewPipelineVerifier(config, verifier.NetMXResolver{}, nil)
+}
+
+func applyPolicy(config verifier.Config, policy policyConfig) verifier.Config {
+	if policy.DNSTimeoutMs > 0 {
+		config.DNSTimeout = policy.DNSTimeoutMs
+	}
+	if policy.SMTPConnectTimeoutMs > 0 {
+		config.SMTPConnectTimeout = policy.SMTPConnectTimeoutMs
+	}
+	if policy.SMTPReadTimeoutMs > 0 {
+		config.SMTPReadTimeout = policy.SMTPReadTimeoutMs
+	}
+	if policy.MaxMXAttempts > 0 {
+		config.MaxMXAttempts = policy.MaxMXAttempts
+	}
+	if policy.PerDomainConcurrency > 0 {
+		config.PerDomainConcurrency = policy.PerDomainConcurrency
+	}
+	if policy.GlobalConnectsPerMinute != nil {
+		config.SMTPRateLimitPerMinute = *policy.GlobalConnectsPerMinute
+	}
+	if policy.TempfailBackoffSeconds != nil {
+		config.BackoffBaseMs = *policy.TempfailBackoffSeconds * 1000
+	}
+
+	return config
+}
+
+func (w *Worker) updateMaxConcurrency(state policyState) {
+	max := w.cfg.MaxConcurrency
+	if max < 1 {
+		max = 1
+	}
+
+	if state.loaded {
+		if state.standard.MaxConcurrencyDefault > 0 {
+			max = state.standard.MaxConcurrencyDefault
+		}
+
+		if state.enhanced.MaxConcurrencyDefault > 0 {
+			max = minInt(max, state.enhanced.MaxConcurrencyDefault)
+		}
+	}
+
+	if max < 1 {
+		max = 1
+	}
+
+	atomic.StoreInt64(&w.maxConcurrency, int64(max))
+}
+
+func (w *Worker) activeCount() int64 {
+	return atomic.LoadInt64(&w.active)
+}
+
+func (w *Worker) currentMaxConcurrency() int64 {
+	return atomic.LoadInt64(&w.maxConcurrency)
+}
+
+func (w *Worker) incrementActive() {
+	atomic.AddInt64(&w.active, 1)
+}
+
+func (w *Worker) decrementActive() {
+	atomic.AddInt64(&w.active, -1)
+}
+
+func minInt(a, b int) int {
+	if a == 0 {
+		return b
+	}
+	if b == 0 {
+		return a
+	}
+	if a < b {
+		return a
+	}
+
+	return b
 }
 
 func normalizeVerificationMode(value string) string {

@@ -56,6 +56,12 @@ Laravel prepares work for the deep verification engine by parsing, deduping, and
 - Rate limits: `engine.feedback_rate_limit_per_minute`.
 - Payload limits: `engine.feedback_max_items_per_request`, `engine.feedback_max_payload_kb`.
 - Retention jobs prune outcomes (`engine.feedback_retention_days`) and imports (`engine.feedback_import_retention_days`).
+
+## Phase 13 — Engine Policy & Fleet Controls
+- Verification policies stored per mode (standard/enhanced) with timeouts, concurrency, and throttles.
+- Global engine settings: `engine_paused` and `enhanced_mode_enabled`.
+- Policy endpoint (`GET /api/verifier/policy`) supports worker refresh without redeploy.
+- Fleet safety controls: disable/drain engine servers, visible in the admin portal.
 3) **Chunk Creation (pending for workers)**
    - Unknown emails are written to chunk files on the configured disk.
    - Chunk keys: `chunks/{job_uuid}/{chunk_no}/input.txt`.

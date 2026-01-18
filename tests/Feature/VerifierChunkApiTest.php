@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\VerificationJob;
 use App\Models\VerificationJobChunk;
 use App\Models\EngineServer;
+use App\Models\EngineSetting;
 use App\Support\Roles;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -212,6 +213,7 @@ class VerifierChunkApiTest extends TestCase
     public function test_claim_next_returns_single_chunk_and_leases(): void
     {
         $this->actingAsVerifier();
+        EngineSetting::query()->update(['engine_paused' => false]);
 
         $job = $this->makeJob();
         $chunk = $this->makeChunk($job, [
@@ -257,5 +259,35 @@ class VerifierChunkApiTest extends TestCase
             ],
             'worker_id' => 'worker-1',
         ])->assertNoContent();
+    }
+
+    public function test_engine_paused_blocks_claim_next(): void
+    {
+        $this->actingAsVerifier();
+
+        EngineSetting::query()->update(['engine_paused' => true]);
+
+        $job = $this->makeJob();
+        $chunk = $this->makeChunk($job, [
+            'status' => 'pending',
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+        ]);
+
+        $this->postJson(route('api.verifier.chunks.claim-next'), [
+            'engine_server' => [
+                'name' => 'engine-paused',
+                'ip_address' => '127.0.0.2',
+                'environment' => 'test',
+                'region' => 'local',
+            ],
+            'worker_id' => 'worker-paused',
+        ])->assertNoContent();
+
+        $chunk->refresh();
+        $this->assertSame('pending', $chunk->status);
+        $this->assertNull($chunk->claim_expires_at);
+        $this->assertNull($chunk->assigned_worker_id);
     }
 }

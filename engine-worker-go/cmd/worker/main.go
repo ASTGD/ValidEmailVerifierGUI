@@ -29,6 +29,7 @@ func main() {
 	pollInterval := time.Duration(envInt("POLL_INTERVAL_SECONDS", 5)) * time.Second
 	heartbeatInterval := time.Duration(envInt("HEARTBEAT_INTERVAL_SECONDS", 30)) * time.Second
 	maxConcurrency := envInt("MAX_CONCURRENCY", 1)
+	policyRefresh := time.Duration(envInt("POLICY_REFRESH_SECONDS", 300)) * time.Second
 	heloName := envOr("HELO_NAME", hostname())
 	dnsTimeout := envInt("DNS_TIMEOUT_MS", 2000)
 	smtpConnectTimeout := envInt("SMTP_CONNECT_TIMEOUT_MS", 2000)
@@ -71,15 +72,14 @@ func main() {
 		DomainTypos:             domainTypos,
 	}
 
-	v := verifier.NewPipelineVerifier(verifierConfig, verifier.NetMXResolver{}, nil)
-
 	cfg := worker.Config{
-		PollInterval:      pollInterval,
-		HeartbeatInterval: heartbeatInterval,
-		LeaseSeconds:      leaseSeconds,
-		MaxConcurrency:    maxConcurrency,
-		WorkerID:          workerID,
-		Verifier:          v,
+		PollInterval:       pollInterval,
+		HeartbeatInterval:  heartbeatInterval,
+		LeaseSeconds:       leaseSeconds,
+		MaxConcurrency:     maxConcurrency,
+		PolicyRefresh:      policyRefresh,
+		WorkerID:           workerID,
+		BaseVerifierConfig: verifierConfig,
 		Server: api.EngineServerPayload{
 			Name:        serverName,
 			IPAddress:   serverIP,

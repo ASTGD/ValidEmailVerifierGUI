@@ -7,6 +7,7 @@ use App\Enums\VerificationMode;
 use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
+use App\Support\EngineSettings;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
@@ -46,7 +47,7 @@ class Upload extends Component
     public function save(JobStorage $storage)
     {
         $this->validate();
-        $enhancedEnabled = (bool) config('engine.enhanced_mode_enabled', false);
+        $enhancedEnabled = EngineSettings::enhancedModeEnabled();
 
         if (! $enhancedEnabled && $this->verification_mode === VerificationMode::Enhanced->value) {
             $this->addError('verification_mode', __('Enhanced mode is coming soon.'));
