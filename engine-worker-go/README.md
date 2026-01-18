@@ -7,6 +7,9 @@ This worker pulls chunks from the Laravel API, downloads inputs via signed URLs,
 - Laravel API running with verifier endpoints enabled
 - A Sanctum token for a `verifier-service` user
 
+## Token safety
+Never paste tokens into chat or commit them to git. Use environment variables or a secrets manager when running the worker.
+
 ## Configuration (env)
 - `ENGINE_API_BASE_URL` (required) — e.g. `http://localhost:8082`
 - `ENGINE_API_TOKEN` (required) — Sanctum token for verifier-service
@@ -37,6 +40,24 @@ ENGINE_API_BASE_URL=http://localhost:8082 \
 ENGINE_API_TOKEN=... \
 ENGINE_SERVER_IP=127.0.0.1 \
 go run ./cmd/worker
+```
+
+## Docker build + run
+Build:
+```bash
+docker build -t engine-worker-go ./engine-worker-go
+```
+
+Run (env vars required):
+```bash
+docker run --rm \
+  -e ENGINE_API_BASE_URL=http://localhost:8082 \
+  -e ENGINE_API_TOKEN=... \
+  -e ENGINE_SERVER_IP=127.0.0.1 \
+  -e ENGINE_SERVER_NAME=worker-local \
+  -e ENGINE_SERVER_ENV=local \
+  -e ENGINE_SERVER_REGION=local \
+  engine-worker-go
 ```
 
 ## Getting a verifier-service token

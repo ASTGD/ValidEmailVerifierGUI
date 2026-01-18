@@ -1,0 +1,32 @@
+name: Engine Worker (Go)
+
+on:
+  push:
+    paths:
+      - "engine-worker-go/**"
+      - ".github/workflows/engine-worker-go.yml"
+  pull_request:
+    paths:
+      - "engine-worker-go/**"
+      - ".github/workflows/engine-worker-go.yml"
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine-worker-go
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+
+      - name: Gofmt check
+        run: test -z "$(gofmt -l .)"
+
+      - name: Go test
+        run: go test ./...

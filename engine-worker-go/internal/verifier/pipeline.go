@@ -1,237 +1,237 @@
 package verifier
 
 import (
-    "context"
-    "errors"
-    "net"
-    "sort"
-    "strings"
-    "time"
+	"context"
+	"errors"
+	"net"
+	"sort"
+	"strings"
+	"time"
 )
 
 type PipelineVerifier struct {
-    resolver      MXResolver
-    smtpChecker   SMTPChecker
-    limiter       *DomainLimiter
-    rateLimiter   *RateLimiter
-    config        Config
+	resolver    MXResolver
+	smtpChecker SMTPChecker
+	limiter     *DomainLimiter
+	rateLimiter *RateLimiter
+	config      Config
 }
 
 func NewPipelineVerifier(config Config, resolver MXResolver, smtpChecker SMTPChecker) *PipelineVerifier {
-    limiter := NewDomainLimiter(config.PerDomainConcurrency)
-    rateLimiter := NewRateLimiter(config.SMTPRateLimitPerMinute)
+	limiter := NewDomainLimiter(config.PerDomainConcurrency)
+	rateLimiter := NewRateLimiter(config.SMTPRateLimitPerMinute)
 
-    if smtpChecker == nil {
-        smtpChecker = NetSMTPChecker{
-            Dialer:         nil,
-            ConnectTimeout: time.Duration(config.SMTPConnectTimeout) * time.Millisecond,
-            ReadTimeout:    time.Duration(config.SMTPReadTimeout) * time.Millisecond,
-            EhloTimeout:    time.Duration(config.SMTPEhloTimeout) * time.Millisecond,
-            HeloName:       config.HeloName,
-            RateLimiter:    rateLimiter,
-        }
-    }
+	if smtpChecker == nil {
+		smtpChecker = NetSMTPChecker{
+			Dialer:         nil,
+			ConnectTimeout: time.Duration(config.SMTPConnectTimeout) * time.Millisecond,
+			ReadTimeout:    time.Duration(config.SMTPReadTimeout) * time.Millisecond,
+			EhloTimeout:    time.Duration(config.SMTPEhloTimeout) * time.Millisecond,
+			HeloName:       config.HeloName,
+			RateLimiter:    rateLimiter,
+		}
+	}
 
-    return &PipelineVerifier{
-        resolver:    resolver,
-        smtpChecker: smtpChecker,
-        limiter:     limiter,
-        rateLimiter: rateLimiter,
-        config:      config,
-    }
+	return &PipelineVerifier{
+		resolver:    resolver,
+		smtpChecker: smtpChecker,
+		limiter:     limiter,
+		rateLimiter: rateLimiter,
+		config:      config,
+	}
 }
 
 func (p *PipelineVerifier) Verify(ctx context.Context, email string) Result {
-    normalized := normalizeEmail(email)
-    if normalized == "" || !strings.Contains(normalized, "@") {
-        return Result{Category: CategoryInvalid, Reason: "syntax"}
-    }
+	normalized := normalizeEmail(email)
+	if normalized == "" || !strings.Contains(normalized, "@") {
+		return Result{Category: CategoryInvalid, Reason: "syntax"}
+	}
 
-    parts := strings.SplitN(normalized, "@", 2)
-    if len(parts) != 2 || parts[1] == "" {
-        return Result{Category: CategoryInvalid, Reason: "syntax"}
-    }
+	parts := strings.SplitN(normalized, "@", 2)
+	if len(parts) != 2 || parts[1] == "" {
+		return Result{Category: CategoryInvalid, Reason: "syntax"}
+	}
 
-    domain := strings.ToLower(strings.TrimSpace(parts[1]))
-    if domain == "" {
-        return Result{Category: CategoryInvalid, Reason: "syntax"}
-    }
+	domain := strings.ToLower(strings.TrimSpace(parts[1]))
+	if domain == "" {
+		return Result{Category: CategoryInvalid, Reason: "syntax"}
+	}
 
-    mxRecords, dnsResult := p.lookupMX(ctx, domain)
-    if dnsResult.Reason != "" {
-        return dnsResult
-    }
-    if len(mxRecords) == 0 {
-        return Result{Category: CategoryInvalid, Reason: "mx_missing"}
-    }
+	mxRecords, dnsResult := p.lookupMX(ctx, domain)
+	if dnsResult.Reason != "" {
+		return dnsResult
+	}
+	if len(mxRecords) == 0 {
+		return Result{Category: CategoryInvalid, Reason: "mx_missing"}
+	}
 
-    sort.Slice(mxRecords, func(i, j int) bool {
-        return mxRecords[i].Pref < mxRecords[j].Pref
-    })
+	sort.Slice(mxRecords, func(i, j int) bool {
+		return mxRecords[i].Pref < mxRecords[j].Pref
+	})
 
-    return p.checkSMTP(ctx, domain, mxRecords)
+	return p.checkSMTP(ctx, domain, mxRecords)
 }
 
 func (p *PipelineVerifier) lookupMX(ctx context.Context, domain string) ([]*net.MX, Result) {
-    if p.resolver == nil {
-        p.resolver = NetMXResolver{}
-    }
+	if p.resolver == nil {
+		p.resolver = NetMXResolver{}
+	}
 
-    timeout := time.Duration(p.config.DNSTimeout) * time.Millisecond
-    if timeout <= 0 {
-        timeout = 2 * time.Second
-    }
+	timeout := time.Duration(p.config.DNSTimeout) * time.Millisecond
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
 
-    retries := maxInt(0, p.config.RetryableNetworkRetries)
+	retries := maxInt(0, p.config.RetryableNetworkRetries)
 
-    var lastErr error
-    for attempt := 0; attempt <= retries; attempt++ {
-        lookupCtx, cancel := context.WithTimeout(ctx, timeout)
-        records, err := p.resolver.LookupMX(lookupCtx, domain)
-        cancel()
+	var lastErr error
+	for attempt := 0; attempt <= retries; attempt++ {
+		lookupCtx, cancel := context.WithTimeout(ctx, timeout)
+		records, err := p.resolver.LookupMX(lookupCtx, domain)
+		cancel()
 
-        if err == nil {
-            return records, Result{}
-        }
+		if err == nil {
+			return records, Result{}
+		}
 
-        lastErr = err
-        if !isRetryableDNSError(err) || attempt == retries {
-            return nil, classifyDNSError(err)
-        }
+		lastErr = err
+		if !isRetryableDNSError(err) || attempt == retries {
+			return nil, classifyDNSError(err)
+		}
 
-        backoffSleep(ctx, p.config.BackoffBaseMs, attempt)
-    }
+		backoffSleep(ctx, p.config.BackoffBaseMs, attempt)
+	}
 
-    if lastErr != nil {
-        return nil, classifyDNSError(lastErr)
-    }
+	if lastErr != nil {
+		return nil, classifyDNSError(lastErr)
+	}
 
-    return nil, Result{}
+	return nil, Result{}
 }
 
 func (p *PipelineVerifier) checkSMTP(ctx context.Context, domain string, mxRecords []*net.MX) Result {
-    maxAttempts := p.config.MaxMXAttempts
-    if maxAttempts <= 0 {
-        maxAttempts = 2
-    }
+	maxAttempts := p.config.MaxMXAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = 2
+	}
 
-    var best Result
+	var best Result
 
-    for i, mx := range mxRecords {
-        if i >= maxAttempts {
-            break
-        }
+	for i, mx := range mxRecords {
+		if i >= maxAttempts {
+			break
+		}
 
-        host := strings.TrimSuffix(mx.Host, ".")
-        attemptResult := p.checkSMTPHost(ctx, domain, host)
+		host := strings.TrimSuffix(mx.Host, ".")
+		attemptResult := p.checkSMTPHost(ctx, domain, host)
 
-        if attemptResult.Category == CategoryValid {
-            return attemptResult
-        }
+		if attemptResult.Category == CategoryValid {
+			return attemptResult
+		}
 
-        if best.Category == "" || rankCategory(attemptResult.Category) > rankCategory(best.Category) {
-            best = attemptResult
-        }
-    }
+		if best.Category == "" || rankCategory(attemptResult.Category) > rankCategory(best.Category) {
+			best = attemptResult
+		}
+	}
 
-    if best.Category == "" {
-        return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
-    }
+	if best.Category == "" {
+		return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
+	}
 
-    return best
+	return best
 }
 
 func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host string) Result {
-    limiterRelease, err := p.limiter.Acquire(ctx, domain)
-    if err != nil {
-        return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
-    }
-    defer limiterRelease()
+	limiterRelease, err := p.limiter.Acquire(ctx, domain)
+	if err != nil {
+		return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
+	}
+	defer limiterRelease()
 
-    retries := maxInt(0, p.config.RetryableNetworkRetries)
+	retries := maxInt(0, p.config.RetryableNetworkRetries)
 
-    var last Result
+	var last Result
 
-    for attempt := 0; attempt <= retries; attempt++ {
-        result := p.smtpChecker.Check(ctx, host)
+	for attempt := 0; attempt <= retries; attempt++ {
+		result := p.smtpChecker.Check(ctx, host)
 
-        if result.Category == CategoryValid {
-            return result
-        }
+		if result.Category == CategoryValid {
+			return result
+		}
 
-        last = result
+		last = result
 
-        if !isRetryableSMTPResult(result) || attempt == retries {
-            return result
-        }
+		if !isRetryableSMTPResult(result) || attempt == retries {
+			return result
+		}
 
-        backoffSleep(ctx, p.config.BackoffBaseMs, attempt)
-    }
+		backoffSleep(ctx, p.config.BackoffBaseMs, attempt)
+	}
 
-    if last.Category == "" {
-        return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
-    }
+	if last.Category == "" {
+		return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
+	}
 
-    return last
+	return last
 }
 
 func normalizeEmail(email string) string {
-    return strings.TrimSpace(strings.ToLower(email))
+	return strings.TrimSpace(strings.ToLower(email))
 }
 
 func isRetryableDNSError(err error) bool {
-    var netErr net.Error
-    if errors.As(err, &netErr) {
-        return netErr.Timeout()
-    }
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return netErr.Timeout()
+	}
 
-    if strings.Contains(strings.ToLower(err.Error()), "servfail") {
-        return true
-    }
+	if strings.Contains(strings.ToLower(err.Error()), "servfail") {
+		return true
+	}
 
-    return false
+	return false
 }
 
 func isRetryableSMTPResult(result Result) bool {
-    switch result.Reason {
-    case "smtp_timeout", "smtp_connect_timeout", "smtp_tempfail":
-        return true
-    default:
-        return false
-    }
+	switch result.Reason {
+	case "smtp_timeout", "smtp_connect_timeout", "smtp_tempfail":
+		return true
+	default:
+		return false
+	}
 }
 
 func backoffSleep(ctx context.Context, baseMs int, attempt int) {
-    if baseMs <= 0 {
-        baseMs = 200
-    }
+	if baseMs <= 0 {
+		baseMs = 200
+	}
 
-    delay := time.Duration(baseMs*(attempt+1)) * time.Millisecond
-    timer := time.NewTimer(delay)
-    defer timer.Stop()
+	delay := time.Duration(baseMs*(attempt+1)) * time.Millisecond
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
 
-    select {
-    case <-ctx.Done():
-    case <-timer.C:
-    }
+	select {
+	case <-ctx.Done():
+	case <-timer.C:
+	}
 }
 
 func rankCategory(category string) int {
-    switch category {
-    case CategoryValid:
-        return 3
-    case CategoryRisky:
-        return 2
-    case CategoryInvalid:
-        return 1
-    default:
-        return 0
-    }
+	switch category {
+	case CategoryValid:
+		return 3
+	case CategoryRisky:
+		return 2
+	case CategoryInvalid:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func maxInt(a, b int) int {
-    if a > b {
-        return a
-    }
-    return b
+	if a > b {
+		return a
+	}
+	return b
 }
