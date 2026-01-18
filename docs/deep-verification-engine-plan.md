@@ -9,6 +9,23 @@ Laravel is the control plane only:
 - **No MX/DNS/SMTP verification is performed in Laravel.**
 - Deep verification (MX/DNS/SMTP) happens exclusively in external engine workers.
 
+## Verification Modes
+Two verification modes are supported at the product level:
+- **Standard (default):** uses Signal Groups 1–4.
+- **Enhanced (opt-in):** mailbox-level signals (TBD), guarded and auditable. Pricing is TBD.
+
+Enhanced mode is a separate opt-in pathway exposed in the Admin + Customer portals. It must be explicitly enabled and is not part of the default verification flow.
+
+## Signal Groups 1–4 (Standard)
+- **SG1 Domain health:** DNS/MX availability and domain-level health signals.
+- **SG2 SMTP connectivity/policy:** EHLO + QUIT connectivity checks (no mailbox probing).
+- **SG3 Enrichment:** role/disposable/typo/IDN heuristics and enrichment.
+- **SG4 Feedback loop + cache:** NoSQL cache freshness and historical feedback signals.
+
+## Portal Placement (Design)
+- **Customer portal:** mode selector on upload/checkout (plan-gated).
+- **Admin portal:** mode policy + per-job override + audit logs for mode changes.
+
 ## Entities (Laravel)
 - **VerificationJob**: the unit of work for email verification.
 - **VerificationJobChunk**: chunked input units created by the Laravel pipeline.
@@ -55,7 +72,7 @@ Before SMTP workers go live, admins need clear visibility and safe controls:
 Workers poll `claim-next`, download inputs via signed URLs, generate mock outputs, upload via signed PUT URLs, and call `complete`/`fail`. No SMTP logic is executed in Laravel or in this phase.
 
 ## Phase 8B — Worker Pull (Connectivity Verification)
-Workers perform **DNS/MX + SMTP connectivity** checks only (EHLO + QUIT), with strict throttling and timeouts. No RCPT probing is performed. Classification uses reason codes:
+Workers perform **DNS/MX + SMTP connectivity** checks only (EHLO + QUIT), with strict throttling and timeouts. No RCPT probing is performed. This is the **SG2 portion of Standard** and is currently implemented. Classification uses reason codes:
 - valid: `smtp_connect_ok`
 - invalid: `syntax`, `mx_missing`, `smtp_unavailable`
 - risky: `dns_timeout`, `dns_servfail`, `smtp_connect_timeout`, `smtp_timeout`, `smtp_tempfail`

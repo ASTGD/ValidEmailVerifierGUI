@@ -25,6 +25,16 @@ This contract defines the language-agnostic API that deep verification workers (
 - Laravel performs only parsing, normalization, dedupe, cache lookups, chunking, and final merge.
 - **MX/DNS/SMTP checks are never performed by Laravel** and must be done by the external engine workers.
 
+## Verification Modes
+Workers must honor the `verification_mode` supplied by Laravel:
+- `standard` (default): Signal Groups 1–4.
+- `enhanced` (opt-in): mailbox-level signals (TBD), guarded and auditable.
+
+Guardrails for `enhanced` mode (design-level):
+- Opt-in only (plan-gated) with explicit audit logs.
+- Strict rate limits and safety thresholds.
+- Kill switch available to admins to disable enhanced mode globally.
+
 ## Connectivity-Based Classification (Phase 8B)
 In Phase 8B the worker performs **DNS/MX + SMTP connectivity checks** (EHLO + QUIT only). No mailbox-level RCPT probing is performed.
 
@@ -130,6 +140,7 @@ Response:
     "chunk_id": "uuid",
     "job_id": "uuid",
     "chunk_no": 1,
+    "verification_mode": "standard",
     "lease_expires_at": "2026-01-14T10:10:00Z",
     "input": { "disk": "s3", "key": "chunks/{job}/{chunk}/input.txt" }
   }
@@ -152,6 +163,7 @@ Response:
     "chunk_no": 1,
     "status": "pending",
     "attempts": 0,
+    "verification_mode": "standard",
     "input": { "disk": "s3", "key": "chunks/{job}/{chunk}/input.txt" },
     "output": {
       "disk": "s3",
