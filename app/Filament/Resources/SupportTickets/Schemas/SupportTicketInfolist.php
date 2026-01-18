@@ -48,19 +48,28 @@ class SupportTicketInfolist
                     ])->columns(4),
 
                 Section::make('Customer Context')
+                    ->collapsed() // Keeps page clean
                     ->schema([
-                        TextEntry::make('user.name')->label('Account Name')->icon('heroicon-m-user'),
+                        TextEntry::make('user.name')
+                            ->label('Account Name')
+                            ->icon('heroicon-m-user')
+                            ->url(fn ($record) => route('filament.admin.resources.customers.index', [
+                                'tableSearch' => $record->user->email,
+                            ]))
+                            ->openUrlInNewTab()
+                            ->color('primary')
+                            ->weight('bold'),
                         TextEntry::make('user.email')->label('Email Address')->icon('heroicon-m-envelope')->copyable(),
                         TextEntry::make('created_at')->label('Date Opened')->dateTime('M d, Y (H:i)'),
                         TextEntry::make('updated_at')->label('Last Activity')->since(),
                     ])->columns(4),
 
-                // Section::make('Initial Customer Request')
-                //     ->collapsed() // Keeps page clean
-                //     ->schema([
-                //         TextEntry::make('subject')->weight('bold')->size('lg'),
-                //         TextEntry::make('message')->label('Original Content')->prose()->markdown(),
-                //     ]),
+                Section::make('Initial Customer Request')
+                    ->collapsed() // Keeps page clean
+                    ->schema([
+                        TextEntry::make('subject')->weight('bold')->size('lg'),
+                        TextEntry::make('message')->label('Original Content')->prose()->markdown(),
+                    ]),
             ]);
     }
 }

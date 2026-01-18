@@ -85,4 +85,14 @@ class MessagesRelationManager extends RelationManager
                     ])),
             ]);
     }
+    public function isCollapsible(): bool
+    {
+        return true;
+    }
+
+    // Optional: Starts the page with this section closed
+    public function isCollapsedByDefault(): bool
+    {
+        return true;
+    }
 }
