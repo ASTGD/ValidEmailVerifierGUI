@@ -42,6 +42,12 @@ Ingestion:
 - Admin CSV import (Filament “Feedback Imports”).
 - Optional API: `POST /api/feedback/outcomes` (auth:sanctum + admin/service token).
 
+Safety controls:
+- Kill switch: `engine.feedback_api_enabled` disables the API.
+- Rate limiting: `engine.feedback_rate_limit_per_minute`.
+- Payload limits: `engine.feedback_max_items_per_request` and `engine.feedback_max_payload_kb`.
+- Retention: outcomes pruned after `engine.feedback_retention_days`, imports pruned after `engine.feedback_import_retention_days`.
+
 ## Verification Modes
 Workers must honor the `verification_mode` supplied by Laravel:
 - `standard` (default): Signal Groups 1–4.
