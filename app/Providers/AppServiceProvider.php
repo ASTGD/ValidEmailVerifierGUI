@@ -6,6 +6,8 @@ use App\Contracts\EmailVerificationCacheStore;
 use App\Contracts\EngineStorageUrlSigner;
 use App\Models\VerificationJob;
 use App\Policies\VerificationJobPolicy;
+use App\Services\EmailVerificationCache\DatabaseEmailVerificationCacheStore;
+use App\Services\EmailVerificationCache\NullCacheStore;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
@@ -24,7 +26,15 @@ class AppServiceProvider extends ServiceProvider
         Cashier::ignoreRoutes();
 
         $this->app->bind(EmailVerificationCacheStore::class, function ($app) {
-            $storeClass = (string) config('verifier.cache_store');
+            $driver = config('engine.cache_store_driver');
+
+            $storeClass = match ($driver) {
+                'database' => DatabaseEmailVerificationCacheStore::class,
+                'dynamodb' => NullCacheStore::class,
+                'null' => NullCacheStore::class,
+                null => config('verifier.cache_store', NullCacheStore::class),
+                default => (string) $driver,
+            };
 
             return $app->make($storeClass);
         });
