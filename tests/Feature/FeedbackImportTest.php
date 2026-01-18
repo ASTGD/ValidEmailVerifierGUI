@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\ImportEmailVerificationOutcomesFromCsv;
 use App\Models\EmailVerificationOutcome;
+use App\Models\EmailVerificationOutcomeIngestion;
 use App\Models\EmailVerificationOutcomeImport;
 use App\Models\User;
 use App\Support\EmailHashing;
@@ -54,5 +55,13 @@ class FeedbackImportTest extends TestCase
         ]);
 
         $this->assertSame(1, EmailVerificationOutcome::query()->count());
+        $this->assertDatabaseHas('email_verification_outcome_ingestions', [
+            'type' => 'import',
+            'import_id' => $import->id,
+            'item_count' => 2,
+            'imported_count' => 1,
+            'skipped_count' => 1,
+        ]);
+        $this->assertSame(1, EmailVerificationOutcomeIngestion::query()->count());
     }
 }
