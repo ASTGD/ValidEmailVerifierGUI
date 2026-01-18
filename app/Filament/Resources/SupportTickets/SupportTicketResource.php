@@ -16,6 +16,8 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use UnitEnum;
+use Filament\Actions\Action;
+use App\Enums\SupportTicketStatus;
 
 class SupportTicketResource extends Resource
 {
@@ -42,6 +44,12 @@ class SupportTicketResource extends Resource
     public static function table(Table $table): Table
     {
         return SupportTicketsTable::configure($table);
+    }
+    public static function getRelations(): array
+    {
+        return [
+            \App\Filament\Resources\SupportTickets\RelationManagers\MessagesRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

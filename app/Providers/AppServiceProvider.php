@@ -41,7 +41,11 @@ class AppServiceProvider extends ServiceProvider
     {
         Gate::policy(VerificationJob::class, VerificationJobPolicy::class);
 
-        if (app()->environment(['local', 'testing']) && ! app()->runningInConsole()) {
+        \App\Models\SupportTicket::observe(\App\Observers\SupportTicketObserver::class);
+        \App\Models\SupportMessage::observe(\App\Observers\SupportMessageObserver::class);
+
+
+        if (app()->environment(['local', 'testing']) && !app()->runningInConsole()) {
             $hotFile = public_path('hot');
 
             if (File::exists($hotFile)) {
@@ -49,7 +53,7 @@ class AppServiceProvider extends ServiceProvider
                 $host = $hotUrl !== '' ? parse_url($hotUrl, PHP_URL_HOST) : null;
                 $port = $hotUrl !== '' ? parse_url($hotUrl, PHP_URL_PORT) : null;
 
-                if (! $host || ! $port) {
+                if (!$host || !$port) {
                     File::delete($hotFile);
                     return;
                 }
@@ -67,14 +71,14 @@ class AppServiceProvider extends ServiceProvider
 
                 $connection = @fsockopen($host, $port, $errno, $errstr, 0.2);
 
-                if (! is_resource($connection)) {
+                if (!is_resource($connection)) {
                     File::delete($hotFile);
                     return;
                 }
 
                 fclose($connection);
 
-                $clientUrl = rtrim($hotUrl, '/').'/@vite/client';
+                $clientUrl = rtrim($hotUrl, '/') . '/@vite/client';
                 $context = stream_context_create([
                     'http' => [
                         'timeout' => 0.4,
@@ -82,7 +86,7 @@ class AppServiceProvider extends ServiceProvider
                 ]);
                 $clientResponse = @file_get_contents($clientUrl, false, $context);
 
-                if ($clientResponse === false || ! str_contains($clientResponse, 'import.meta.hot')) {
+                if ($clientResponse === false || !str_contains($clientResponse, 'import.meta.hot')) {
                     File::delete($hotFile);
                 }
             }
@@ -92,7 +96,7 @@ class AppServiceProvider extends ServiceProvider
             $limit = (int) config('verifier.api_rate_limit_per_minute', 120);
             $key = $request->user()?->id ?: $request->ip();
 
-            return Limit::perMinute($limit)->by('verifier-api|'.$key);
+            return Limit::perMinute($limit)->by('verifier-api|' . $key);
         });
     }
 }

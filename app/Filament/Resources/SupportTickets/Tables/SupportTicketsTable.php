@@ -17,15 +17,24 @@ class SupportTicketsTable
         return $table
             ->defaultSort('created_at', 'desc')
             ->columns([
-                TextColumn::make('id')
-                    ->label('Ticket')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                // ADDED AS THE FIRST COLUMN
+                TextColumn::make('ticket_number')
+                    ->label('ID')
+                    ->searchable()
+                    ->sortable()
+                    ->fontFamily('mono') // Industry standard for IDs
+                    ->weight('bold')
+                    ->color('primary'), // Matches your brand blue
+
                 TextColumn::make('subject')
                     ->label('Subject')
-                    ->searchable(),
+                    ->searchable()
+                    ->limit(40),
+
                 TextColumn::make('user.email')
-                    ->label('Customer')
+                    ->label('Requestor')
                     ->searchable(),
+
                 TextColumn::make('status')
                     ->label('Status')
                     ->badge()
@@ -33,12 +42,10 @@ class SupportTicketsTable
                         if ($state instanceof SupportTicketStatus) {
                             return $state->label();
                         }
-
                         return ucfirst((string) $state);
                     })
                     ->color(function ($state): string {
                         $value = $state instanceof SupportTicketStatus ? $state->value : (string) $state;
-
                         return match ($value) {
                             SupportTicketStatus::Open->value => 'info',
                             SupportTicketStatus::Pending->value => 'warning',
@@ -46,37 +53,31 @@ class SupportTicketsTable
                             default => 'gray',
                         };
                     }),
+
                 TextColumn::make('priority')
                     ->label('Priority')
                     ->badge()
                     ->formatStateUsing(function ($state): string {
-                        if (empty($state)) {
-                            return '-';
-                        }
-
-                        if ($state instanceof SupportTicketPriority) {
-                            return $state->label();
-                        }
-
+                        if (empty($state)) return '-';
+                        if ($state instanceof SupportTicketPriority) return $state->label();
                         return ucfirst((string) $state);
                     })
                     ->color(function ($state): string {
-                        if (empty($state)) {
-                            return 'gray';
-                        }
-
+                        if (empty($state)) return 'gray';
                         $value = $state instanceof SupportTicketPriority ? $state->value : (string) $state;
-
                         return match ($value) {
-                            SupportTicketPriority::High->value => 'danger',
+                            SupportTicketPriority::Urgent->value => 'danger',
+                            SupportTicketPriority::High->value => 'warning',
                             SupportTicketPriority::Normal->value => 'info',
                             SupportTicketPriority::Low->value => 'gray',
                             default => 'gray',
                         };
                     }),
+
                 TextColumn::make('assignedTo.email')
                     ->label('Assigned to')
                     ->toggleable(),
+
                 TextColumn::make('updated_at')
                     ->label('Updated')
                     ->dateTime()
@@ -101,22 +102,18 @@ class SupportTicketsTable
     private static function statusOptions(): array
     {
         $options = [];
-
         foreach (SupportTicketStatus::cases() as $status) {
             $options[$status->value] = $status->label();
         }
-
         return $options;
     }
 
     private static function priorityOptions(): array
     {
         $options = [];
-
         foreach (SupportTicketPriority::cases() as $priority) {
             $options[$priority->value] = $priority->label();
         }
-
         return $options;
     }
 }

@@ -7,6 +7,7 @@ enum SupportTicketPriority: string
     case Low = 'low';
     case Normal = 'normal';
     case High = 'high';
+    case Urgent = 'Urgent';
 
     public function label(): string
     {
@@ -14,6 +15,7 @@ enum SupportTicketPriority: string
             self::Low => 'Low',
             self::Normal => 'Normal',
             self::High => 'High',
+            self::Urgent => 'Urgent',
         };
     }
 }

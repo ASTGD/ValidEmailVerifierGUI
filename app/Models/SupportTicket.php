@@ -6,22 +6,23 @@ use App\Enums\SupportTicketPriority;
 use App\Enums\SupportTicketStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SupportTicket extends Model
 {
     protected $fillable = [
         'user_id',
-        'assigned_to',
+        'ticket_number',
         'subject',
-        'message',
+        'category',
         'status',
         'priority',
         'closed_at',
     ];
 
     protected $casts = [
-        'status' => SupportTicketStatus::class,
-        'priority' => SupportTicketPriority::class,
+        'status' => \App\Enums\SupportTicketStatus::class,
+        'priority' => \App\Enums\SupportTicketPriority::class,
         'closed_at' => 'datetime',
     ];
 
@@ -33,5 +34,36 @@ class SupportTicket extends Model
     public function assignedTo(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    /**
+     * Relationship to the chat messages.
+     */
+    public function messages(): HasMany
+    {
+        return $this->hasMany(SupportMessage::class);
+    }
+
+    /**
+     * Auto-generate a ticket number when creating.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+        static::creating(function ($model) {
+            $model->ticket_number = 'TK-' . strtoupper(bin2hex(random_bytes(3)));
+        });
+    }
+    /**
+     * Get the color classes based on the department/category.
+     */
+    public function getCategoryBadgeClasses(): string
+    {
+        return match ($this->category) {
+            'Technical' => 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+            'Billing'   => 'bg-teal-50 text-teal-700 border border-teal-200',
+            'Sales'     => 'bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200',
+            default     => 'bg-slate-50 text-slate-600 border border-slate-200',
+        };
     }
 }
