@@ -147,6 +147,23 @@
                     </div>
 
                     <div class="pt-6 border-t border-[#F1F5F9]">
+                        <p class="text-[10px] font-black uppercase text-[#94A3B8] tracking-widest">
+                            {{ __('Verification Mode') }}</p>
+                        @php
+                            $modeLabel = $job->verification_mode?->label() ?? __('Standard');
+                            $modeDescription = $job->verification_mode === \App\Enums\VerificationMode::Enhanced
+                                ? __('Enhanced is gated and currently behaves like Standard until enabled.')
+                                : __('Standard runs the default verification pipeline.');
+                        @endphp
+                        <div class="mt-3">
+                            <span class="inline-flex items-center rounded-full bg-[#F1F5F9] px-3 py-1 text-[10px] font-black uppercase text-[#64748B]">
+                                {{ $modeLabel }}
+                            </span>
+                            <p class="mt-2 text-xs text-[#64748B]">{{ $modeDescription }}</p>
+                        </div>
+                    </div>
+
+                    <div class="pt-6 border-t border-[#F1F5F9]">
                         <p class="text-[10px] font-black uppercase text-[#94A3B8] tracking-widest">{{ __('Timeline') }}
                         </p>
                         <ul class="mt-4 space-y-4">

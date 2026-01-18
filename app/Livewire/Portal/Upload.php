@@ -3,6 +3,7 @@
 namespace App\Livewire\Portal;
 
 use App\Enums\VerificationJobStatus;
+use App\Enums\VerificationMode;
 use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
@@ -14,6 +15,7 @@ use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithFileUploads;
+use Illuminate\Validation\Rule;
 
 #[Layout('layouts.portal')]
 class Upload extends Component
@@ -22,6 +24,7 @@ class Upload extends Component
     use WithFileUploads;
 
     public $file;
+    public string $verification_mode = VerificationMode::Standard->value;
 
     protected function maxUploadKilobytes(): int
     {
@@ -32,14 +35,24 @@ class Upload extends Component
 
     protected function rules(): array
     {
+        $modes = array_map(static fn (VerificationMode $mode) => $mode->value, VerificationMode::cases());
+
         return [
             'file' => ['required', 'file', 'mimes:csv,txt', 'max:'.$this->maxUploadKilobytes()],
+            'verification_mode' => ['required', 'string', Rule::in($modes)],
         ];
     }
 
     public function save(JobStorage $storage)
     {
         $this->validate();
+        $enhancedEnabled = (bool) config('engine.enhanced_mode_enabled', false);
+
+        if (! $enhancedEnabled && $this->verification_mode === VerificationMode::Enhanced->value) {
+            $this->addError('verification_mode', __('Enhanced mode is coming soon.'));
+
+            return;
+        }
 
         $user = Auth::user();
 
@@ -79,6 +92,7 @@ class Upload extends Component
         $job = new VerificationJob([
             'user_id' => $user->id,
             'status' => VerificationJobStatus::Pending,
+            'verification_mode' => $this->verification_mode,
             'original_filename' => $this->file->getClientOriginalName(),
         ]);
 
@@ -91,6 +105,11 @@ class Upload extends Component
         $job->save();
         $job->addLog('created', 'Job created via customer portal upload.', [
             'original_filename' => $job->original_filename,
+        ], $user->id);
+        $job->addLog('verification_mode_set', 'Verification mode set at job creation.', [
+            'from' => null,
+            'to' => $this->verification_mode,
+            'actor_id' => $user->id,
         ], $user->id);
 
         PrepareVerificationJob::dispatch($job->id);

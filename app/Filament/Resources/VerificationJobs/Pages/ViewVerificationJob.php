@@ -29,6 +29,7 @@ class ViewVerificationJob extends ViewRecord
                 ->form([
                     Select::make('verification_mode')
                         ->label('Verification mode')
+                        ->helperText('Enhanced is gated and currently behaves like Standard until enabled.')
                         ->options(function (): array {
                             $options = [];
 
@@ -63,9 +64,10 @@ class ViewVerificationJob extends ViewRecord
                         'verification_mode' => $data['verification_mode'],
                     ]);
 
-                    $record->addLog('mode_updated', 'Verification mode updated by admin.', [
+                    $record->addLog('verification_mode_changed', 'Verification mode updated by admin.', [
                         'from' => $from,
                         'to' => $data['verification_mode'],
+                        'actor_id' => auth()->id(),
                     ], auth()->id());
 
                     AdminAuditLogger::log('job_mode_updated', $record, [
@@ -78,6 +80,7 @@ class ViewVerificationJob extends ViewRecord
                         ->success()
                         ->send();
                 })
+                ->requiresConfirmation()
                 ->disabled(fn (): bool => ! config('engine.enhanced_mode_enabled'))
                 ->tooltip(fn (): ?string => config('engine.enhanced_mode_enabled') ? null : 'Coming soon'),
             Action::make('finalize')

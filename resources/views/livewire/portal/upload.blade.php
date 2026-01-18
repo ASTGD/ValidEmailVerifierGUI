@@ -59,8 +59,48 @@
                             hover:file:bg-[#1866AD] cursor-pointer" />
                     </div>
 
-                    <!-- ERROR HANDLING (Keeping your backend logic) -->
-                    <x-input-error :messages="$errors->get('file')" class="mt-4 font-bold" />
+                <!-- ERROR HANDLING (Keeping your backend logic) -->
+                <x-input-error :messages="$errors->get('file')" class="mt-4 font-bold" />
+                </div>
+
+                @php
+                    $enhancedEnabled = (bool) config('engine.enhanced_mode_enabled', false);
+                @endphp
+
+                <div class="mt-8 rounded-[2rem] border border-[#E2E8F0] bg-white p-6">
+                    <div class="flex flex-col gap-2">
+                        <h4 class="text-lg font-bold text-[#0F172A]">{{ __('Verification Mode') }}</h4>
+                        <p class="text-sm text-[#64748B]">
+                            {{ __('Standard runs the default verification pipeline. Enhanced is gated and coming soon.') }}
+                        </p>
+                    </div>
+
+                    <div class="mt-4 grid gap-4 md:grid-cols-2">
+                        <label class="flex items-start gap-3 rounded-2xl border border-[#E2E8F0] p-4 hover:border-[#1E7CCF]">
+                            <input type="radio" name="verification_mode" value="standard" wire:model="verification_mode"
+                                class="mt-1 h-4 w-4 text-[#1E7CCF] focus:ring-[#1E7CCF]"
+                                @checked(old('verification_mode', 'standard') === 'standard') />
+                            <div>
+                                <p class="text-sm font-bold text-[#0F172A]">{{ __('Standard') }}</p>
+                                <p class="text-xs text-[#64748B]">{{ __('Recommended for most lists.') }}</p>
+                            </div>
+                        </label>
+                        <label
+                            class="flex items-start gap-3 rounded-2xl border border-[#E2E8F0] p-4 hover:border-[#1E7CCF] {{ $enhancedEnabled ? '' : 'opacity-60' }}"
+                            title="{{ $enhancedEnabled ? '' : __('Coming soon') }}">
+                            <input type="radio" name="verification_mode" value="enhanced" wire:model="verification_mode"
+                                class="mt-1 h-4 w-4 text-[#1E7CCF] focus:ring-[#1E7CCF]" @disabled(! $enhancedEnabled)
+                                @checked(old('verification_mode') === 'enhanced') />
+                            <div>
+                                <p class="text-sm font-bold text-[#0F172A]">{{ __('Enhanced') }}</p>
+                                <p class="text-xs text-[#64748B]">
+                                    {{ $enhancedEnabled ? __('Enable for deeper checks when available.') : __('Coming soon') }}
+                                </p>
+                            </div>
+                        </label>
+                    </div>
+
+                    <x-input-error :messages="$errors->get('verification_mode')" class="mt-3 font-bold" />
                 </div>
 
                 <!-- SUBMIT ACTIONS -->

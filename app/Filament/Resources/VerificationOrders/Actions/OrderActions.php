@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\VerificationOrders\Actions;
 
 use App\Enums\VerificationJobStatus;
+use App\Enums\VerificationMode;
 use App\Enums\VerificationOrderStatus;
 use App\Filament\Resources\VerificationJobs\VerificationJobResource;
 use App\Jobs\PrepareVerificationJob;
@@ -90,6 +91,7 @@ class OrderActions
                     $job = new VerificationJob([
                         'user_id' => $record->user_id,
                         'status' => VerificationJobStatus::Pending,
+                        'verification_mode' => VerificationMode::Standard->value,
                         'original_filename' => $record->original_filename,
                     ]);
                     $job->id = (string) Str::uuid();
@@ -101,6 +103,11 @@ class OrderActions
 
                     $job->addLog('created', 'Job activated by admin.', [
                         'order_id' => $record->id,
+                    ], auth()->id());
+                    $job->addLog('verification_mode_set', 'Verification mode set at job creation.', [
+                        'from' => null,
+                        'to' => VerificationMode::Standard->value,
+                        'actor_id' => auth()->id(),
                     ], auth()->id());
 
                     PrepareVerificationJob::dispatch($job->id);
