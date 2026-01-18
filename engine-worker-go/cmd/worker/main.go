@@ -10,6 +10,7 @@ import (
     "time"
 
     "engine-worker-go/internal/api"
+    "engine-worker-go/internal/verifier"
     "engine-worker-go/internal/worker"
 )
 
@@ -26,6 +27,16 @@ func main() {
     pollInterval := time.Duration(envInt("POLL_INTERVAL_SECONDS", 5)) * time.Second
     heartbeatInterval := time.Duration(envInt("HEARTBEAT_INTERVAL_SECONDS", 30)) * time.Second
     maxConcurrency := envInt("MAX_CONCURRENCY", 1)
+    heloName := envOr("HELO_NAME", hostname())
+    dnsTimeout := envInt("DNS_TIMEOUT_MS", 2000)
+    smtpConnectTimeout := envInt("SMTP_CONNECT_TIMEOUT_MS", 2000)
+    smtpReadTimeout := envInt("SMTP_READ_TIMEOUT_MS", 2000)
+    smtpEhloTimeout := envInt("SMTP_EHLO_TIMEOUT_MS", 2000)
+    maxMxAttempts := envInt("MAX_MX_ATTEMPTS", 2)
+    retryableNetworkRetries := envInt("RETRYABLE_NETWORK_RETRIES", 1)
+    backoffMs := envInt("BACKOFF_MS_BASE", 200)
+    perDomainConcurrency := envInt("PER_DOMAIN_CONCURRENCY", 2)
+    smtpRateLimit := envInt("SMTP_RATE_LIMIT_PER_MINUTE", 0)
 
     var leaseSeconds *int
     if val := os.Getenv("LEASE_SECONDS"); val != "" {
@@ -39,12 +50,28 @@ func main() {
 
     client := api.NewClient(baseURL, token)
 
+    verifierConfig := verifier.Config{
+        DNSTimeout:              dnsTimeout,
+        SMTPConnectTimeout:      smtpConnectTimeout,
+        SMTPReadTimeout:         smtpReadTimeout,
+        SMTPEhloTimeout:         smtpEhloTimeout,
+        MaxMXAttempts:           maxMxAttempts,
+        RetryableNetworkRetries: retryableNetworkRetries,
+        BackoffBaseMs:           backoffMs,
+        HeloName:                heloName,
+        PerDomainConcurrency:    perDomainConcurrency,
+        SMTPRateLimitPerMinute:  smtpRateLimit,
+    }
+
+    v := verifier.NewPipelineVerifier(verifierConfig, verifier.NetMXResolver{}, nil)
+
     cfg := worker.Config{
         PollInterval:      pollInterval,
         HeartbeatInterval: heartbeatInterval,
         LeaseSeconds:      leaseSeconds,
         MaxConcurrency:    maxConcurrency,
         WorkerID:          workerID,
+        Verifier:          v,
         Server: api.EngineServerPayload{
             Name:        serverName,
             IPAddress:   serverIP,

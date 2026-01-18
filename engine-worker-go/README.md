@@ -1,6 +1,6 @@
-# Engine Worker (Go) — Phase 8A
+# Engine Worker (Go) — Phase 8B
 
-This mock worker pulls chunks from the Laravel API, downloads inputs via signed URLs, generates mock outputs, uploads them, and completes chunks. It does **not** perform SMTP/DNS/MX verification.
+This worker pulls chunks from the Laravel API, downloads inputs via signed URLs, performs **DNS/MX + SMTP connectivity** checks, uploads outputs, and completes chunks. It does **not** perform mailbox-level RCPT probing.
 
 ## Requirements
 - Go 1.22+
@@ -19,6 +19,16 @@ This mock worker pulls chunks from the Laravel API, downloads inputs via signed 
 - `HEARTBEAT_INTERVAL_SECONDS` (default 30)
 - `LEASE_SECONDS` (optional)
 - `MAX_CONCURRENCY` (default 1)
+- `DNS_TIMEOUT_MS` (default 2000)
+- `SMTP_CONNECT_TIMEOUT_MS` (default 2000)
+- `SMTP_READ_TIMEOUT_MS` (default 2000)
+- `SMTP_EHLO_TIMEOUT_MS` (default 2000)
+- `MAX_MX_ATTEMPTS` (default 2)
+- `RETRYABLE_NETWORK_RETRIES` (default 1)
+- `BACKOFF_MS_BASE` (default 200)
+- `PER_DOMAIN_CONCURRENCY` (default 2)
+- `SMTP_RATE_LIMIT_PER_MINUTE` (default 0, disabled)
+- `HELO_NAME` (optional; defaults to hostname)
 
 ## Run
 ```bash
@@ -46,7 +56,8 @@ $token = $user->createToken('engine-worker')->plainTextToken;
 4) Job should finalize and downloads appear in the portal.
 
 ## Notes
-- Outputs are mock-classified:
-  - missing `@` → invalid (`syntax`)
-  - domain contains `example` → risky (`mock_risky_domain`)
-  - otherwise → valid (`mock_valid`)
+- Outputs use schema `email,reason`.
+- Classification uses **connectivity-only** checks:
+  - invalid: `syntax`, `mx_missing`, `smtp_unavailable`
+  - risky: `dns_timeout`, `dns_servfail`, `smtp_connect_timeout`, `smtp_timeout`, `smtp_tempfail`
+  - valid: `smtp_connect_ok`

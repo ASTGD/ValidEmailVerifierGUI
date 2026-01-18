@@ -54,6 +54,12 @@ Before SMTP workers go live, admins need clear visibility and safe controls:
 ## Phase 8A — Worker Pull (Mock Verification)
 Workers poll `claim-next`, download inputs via signed URLs, generate mock outputs, upload via signed PUT URLs, and call `complete`/`fail`. No SMTP logic is executed in Laravel or in this phase.
 
+## Phase 8B — Worker Pull (Connectivity Verification)
+Workers perform **DNS/MX + SMTP connectivity** checks only (EHLO + QUIT), with strict throttling and timeouts. No RCPT probing is performed. Classification uses reason codes:
+- valid: `smtp_connect_ok`
+- invalid: `syntax`, `mx_missing`, `smtp_unavailable`
+- risky: `dns_timeout`, `dns_servfail`, `smtp_connect_timeout`, `smtp_timeout`, `smtp_tempfail`
+
 ## Engine API Contract v1
 All endpoints are under `/api/verifier/*`, protected by:
 - `auth:sanctum`
