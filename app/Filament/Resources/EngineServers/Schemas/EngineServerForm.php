@@ -32,8 +32,15 @@ class EngineServerForm
                             ->label('Last heartbeat')
                             ->seconds(false),
                         Toggle::make('is_active')
-                            ->label('Active')
+                            ->label('Enabled')
                             ->default(true),
+                        Toggle::make('drain_mode')
+                            ->label('Drain mode')
+                            ->helperText('When enabled, the server stops receiving new work.'),
+                        TextInput::make('max_concurrency')
+                            ->label('Max concurrency')
+                            ->numeric()
+                            ->minValue(1),
                         Textarea::make('notes')
                             ->rows(3)
                             ->columnSpanFull(),

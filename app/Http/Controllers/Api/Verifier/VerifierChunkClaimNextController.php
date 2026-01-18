@@ -7,6 +7,7 @@ use App\Http\Requests\Verifier\ChunkClaimNextRequest;
 use App\Models\EngineServer;
 use App\Models\VerificationJobChunk;
 use App\Support\AdminAuditLogger;
+use App\Support\EngineSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -35,6 +36,7 @@ class VerifierChunkClaimNextController
             ['ip_address' => $serverData['ip_address']],
             $update
         );
+        $server->refresh();
 
         AdminAuditLogger::log('engine_claim_next', $server, [
             'ip_address' => $server->ip_address,
@@ -43,6 +45,14 @@ class VerifierChunkClaimNextController
             'region' => $server->region,
             'worker_id' => $payload['worker_id'],
         ]);
+
+        if (EngineSettings::enginePaused()) {
+            return response()->noContent();
+        }
+
+        if ($server->is_active === false || $server->drain_mode === true) {
+            return response()->noContent();
+        }
 
         $leaseSeconds = (int) ($payload['lease_seconds'] ?? config('engine.lease_seconds', 600));
         $leaseSeconds = max(1, $leaseSeconds);

@@ -8,6 +8,7 @@ use App\Filament\Resources\VerificationJobs\VerificationJobResource;
 use App\Jobs\FinalizeVerificationJob;
 use App\Models\VerificationJob;
 use App\Support\AdminAuditLogger;
+use App\Support\EngineSettings;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
@@ -47,7 +48,7 @@ class ViewVerificationJob extends ViewRecord
                     ];
                 })
                 ->action(function (array $data): void {
-                    if (! config('engine.enhanced_mode_enabled')
+                    if (! EngineSettings::enhancedModeEnabled()
                         && $data['verification_mode'] === VerificationMode::Enhanced->value) {
                         Notification::make()
                             ->title('Enhanced mode is coming soon.')
@@ -81,8 +82,8 @@ class ViewVerificationJob extends ViewRecord
                         ->send();
                 })
                 ->requiresConfirmation()
-                ->disabled(fn (): bool => ! config('engine.enhanced_mode_enabled'))
-                ->tooltip(fn (): ?string => config('engine.enhanced_mode_enabled') ? null : 'Coming soon'),
+                ->disabled(fn (): bool => ! EngineSettings::enhancedModeEnabled())
+                ->tooltip(fn (): ?string => EngineSettings::enhancedModeEnabled() ? null : 'Coming soon'),
             Action::make('finalize')
                 ->label('Finalize')
                 ->action(function (): void {

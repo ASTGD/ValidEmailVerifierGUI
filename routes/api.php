@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\Verifier\VerifierJobCompleteController;
 use App\Http\Controllers\Api\Verifier\VerifierJobDownloadController;
 use App\Http\Controllers\Api\Verifier\VerifierJobStatusController;
 use App\Http\Controllers\Api\Verifier\VerifierJobsController;
+use App\Http\Controllers\Api\Verifier\VerifierPolicyController;
 use App\Http\Controllers\Api\Verifier\VerifierStorageDownloadController;
 use App\Http\Controllers\Api\Verifier\VerifierStorageUploadController;
 use App\Http\Controllers\Api\Feedback\FeedbackOutcomesController;
@@ -32,6 +33,7 @@ Route::middleware(['auth:sanctum', EnsureVerifierService::class, 'throttle:verif
     ->prefix('verifier')
     ->name('api.verifier.')
     ->group(function () {
+        Route::get('policy', VerifierPolicyController::class)->name('policy');
         Route::post('heartbeat', VerifierHeartbeatController::class)->name('heartbeat');
         Route::get('jobs', [VerifierJobsController::class, 'index'])->name('jobs.index');
         Route::post('jobs/{job}/claim', VerifierJobClaimController::class)

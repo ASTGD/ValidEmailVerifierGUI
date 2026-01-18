@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Portal;
 
 use App\Enums\VerificationMode;
+use App\Support\EngineSettings;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -29,7 +30,7 @@ class UploadVerificationJobRequest extends FormRequest
     {
         $validator->after(function ($validator): void {
             $mode = $this->input('verification_mode');
-            $enhancedEnabled = (bool) config('engine.enhanced_mode_enabled', false);
+            $enhancedEnabled = EngineSettings::enhancedModeEnabled();
 
             if ($mode === VerificationMode::Enhanced->value && ! $enhancedEnabled) {
                 $validator->errors()->add('verification_mode', 'Enhanced mode is coming soon.');

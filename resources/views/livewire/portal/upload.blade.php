@@ -64,7 +64,7 @@
                 </div>
 
                 @php
-                    $enhancedEnabled = (bool) config('engine.enhanced_mode_enabled', false);
+                    $enhancedEnabled = \App\Support\EngineSettings::enhancedModeEnabled();
                 @endphp
 
                 <div class="mt-8 rounded-[2rem] border border-[#E2E8F0] bg-white p-6">
