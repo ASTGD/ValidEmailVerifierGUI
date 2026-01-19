@@ -16,18 +16,18 @@ class ViewSupportTicket extends ViewRecord
     /**
      * This sets the big title at the top of the page
      */
-    public function getHeading(): string | Htmlable
-    {
-        return $this->record->subject;
-    }
+    // public function getHeading(): string | Htmlable
+    // {
+    //     return $this->record->subject;
+    // }
 
     /**
      * This adds a sub-heading for extra professional detail
      */
-    public function getSubheading(): string | Htmlable | null
-    {
-        return "Viewing conversation for ticket #" . $this->record->ticket_number;
-    }
+    // public function getSubheading(): string | Htmlable | null
+    // {
+    //     return "Viewing conversation for ticket #" . $this->record->ticket_number;
+    // }
 
     protected function getHeaderActions(): array
     {

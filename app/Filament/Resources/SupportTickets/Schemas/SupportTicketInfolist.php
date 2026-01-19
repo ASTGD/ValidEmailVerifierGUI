@@ -25,8 +25,8 @@ class SupportTicketInfolist
                             ->copyable(),
                         TextEntry::make('status')
                             ->badge()
-                            ->formatStateUsing(fn ($state) => $state->label())
-                            ->color(fn ($state) => match ($state->value) {
+                            ->formatStateUsing(fn($state) => $state->label())
+                            ->color(fn($state) => match ($state->value) {
                                 'open' => 'info',
                                 'pending' => 'warning',
                                 'resolved' => 'success',
@@ -35,8 +35,8 @@ class SupportTicketInfolist
                             }),
                         TextEntry::make('priority')
                             ->badge()
-                            ->formatStateUsing(fn ($state) => $state->label())
-                            ->color(fn ($state) => match ($state->value) {
+                            ->formatStateUsing(fn($state) => $state->label())
+                            ->color(fn($state) => match ($state->value) {
                                 'Urgent' => 'danger',
                                 'high' => 'warning',
                                 'normal' => 'info',
@@ -48,12 +48,11 @@ class SupportTicketInfolist
                     ])->columns(4),
 
                 Section::make('Customer Context')
-                    ->collapsed() // Keeps page clean
                     ->schema([
                         TextEntry::make('user.name')
                             ->label('Account Name')
                             ->icon('heroicon-m-user')
-                            ->url(fn ($record) => route('filament.admin.resources.customers.index', [
+                            ->url(fn($record) => route('filament.admin.resources.customers.index', [
                                 'tableSearch' => $record->user->email,
                             ]))
                             ->openUrlInNewTab()
@@ -63,13 +62,28 @@ class SupportTicketInfolist
                         TextEntry::make('created_at')->label('Date Opened')->dateTime('M d, Y (H:i)'),
                         TextEntry::make('updated_at')->label('Last Activity')->since(),
                     ])->columns(4),
-
-                Section::make('Initial Customer Request')
-                    ->collapsed() // Keeps page clean
+                Section::make('Ticket Details')
+                    ->columnSpanFull()
                     ->schema([
-                        TextEntry::make('subject')->weight('bold')->size('lg'),
-                        TextEntry::make('message')->label('Original Content')->prose()->markdown(),
-                    ]),
+                        TextEntry::make('subject')
+                            ->label('Subject')
+                            ->weight('bold')
+                            ->size('lg'),
+
+                        // TextEntry::make('message')
+                        //     ->label('Initial Message Content')
+                        //     ->prose()
+                        //     ->markdown()
+                        //     ->columnSpanFull(),
+                    ])
+                    ->columns(1),
+
+                // Section::make('Initial Customer Request')
+                //     ->collapsed() // Keeps page clean
+                //     ->schema([
+                //         TextEntry::make('subject')->weight('bold')->size('lg'),
+                //         TextEntry::make('message')->label('Original Content')->prose()->markdown(),
+                //     ]),
             ]);
     }
 }

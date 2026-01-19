@@ -39,55 +39,63 @@ class MessagesRelationManager extends RelationManager
                 ->default(true),
         ]);
     }
-
     public function table(Table $table): Table
     {
+        // Define your brand's soft blue background
+        $adminBg = 'background-color: #f4f8fd !important;';
+
         return $table
             ->heading('Conversation Thread')
-            // NEWEST FIRST: Last reply at the top
             ->defaultSort('created_at', 'desc')
             ->columns([
+                // 1. Author
                 Tables\Columns\TextColumn::make('user.name')
                     ->label('Author')
-                    ->weight('bold')
-                    ->color(fn($record) => $record->is_admin ? 'primary' : 'gray')
-                    ->description(fn($record) => $record->is_admin ? 'STAFF REPLY' : 'CUSTOMER MESSAGE'),
+                    ->icon('heroicon-m-user')
+                    // Link to Customer Admin List filtered by this user
+                    ->url(fn($record) => "/admin/customers?tableSearch=" . urlencode($record->user->email))
+                    ->openUrlInNewTab()
+                    ->color(fn($record) => $record->is_admin ? 'info' : 'warning')
+                    ->description(fn($record) => $record->is_admin ? 'ADMIN REPLY' : 'CUSTOMER REPLY')
+                    ->extraCellAttributes(fn($record) => [
+                        'style' => $record->is_admin ? $adminBg : '',
+                    ]),
 
+                // 2. Message Content
                 Tables\Columns\TextColumn::make('content')
                     ->label('Message Content')
                     ->wrap()
-                    ->grow(),
+                    ->grow()
+                    ->extraCellAttributes(fn($record) => [
+                        'style' => $record->is_admin ? $adminBg : '',
+                    ]),
 
+                // 3. File
                 Tables\Columns\ImageColumn::make('attachment')
                     ->label('File')
                     ->disk('public')
-                    ->visibility('public')
-                    ->square()
-                    ->size(50)
-                    ->placeholder('-'),
+                    ->size(40)
+                    ->placeholder('-')
+                    ->extraCellAttributes(fn($record) => [
+                        'style' => $record->is_admin ? $adminBg : '',
+                    ]),
 
+                // 4. Time
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Sent')
                     ->since()
                     ->alignment('right')
-                    ->color('gray')
-                    ->description(fn($record) => $record->created_at->format('M d, Y H:i')),
+                    ->description(fn($record) => $record->created_at->format('M d, Y H:i'))
+                    ->extraCellAttributes(fn($record) => [
+                        'style' => $record->is_admin ? $adminBg : '',
+                    ]),
             ])
             ->headerActions([
-                // Using the corrected Action class
-                CreateAction::make()
+                \Filament\Actions\CreateAction::make()
                     ->label('Post New Reply')
                     ->icon('heroicon-m-chat-bubble-left-right')
-                    ->modalHeading('Reply to Customer')
-                    ->modalButton('Send Message')
-                    ->after(fn(SupportMessage $record) => $record->ticket->update([
-                        'status' => SupportTicketStatus::Pending
-                    ])),
+                    ->after(fn() => $this->getOwnerRecord()->update(['status' => \App\Enums\SupportTicketStatus::Pending])),
             ]);
-    }
-    public function isCollapsible(): bool
-    {
-        return true;
     }
 
     // Optional: Starts the page with this section closed
