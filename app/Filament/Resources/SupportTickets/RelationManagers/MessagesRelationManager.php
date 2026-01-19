@@ -101,7 +101,41 @@ class MessagesRelationManager extends RelationManager
                         'style' => $record->is_admin ? $adminBg : '',
                     ]),
             ])
+            ->actions([
+                // No per-row actions needed for now
+            ])
             ->headerActions([
+                \Filament\Actions\Action::make('edit_last_message')
+                    ->label('Edit Last Chat')
+                    ->icon('heroicon-m-pencil-square')
+                    ->color('warning')
+                    ->visible(fn() => $this->getOwnerRecord()->messages()->exists())
+                    ->mountUsing(function (\Filament\Schemas\Schema $form) {
+                        $lastMessage = $this->getOwnerRecord()->messages()->latest()->first();
+                        $form->fill([
+                            'content' => $lastMessage?->content,
+                        ]);
+                    })
+                    ->form([
+                        Forms\Components\Textarea::make('content')
+                            ->label('Correct Message')
+                            ->required()
+                            ->rows(5),
+                    ])
+                    ->action(function (array $data) {
+                        $lastMessage = $this->getOwnerRecord()->messages()->latest()->first();
+                        if ($lastMessage) {
+                            $lastMessage->update([
+                                'content' => $data['content'],
+                            ]);
+                            \Filament\Notifications\Notification::make()
+                                ->title('Success')
+                                ->body('The last message has been updated.')
+                                ->success()
+                                ->send();
+                        }
+                    }),
+
                 \Filament\Actions\CreateAction::make()
                     ->label('Post New Reply')
                     ->icon('heroicon-m-chat-bubble-left-right')

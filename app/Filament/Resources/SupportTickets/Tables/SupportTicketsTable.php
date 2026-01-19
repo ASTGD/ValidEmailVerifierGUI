@@ -31,6 +31,16 @@ class SupportTicketsTable
                     ->searchable()
                     ->limit(40),
 
+                TextColumn::make('category')
+                    ->label('Department')
+                    ->badge()
+                    ->color(fn($state): string => match ($state) {
+                        'Technical' => 'info',
+                        'Billing' => 'warning',
+                        'Sales' => 'success',
+                        default => 'gray',
+                    }),
+
                 TextColumn::make('user.email')
                     ->label('Requestor')
                     ->searchable(),
@@ -48,9 +58,9 @@ class SupportTicketsTable
                         $value = $state instanceof SupportTicketStatus ? $state : SupportTicketStatus::tryFrom((string) $state);
                         return match ($value) {
                             SupportTicketStatus::Open => 'info',
-                            SupportTicketStatus::Pending => 'warning',
+                            SupportTicketStatus::Pending => 'amber',
                             SupportTicketStatus::Answered => 'success',
-                            SupportTicketStatus::CustomerReply => 'danger', // High priority for admin to see
+                            SupportTicketStatus::CustomerReply => 'danger',
                             SupportTicketStatus::OnHold => 'gray',
                             SupportTicketStatus::InProgress => 'primary',
                             SupportTicketStatus::Resolved => 'success',
@@ -72,12 +82,12 @@ class SupportTicketsTable
                     ->color(function ($state): string {
                         if (empty($state))
                             return 'gray';
-                        $value = $state instanceof SupportTicketPriority ? $state->value : (string) $state;
+                        $value = $state instanceof SupportTicketPriority ? $state : SupportTicketPriority::tryFrom((string) $state);
                         return match ($value) {
-                            SupportTicketPriority::Urgent->value => 'danger',
-                            SupportTicketPriority::High->value => 'warning',
-                            SupportTicketPriority::Normal->value => 'info',
-                            SupportTicketPriority::Low->value => 'gray',
+                            SupportTicketPriority::Urgent => 'danger',
+                            SupportTicketPriority::High => 'warning',
+                            SupportTicketPriority::Normal => 'info',
+                            SupportTicketPriority::Low => 'gray',
                             default => 'gray',
                         };
                     }),
@@ -103,7 +113,6 @@ class SupportTicketsTable
             ->emptyStateDescription('Tickets will appear here when customers contact support.')
             ->recordActions([
                 ViewAction::make(),
-                EditAction::make(),
             ]);
     }
 

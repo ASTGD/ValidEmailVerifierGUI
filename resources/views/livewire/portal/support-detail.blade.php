@@ -16,14 +16,14 @@
         <!-- Right Side Badges -->
         <div class="flex items-center gap-3">
             <!-- Priority Badge -->
-            <div class="px-4 py-2 bg-white border border-[#E2E8F0] rounded-xl flex items-center gap-2 shadow-sm">
+            <div class="px-4 py-2 border rounded-xl flex items-center gap-2 shadow-sm {{ $ticket->priority->badgeClasses() }}">
                 <span
-                    class="text-[10px] font-black text-[#94A3B8] uppercase tracking-widest">{{ __('Priority') }}:</span>
-                <span class="text-xs font-black text-[#0F172A] uppercase">{{ $ticket->priority->label() }}</span>
+                    class="text-[9px] font-black uppercase tracking-widest opacity-70">{{ __('Priority') }}:</span>
+                <span class="text-[10px] font-black uppercase">{{ $ticket->priority->label() }}</span>
             </div>
             <!-- Status Badge (Dynamic Color) -->
             <div
-                class="px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm {{ $ticket->status->badgeClasses() }}">
+                class="px-4 py-2 border rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm {{ $ticket->status->badgeClasses() }}">
                 {{ $ticket->status->label() }}
             </div>
         </div>
@@ -36,8 +36,10 @@
             <p class="text-sm font-bold text-[#1E7CCF]">#{{ $ticket->ticket_number }}</p>
         </div>
         <div class="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-sm">
-            <p class="text-[10px] font-black text-[#94A3B8] uppercase tracking-widest mb-1">{{ __('Department') }}</p>
-            <p class="text-sm font-bold text-[#334155]">{{ $ticket->category }}</p>
+            <p class="text-[10px] font-black text-[#94A3B8] uppercase tracking-widest mb-2">{{ __('Department') }}</p>
+            <span class="inline-flex px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest {{ $ticket->getCategoryBadgeClasses() }}">
+                {{ $ticket->category }}
+            </span>
         </div>
         <div class="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-sm">
             <p class="text-[10px] font-black text-[#94A3B8] uppercase tracking-widest mb-1">{{ __('Created') }}</p>

@@ -22,17 +22,26 @@
                 <thead>
                     <tr class="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                         <th class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
-                            {{ __('Ticket ID') }}</th>
+                            {{ __('Ticket ID') }}
+                        </th>
                         <th class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
-                            {{ __('Subject') }}</th>
+                            {{ __('Subject') }}
+                        </th>
                         <th class="px-8 py-5 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
-                            {{ __('Department') }}</th>
+                            {{ __('Department') }}
+                        </th>
                         <th
                             class="px-8 py-5 text-[11px] font-black text-[#64748B] uppercase tracking-widest text-center">
-                            {{ __('Status') }}</th>
+                            {{ __('Priority') }}
+                        </th>
+                        <th
+                            class="px-8 py-5 text-[11px] font-black text-[#64748B] uppercase tracking-widest text-center">
+                            {{ __('Status') }}
+                        </th>
                         <th
                             class="px-8 py-5 text-[11px] font-black text-[#64748B] uppercase tracking-widest text-right">
-                            {{ __('Last Updated') }}</th>
+                            {{ __('Last Updated') }}
+                        </th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#E2E8F0]">
@@ -55,6 +64,12 @@
                                 </span>
                             </td>
                             <td class="px-8 py-6 text-center">
+                                <span
+                                    class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter {{ $ticket->priority->badgeClasses() }}">
+                                    {{ $ticket->priority->label() }}
+                                </span>
+                            </td>
+                            <td class="px-8 py-6 text-center">
                                 <div class="flex justify-center">
                                     <span
                                         class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter {{ $ticket->status->badgeClasses() }}">
@@ -71,8 +86,7 @@
                                         {{ $ticket->updated_at->diffForHumans() }}
                                     </span>
                                     <!-- Muted technical date string -->
-                                    <span
-                                        class="text-[11px] font-extrabold text-[#94A3B8] uppercase tracking-tighter mt-1">
+                                    <span class="text-[11px] font-extrabold text-[#94A3B8] uppercase tracking-tighter mt-1">
                                         {{ $ticket->updated_at->format('M d, Y • H:i') }}
                                     </span>
                                 </div>

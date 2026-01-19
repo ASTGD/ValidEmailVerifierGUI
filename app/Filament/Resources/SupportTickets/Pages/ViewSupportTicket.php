@@ -81,7 +81,6 @@ class ViewSupportTicket extends ViewRecord
                 ->action(fn() => $this->record->update(['status' => SupportTicketStatus::Closed]))
                 ->visible(fn() => $this->record->status !== SupportTicketStatus::Closed),
 
-            EditAction::make()->label('Edit Details'),
         ];
     }
 }

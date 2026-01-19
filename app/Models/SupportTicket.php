@@ -61,9 +61,9 @@ class SupportTicket extends Model
     {
         return match ($this->category) {
             'Technical' => 'bg-indigo-50 text-indigo-700 border border-indigo-200',
-            'Billing'   => 'bg-teal-50 text-teal-700 border border-teal-200',
-            'Sales'     => 'bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200',
-            default     => 'bg-slate-50 text-slate-600 border border-slate-200',
+            'Billing' => 'bg-amber-50 text-amber-700 border border-amber-200',
+            'Sales' => 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+            default => 'bg-slate-50 text-slate-600 border border-slate-200',
         };
     }
     /**
