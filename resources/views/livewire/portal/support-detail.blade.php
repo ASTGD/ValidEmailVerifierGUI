@@ -57,8 +57,22 @@
         <div class="bg-white rounded-xl border border-[#E2E8F0] shadow-sm p-6 md:p-10 flex flex-col space-y-10">
             @foreach ($messages as $msg)
                 <div class="flex {{ $msg->is_admin ? 'justify-start' : 'justify-end' }}">
-                    <div class="max-w-[85%] md:max-w-[70%] space-y-2">
 
+                    <div class="max-w-[85%] md:max-w-[70%] space-y-2">
+                        <!-- Message Meta -->
+                        <div
+                            class="flex items-center gap-2 px-2 {{ $msg->is_admin ? 'justify-start' : 'justify-end' }}">
+                            @if ($msg->is_admin)
+                                <span
+                                    class="w-5 h-5 bg-[#1E7CCF] text-white rounded-full flex items-center justify-center">
+                                    <i data-lucide="shield-check" class="w-3 h-3"></i>
+                                </span>
+                            @endif
+                            <span class="text-[10px] font-black uppercase tracking-widest text-[#94A3B8]">
+                                {{ $msg->is_admin ? __('Support Team') : __('You') }} •
+                                {{ $msg->created_at->format('H:i A') }}
+                            </span>
+                        </div>
                         <!-- Message Bubble -->
                         <div
                             class="relative p-6 rounded-3xl {{ $msg->is_admin ? 'bg-[#1E7CCF] text-white rounded-tl-none' : 'bg-[#E9F2FB] text-[#0F172A] border border-[#1E7CCF]/10 rounded-tr-none' }}">
@@ -74,68 +88,52 @@
                                 </div>
                             @endif
                         </div>
-
-                        <!-- Message Meta -->
-                        <div
-                            class="flex items-center gap-2 px-2 {{ $msg->is_admin ? 'justify-start' : 'justify-end' }}">
-                            @if ($msg->is_admin)
-                                <span
-                                    class="w-5 h-5 bg-[#1E7CCF] text-white rounded-full flex items-center justify-center">
-                                    <i data-lucide="shield-check" class="w-3 h-3"></i>
-                                </span>
-                            @endif
-                            <span class="text-[10px] font-black uppercase tracking-widest text-[#94A3B8]">
-                                {{ $msg->is_admin ? __('Support Team') : __('You') }} •
-                                {{ $msg->created_at->format('H:i A') }}
-                            </span>
-                        </div>
                     </div>
                 </div>
             @endforeach
         </div>
-        <div>
-            <!-- TICKET INFO CARD -->
-            <div class="bg-white rounded-xl border border-[#E2E8F0] shadow-sm overflow-hidden">
-                <div class="p-6 bg-[#F8FAFC] border-b border-[#E2E8F0]">
-                    <h4 class="text-xs font-black uppercase tracking-widest text-[#0F172A]">
-                        {{ __('Ticket Information') }}</h4>
+        <!-- TICKET INFO CARD -->
+        <div class="bg-white rounded-xl border border-[#E2E8F0] shadow-sm overflow-hidden">
+            <div class="p-6 bg-[#F8FAFC] border-b border-[#E2E8F0]">
+                <h4 class="text-xs font-black uppercase tracking-widest text-[#0F172A]">
+                    {{ __('Ticket Information') }}</h4>
+            </div>
+            <div class="p-6 space-y-6">
+                <!-- Name Info -->
+                <div class="flex items-start gap-3">
+                    <div class="p-2 bg-[#F1F5F9] rounded-lg text-[#64748B]"><i data-lucide="user" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-[0.15em] mb-0.5">
+                            {{ __('Customer Name') }}</p>
+                        <p class="text-sm font-bold text-[#334155]">{{ $ticket->user->name }}</p>
+                    </div>
                 </div>
-                <div class="p-6 space-y-6">
-                    <!-- Name Info -->
-                    <div class="flex items-start gap-3">
-                        <div class="p-2 bg-[#F1F5F9] rounded-lg text-[#64748B]"><i data-lucide="user"
-                                class="w-4 h-4"></i></div>
-                        <div>
-                            <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-[0.15em] mb-0.5">
-                                {{ __('Customer Name') }}</p>
-                            <p class="text-sm font-bold text-[#334155]">{{ $ticket->user->name }}</p>
-                        </div>
+                <!-- Email Info -->
+                <div class="flex items-start gap-3">
+                    <div class="p-2 bg-[#F1F5F9] rounded-lg text-[#64748B]"><i data-lucide="mail" class="w-4 h-4"></i>
                     </div>
-                    <!-- Email Info -->
-                    <div class="flex items-start gap-3">
-                        <div class="p-2 bg-[#F1F5F9] rounded-lg text-[#64748B]"><i data-lucide="mail"
-                                class="w-4 h-4"></i></div>
-                        <div>
-                            <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-[0.15em] mb-0.5">
-                                {{ __('Email Address') }}</p>
-                            <p class="text-sm font-bold text-[#334155] truncate max-w-[150px]">
-                                {{ $ticket->user->email }}</p>
-                        </div>
+                    <div>
+                        <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-[0.15em] mb-0.5">
+                            {{ __('Email Address') }}</p>
+                        <p class="text-sm font-bold text-[#334155] truncate max-w-[150px]">
+                            {{ $ticket->user->email }}</p>
                     </div>
-                    <!-- Subject Info -->
-                    <div class="flex items-start gap-3">
-                        <div class="p-2 bg-[#F1F5F9] rounded-lg text-[#64748B]"><i data-lucide="file-text"
-                                class="w-4 h-4"></i></div>
-                        <div>
-                            <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-[0.15em] mb-0.5">
-                                {{ __('Ticket ID') }}</p>
-                            <p class="text-sm font-bold text-[#1E7CCF] font-mono">#{{ $ticket->ticket_number }}</p>
-                        </div>
-                    </div>
-                    <hr class="border-[#F1F5F9]">
                 </div>
+                <!-- Subject Info -->
+                <div class="flex items-start gap-3">
+                    <div class="p-2 bg-[#F1F5F9] rounded-lg text-[#64748B]"><i data-lucide="file-text"
+                            class="w-4 h-4"></i></div>
+                    <div>
+                        <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-[0.15em] mb-0.5">
+                            {{ __('Ticket ID') }}</p>
+                        <p class="text-sm font-bold text-[#1E7CCF] font-mono">#{{ $ticket->ticket_number }}</p>
+                    </div>
+                </div>
+                <hr class="border-[#F1F5F9]">
             </div>
         </div>
+
     </div>
 
     <!-- 4. REPLY AREA -->
