@@ -154,12 +154,37 @@ class VerificationJobInfolist
                             ->placeholder('-'),
                     ])
                     ->columns(3),
-                Section::make('Cached Artifacts')
+                Section::make('Pipeline Breakdown (Internal)')
                     ->schema([
-                        TextEntry::make('cached_count')
-                            ->label('Cached count')
+                        TextEntry::make('total_emails')
+                            ->label('Total unique')
                             ->numeric()
                             ->placeholder('-'),
+                        TextEntry::make('cached_count')
+                            ->label('Cache hits')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('unknown_count')
+                            ->label('Sent to engine')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('cache_hit_rate')
+                            ->label('Cache hit rate')
+                            ->state(function (VerificationJob $record): string {
+                                $total = (int) ($record->total_emails ?? 0);
+                                if ($total <= 0) {
+                                    return '-';
+                                }
+
+                                $cached = (int) ($record->cached_count ?? 0);
+                                $percent = ($cached / $total) * 100;
+
+                                return sprintf('%0.1f%% (%d/%d)', $percent, $cached, $total);
+                            }),
+                    ])
+                    ->columns(4),
+                Section::make('Cached Files')
+                    ->schema([
                         TextEntry::make('cached_valid_key')
                             ->label('Cached valid key')
                             ->placeholder('-')
