@@ -45,11 +45,16 @@ class SupportTicketsTable
                         return ucfirst((string) $state);
                     })
                     ->color(function ($state): string {
-                        $value = $state instanceof SupportTicketStatus ? $state->value : (string) $state;
+                        $value = $state instanceof SupportTicketStatus ? $state : SupportTicketStatus::tryFrom((string) $state);
                         return match ($value) {
-                            SupportTicketStatus::Open->value => 'info',
-                            SupportTicketStatus::Pending->value => 'warning',
-                            SupportTicketStatus::Closed->value => 'success',
+                            SupportTicketStatus::Open => 'info',
+                            SupportTicketStatus::Pending => 'warning',
+                            SupportTicketStatus::Answered => 'success',
+                            SupportTicketStatus::CustomerReply => 'danger', // High priority for admin to see
+                            SupportTicketStatus::OnHold => 'gray',
+                            SupportTicketStatus::InProgress => 'primary',
+                            SupportTicketStatus::Resolved => 'success',
+                            SupportTicketStatus::Closed => 'gray',
                             default => 'gray',
                         };
                     }),
@@ -58,12 +63,15 @@ class SupportTicketsTable
                     ->label('Priority')
                     ->badge()
                     ->formatStateUsing(function ($state): string {
-                        if (empty($state)) return '-';
-                        if ($state instanceof SupportTicketPriority) return $state->label();
+                        if (empty($state))
+                            return '-';
+                        if ($state instanceof SupportTicketPriority)
+                            return $state->label();
                         return ucfirst((string) $state);
                     })
                     ->color(function ($state): string {
-                        if (empty($state)) return 'gray';
+                        if (empty($state))
+                            return 'gray';
                         $value = $state instanceof SupportTicketPriority ? $state->value : (string) $state;
                         return match ($value) {
                             SupportTicketPriority::Urgent->value => 'danger',

@@ -21,16 +21,27 @@ class MessagesRelationManager extends RelationManager
     public function form(Schema $schema): Schema
     {
         return $schema->components([
-            Forms\Components\Textarea::make('content')
-                ->label('Reply to Customer')
-                ->placeholder('Describe the solution or ask for more details...')
-                ->required()
-                ->columnSpanFull(),
+            Forms\Components\Grid::make(2)
+                ->schema([
+                    Forms\Components\Textarea::make('content')
+                        ->label('Reply to Customer')
+                        ->placeholder('Describe the solution or ask for more details...')
+                        ->required()
+                        ->columnSpanFull(),
 
-            Forms\Components\FileUpload::make('attachment')
-                ->image()
-                ->directory('support-attachments')
-                ->disk('public'),
+                    Forms\Components\FileUpload::make('attachment')
+                        ->image()
+                        ->directory('support-attachments')
+                        ->disk('public'),
+
+                    Forms\Components\Select::make('ticket_status')
+                        ->label('Update Ticket Status')
+                        ->options(SupportTicketStatus::class)
+                        ->default(fn($record) => $this->getOwnerRecord()->status)
+                        ->selectablePlaceholder(false)
+                        ->dehydrated(false) // This field is not for the message model
+                        ->required(),
+                ]),
 
             Forms\Components\Hidden::make('user_id')
                 ->default(auth()->id()),
@@ -94,7 +105,11 @@ class MessagesRelationManager extends RelationManager
                 \Filament\Actions\CreateAction::make()
                     ->label('Post New Reply')
                     ->icon('heroicon-m-chat-bubble-left-right')
-                    ->after(fn() => $this->getOwnerRecord()->update(['status' => \App\Enums\SupportTicketStatus::Pending])),
+                    ->after(function (array $data) {
+                        $this->getOwnerRecord()->update([
+                            'status' => $data['ticket_status']
+                        ]);
+                    }),
             ]);
     }
 

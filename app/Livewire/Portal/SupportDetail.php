@@ -43,8 +43,8 @@ class SupportDetail extends Component
             'is_admin' => false,
         ]);
 
-        // Update status to Open so Admin sees the customer replied
-        $this->ticket->update(['status' => SupportTicketStatus::Open]);
+        // Update status to Customer-Reply so Admin sees the customer replied
+        $this->ticket->update(['status' => SupportTicketStatus::CustomerReply]);
 
         $this->reset(['message', 'attachment']);
         $this->ticket->refresh();
