@@ -17,6 +17,8 @@ class VerifierPolicyController
                 'contract_version' => (string) config('engine.policy_contract_version', 'v1'),
                 'engine_paused' => EngineSettings::enginePaused(),
                 'enhanced_mode_enabled' => EngineSettings::enhancedModeEnabled(),
+                'role_accounts_behavior' => EngineSettings::roleAccountsBehavior(),
+                'role_accounts_list' => EngineSettings::roleAccountsList(),
                 'policies' => [
                     'standard' => $policies['standard'] ?? [],
                     'enhanced' => $policies['enhanced'] ?? [],

@@ -19,6 +19,12 @@ class EngineSettingsTable
                 IconColumn::make('enhanced_mode_enabled')
                     ->label('Enhanced enabled')
                     ->boolean(),
+                TextColumn::make('role_accounts_behavior')
+                    ->label('Role behavior')
+                    ->badge(),
+                TextColumn::make('role_accounts_list')
+                    ->label('Role list')
+                    ->limit(40),
                 TextColumn::make('updated_at')
                     ->label('Updated')
                     ->since(),

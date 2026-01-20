@@ -22,7 +22,7 @@ class FeedbackImportResource extends Resource
 
     protected static ?string $navigationLabel = 'Feedback Imports';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Engine';
+    protected static string|UnitEnum|null $navigationGroup = 'Operations';
 
     protected static ?int $navigationSort = 3;
 

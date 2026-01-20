@@ -21,9 +21,15 @@ class EngineSettingResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
 
-    protected static ?string $navigationLabel = 'Engine Settings';
+    protected static ?string $navigationLabel = 'Settings';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Engine';
+    protected static string|UnitEnum|null $navigationGroup = 'Operations';
+
+    protected static ?string $modelLabel = 'Setting';
+
+    protected static ?string $pluralModelLabel = 'Settings';
+
+    protected static ?string $slug = 'settings';
 
     protected static ?int $navigationSort = 3;
 

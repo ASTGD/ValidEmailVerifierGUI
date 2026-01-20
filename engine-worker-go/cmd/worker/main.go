@@ -41,6 +41,7 @@ func main() {
 	perDomainConcurrency := envInt("PER_DOMAIN_CONCURRENCY", 2)
 	smtpRateLimit := envInt("SMTP_RATE_LIMIT_PER_MINUTE", 0)
 	roleAccounts := parseRoleAccounts(os.Getenv("ROLE_ACCOUNTS"))
+	roleAccountsBehavior := parseRoleAccountsBehavior(os.Getenv("ROLE_ACCOUNTS_BEHAVIOR"))
 	domainTypos := parseDomainTypos(os.Getenv("DOMAIN_TYPOS"))
 	disposableDomains := parseDisposableDomains(workerdata.DisposableDomains)
 
@@ -69,6 +70,7 @@ func main() {
 		SMTPRateLimitPerMinute:  smtpRateLimit,
 		DisposableDomains:       disposableDomains,
 		RoleAccounts:            roleAccounts,
+		RoleAccountsBehavior:    roleAccountsBehavior,
 		DomainTypos:             domainTypos,
 	}
 
@@ -150,6 +152,19 @@ func parseRoleAccounts(value string) map[string]struct{} {
 	}
 
 	return mapFromSlice(strings.Split(value, ","))
+}
+
+func parseRoleAccountsBehavior(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return "risky"
+	}
+
+	if value == "risky" || value == "allow" {
+		return value
+	}
+
+	return "risky"
 }
 
 func parseDomainTypos(value string) map[string]string {
