@@ -106,7 +106,7 @@ class MessagesRelationManager extends RelationManager
             ])
             ->headerActions([
                 \Filament\Actions\Action::make('edit_last_message')
-                    ->label('Edit Last Chat')
+                    ->label('Edit Last Message')
                     ->icon('heroicon-m-pencil-square')
                     ->color('warning')
                     ->visible(fn() => $this->getOwnerRecord()->messages()->exists())

@@ -56,4 +56,23 @@ class SupportDetail extends Component
             'messages' => $this->ticket->messages()->oldest()->get()
         ])->layout('layouts.portal'); // <--- This line is the fix
     }
+
+    public function closeTicket()
+    {
+        // 1. Security check: Ensure the user owns this ticket
+        if ($this->ticket->user_id !== \Illuminate\Support\Facades\Auth::id()) {
+            abort(403);
+        }
+
+        // 2. Update status using your Enum
+        $this->ticket->update([
+            'status' => \App\Enums\SupportTicketStatus::Closed
+        ]);
+
+        // 3. Optional: Add a log or notification
+        session()->flash('status', 'Ticket has been marked as Closed.');
+
+        // 4. Refresh the page to update the UI
+        $this->ticket->refresh();
+    }
 }

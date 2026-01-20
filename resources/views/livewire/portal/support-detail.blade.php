@@ -15,17 +15,28 @@
 
         <!-- Right Side Badges -->
         <div class="flex items-center gap-3">
-            <!-- Priority Badge -->
-            <div class="px-4 py-2 border rounded-xl flex items-center gap-2 shadow-sm {{ $ticket->priority->badgeClasses() }}">
+            <!-- 1. Priority Display -->
+            {{-- <div class="px-4 py-2 bg-white border border-[#E2E8F0] rounded-xl flex items-center gap-2 shadow-sm">
                 <span
-                    class="text-[9px] font-black uppercase tracking-widest opacity-70">{{ __('Priority') }}:</span>
-                <span class="text-[10px] font-black uppercase">{{ $ticket->priority->label() }}</span>
+                    class="text-[9px] font-black text-[#94A3B8] uppercase tracking-widest">{{ __('Priority') }}:</span>
+                <span class="text-xs font-black text-[#0F172A] uppercase">{{ $ticket->priority->label() }}</span>
             </div>
-            <!-- Status Badge (Dynamic Color) -->
+
+            <!-- 2. Dynamic Status Badge -->
             <div
-                class="px-4 py-2 border rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm {{ $ticket->status->badgeClasses() }}">
+                class="px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm {{ $ticket->status->badgeClasses() }}">
                 {{ $ticket->status->label() }}
-            </div>
+            </div> --}}
+
+            <!-- 3. NEW: CLOSE TICKET BUTTON (Only shows if not closed) -->
+            @if ($ticket->status->value !== 'closed')
+                <button wire:click="closeTicket"
+                    wire:confirm="Are you sure you want to close this ticket? You will need to open a new one if the problem persists."
+                    class="flex items-center gap-2 px-5 py-2 bg-[#FEE2E2] hover:bg-[#DC2626] text-[#DC2626] hover:text-red-600 border border-[#FCA5A5] rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm">
+                    <i data-lucide="x-circle" class="w-4 h-4"></i>
+                    {{ __('Close This Ticket') }}
+                </button>
+            @endif
         </div>
     </div>
 
@@ -37,7 +48,8 @@
         </div>
         <div class="bg-white p-5 rounded-xl border border-[#E2E8F0] shadow-sm">
             <p class="text-[10px] font-black text-[#94A3B8] uppercase tracking-widest mb-2">{{ __('Department') }}</p>
-            <span class="inline-flex px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest {{ $ticket->getCategoryBadgeClasses() }}">
+            <span
+                class="inline-flex px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest {{ $ticket->getCategoryBadgeClasses() }}">
                 {{ $ticket->category }}
             </span>
         </div>
@@ -58,14 +70,16 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
 
         <!-- MESSAGE THREAD (Takes 2/3 of space) -->
-        <div class="lg:col-span-2 bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-6 md:p-8 flex flex-col space-y-8">
+        <div
+            class="lg:col-span-2 bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-6 md:p-8 flex flex-col space-y-8">
             @foreach ($messages as $msg)
                 <div class="flex {{ $msg->is_admin ? 'justify-start' : 'justify-end' }} gap-4">
 
                     @if ($msg->is_admin)
                         <!-- Admin Avatar -->
                         <div class="flex-shrink-0 mt-6">
-                            <div class="w-15 h-15 rounded-full bg-[#1E7CCF] flex items-center justify-center text-white shadow-md">
+                            <div
+                                class="w-15 h-15 rounded-full bg-[#1E7CCF] flex items-center justify-center text-white shadow-md">
                                 <i data-lucide="headphones" class="w-10 h-10"></i>
                             </div>
                         </div>
@@ -73,7 +87,8 @@
 
                     <div class="max-w-[85%] md:max-w-[75%] space-y-1">
                         <!-- Sender Name & Time -->
-                        <div class="flex items-center gap-2 px-1 {{ $msg->is_admin ? 'justify-start' : 'justify-end' }}">
+                        <div
+                            class="flex items-center gap-2 px-1 {{ $msg->is_admin ? 'justify-start' : 'justify-end' }}">
                             <span class="text-[10px] font-black uppercase tracking-widest text-[#94A3B8]">
                                 {{ $msg->is_admin ? __('Support Team') : $ticket->user->name }}
                             </span>
@@ -82,14 +97,17 @@
                         </div>
 
                         <!-- Message Bubble -->
-                        <div class="p-6 rounded-2xl shadow-sm {{ $msg->is_admin
-                            ? 'bg-[#1E7CCF] text-white rounded-tl-none'
-                            : 'bg-[#F8FAFC] text-[#334155] border border-[#E2E8F0] rounded-tr-none' }}">
+                        <div
+                            class="p-6 rounded-2xl shadow-sm {{ $msg->is_admin
+                                ? 'bg-[#1E7CCF] text-white rounded-tl-none'
+                                : 'bg-[#F8FAFC] text-[#334155] border border-[#E2E8F0] rounded-tr-none' }}">
 
-                            <p class="text-base md:text-lg font-medium leading-relaxed whitespace-pre-wrap">{{ $msg->content }}</p>
+                            <p class="text-base md:text-lg font-medium leading-relaxed whitespace-pre-wrap">
+                                {{ $msg->content }}</p>
 
                             @if ($msg->attachment)
-                                <div class="mt-4 pt-4 border-t {{ $msg->is_admin ? 'border-white/10' : 'border-[#E2E8F0]' }}">
+                                <div
+                                    class="mt-4 pt-4 border-t {{ $msg->is_admin ? 'border-white/10' : 'border-[#E2E8F0]' }}">
                                     <a href="{{ Storage::url($msg->attachment) }}" target="_blank"
                                         class="inline-flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl backdrop-blur-sm border {{ $msg->is_admin ? 'border-white/10' : 'border-[#1E7CCF]/10' }} text-xs font-bold {{ $msg->is_admin ? 'text-white' : 'text-[#1E7CCF]' }} transition-all">
                                         <i data-lucide="file-image" class="w-4 h-4"></i> {{ __('View Attachment') }}
@@ -102,7 +120,8 @@
                     @if (!$msg->is_admin)
                         <!-- User Avatar -->
                         <div class="flex-shrink-0 mt-6">
-                            <div class="w-15 h-15 rounded-full bg-white border-2 border-[#E2E8F0] flex items-center justify-center text-[#1E7CCF] shadow-sm">
+                            <div
+                                class="w-15 h-15 rounded-full bg-white border-2 border-[#E2E8F0] flex items-center justify-center text-[#1E7CCF] shadow-sm">
                                 <i data-lucide="user" class="w-10 h-10"></i>
                             </div>
                         </div>
@@ -121,38 +140,57 @@
                     </h4>
                 </div>
                 <div class="p-6 space-y-8">
+                    <!-- Status Info -->
+                    <div class="flex items-center gap-4 group">
+                        <div
+                            class="p-2.5 bg-[#F1F5F9] rounded-xl text-[#64748B] group-hover:bg-[#E9F2FB] group-hover:text-[#1E7CCF] transition-colors">
+                            <i data-lucide="tag" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-[0.15em] mb-0.5">
+                                {{ __('Status') }}</p>
+                            <p class="text-sm font-bold text-[#334155]">{{ $ticket->status }}</p>
+                        </div>
+                    </div>
                     <!-- Customer Info -->
                     <div class="flex items-center gap-4 group">
-                        <div class="p-2.5 bg-[#F1F5F9] rounded-xl text-[#64748B] group-hover:bg-[#E9F2FB] group-hover:text-[#1E7CCF] transition-colors">
+                        <div
+                            class="p-2.5 bg-[#F1F5F9] rounded-xl text-[#64748B] group-hover:bg-[#E9F2FB] group-hover:text-[#1E7CCF] transition-colors">
                             <i data-lucide="user" class="w-4 h-4"></i>
                         </div>
                         <div>
-                            <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-[0.15em] mb-0.5">{{ __('Customer') }}</p>
+                            <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-[0.15em] mb-0.5">
+                                {{ __('Customer') }}</p>
                             <p class="text-sm font-bold text-[#334155]">{{ $ticket->user->name }}</p>
                         </div>
                     </div>
 
                     <!-- Email Info -->
                     <div class="flex items-center gap-4 group">
-                        <div class="p-2.5 bg-[#F1F5F9] rounded-xl text-[#64748B] group-hover:bg-[#E9F2FB] group-hover:text-[#1E7CCF] transition-colors">
+                        <div
+                            class="p-2.5 bg-[#F1F5F9] rounded-xl text-[#64748B] group-hover:bg-[#E9F2FB] group-hover:text-[#1E7CCF] transition-colors">
                             <i data-lucide="mail" class="w-4 h-4"></i>
                         </div>
                         <div class="min-w-0 flex-1">
-                            <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-[0.15em] mb-0.5">{{ __('Email') }}</p>
+                            <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-[0.15em] mb-0.5">
+                                {{ __('Email') }}</p>
                             <p class="text-sm font-bold text-[#334155] truncate">{{ $ticket->user->email }}</p>
                         </div>
                     </div>
 
                     <!-- Department Info -->
                     <div class="flex items-center gap-4 group">
-                        <div class="p-2.5 bg-[#F1F5F9] rounded-xl text-[#64748B] group-hover:bg-[#E9F2FB] group-hover:text-[#1E7CCF] transition-colors">
+                        <div
+                            class="p-2.5 bg-[#F1F5F9] rounded-xl text-[#64748B] group-hover:bg-[#E9F2FB] group-hover:text-[#1E7CCF] transition-colors">
                             <i data-lucide="tag" class="w-4 h-4"></i>
                         </div>
                         <div>
-                            <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-[0.15em] mb-0.5">{{ __('Department') }}</p>
-                            <p class="text-sm font-bold text-[#334155]">{{ $ticket->category }}</p>
+                            <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-[0.15em] mb-0.5">
+                                {{ __('priority') }}</p>
+                            <p class="text-sm font-bold text-[#334155]">{{ $ticket->priority }}</p>
                         </div>
                     </div>
+
                 </div>
             </div>
         </div>
