@@ -53,6 +53,7 @@ func baseConfig(maxMX int) Config {
 		SMTPRateLimitPerMinute:  0,
 		DisposableDomains:       map[string]struct{}{},
 		RoleAccounts:            map[string]struct{}{},
+		RoleAccountsBehavior:    "risky",
 		DomainTypos:             map[string]string{},
 	}
 }

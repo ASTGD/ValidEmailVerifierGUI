@@ -40,11 +40,13 @@ type Worker struct {
 }
 
 type policyState struct {
-	loaded              bool
-	enginePaused        bool
-	enhancedModeEnabled bool
-	standard            policyConfig
-	enhanced            policyConfig
+	loaded               bool
+	enginePaused         bool
+	enhancedModeEnabled  bool
+	roleAccountsBehavior string
+	roleAccounts         map[string]struct{}
+	standard             policyConfig
+	enhanced             policyConfig
 }
 
 type policyConfig struct {
@@ -428,9 +430,11 @@ func (w *Worker) refreshPolicyIfNeeded(ctx context.Context, now time.Time) {
 
 func policyStateFrom(resp *api.PolicyResponse) policyState {
 	state := policyState{
-		loaded:              true,
-		enginePaused:        resp.Data.EnginePaused,
-		enhancedModeEnabled: resp.Data.EnhancedModeEnabled,
+		loaded:               true,
+		enginePaused:         resp.Data.EnginePaused,
+		enhancedModeEnabled:  resp.Data.EnhancedModeEnabled,
+		roleAccountsBehavior: normalizeRoleAccountsBehavior(resp.Data.RoleAccountsBehavior),
+		roleAccounts:         mapFromSlice(resp.Data.RoleAccountsList),
 	}
 
 	if policy, ok := resp.Data.Policies["standard"]; ok {
@@ -498,12 +502,28 @@ func (w *Worker) policySnapshot() policyState {
 
 func (w *Worker) verifierForMode(mode string, policy policyConfig, hasPolicy bool) verifier.Verifier {
 	config := w.cfg.BaseVerifierConfig
+	state := w.policySnapshot()
+
+	if state.loaded {
+		config = applyGlobalOverrides(config, state)
+	}
 
 	if hasPolicy {
 		config = applyPolicy(config, policy)
 	}
 
 	return verifier.NewPipelineVerifier(config, verifier.NetMXResolver{}, nil)
+}
+
+func applyGlobalOverrides(config verifier.Config, state policyState) verifier.Config {
+	if state.roleAccountsBehavior != "" {
+		config.RoleAccountsBehavior = state.roleAccountsBehavior
+	}
+	if state.roleAccounts != nil {
+		config.RoleAccounts = state.roleAccounts
+	}
+
+	return config
 }
 
 func applyPolicy(config verifier.Config, policy policyConfig) verifier.Config {
@@ -530,6 +550,34 @@ func applyPolicy(config verifier.Config, policy policyConfig) verifier.Config {
 	}
 
 	return config
+}
+
+func normalizeRoleAccountsBehavior(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return "risky"
+	}
+
+	if value == "risky" || value == "allow" {
+		return value
+	}
+
+	return "risky"
+}
+
+func mapFromSlice(values []string) map[string]struct{} {
+	output := map[string]struct{}{}
+
+	for _, value := range values {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value == "" {
+			continue
+		}
+
+		output[value] = struct{}{}
+	}
+
+	return output
 }
 
 func (w *Worker) updateMaxConcurrency(state policyState) {

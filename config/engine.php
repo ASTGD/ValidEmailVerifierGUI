@@ -37,6 +37,8 @@ return [
     'health_window_days' => (int) env('ENGINE_HEALTH_WINDOW_DAYS', 7),
     'engine_paused' => (bool) env('ENGINE_PAUSED', false),
     'enhanced_mode_enabled' => env('ENGINE_ENHANCED_MODE_ENABLED', false),
+    'role_accounts_behavior' => env('ENGINE_ROLE_ACCOUNTS_BEHAVIOR', 'risky'),
+    'role_accounts_list' => env('ENGINE_ROLE_ACCOUNTS_LIST', 'info,admin,support,sales,contact,hello,hr'),
     'policy_contract_version' => env('ENGINE_POLICY_CONTRACT_VERSION', 'v1'),
     'policy_defaults' => [
         'standard' => array_merge($policyDefaults, [

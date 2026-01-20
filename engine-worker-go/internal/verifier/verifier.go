@@ -30,5 +30,6 @@ type Config struct {
 	SMTPRateLimitPerMinute  int
 	DisposableDomains       map[string]struct{}
 	RoleAccounts            map[string]struct{}
+	RoleAccountsBehavior    string
 	DomainTypos             map[string]string
 }

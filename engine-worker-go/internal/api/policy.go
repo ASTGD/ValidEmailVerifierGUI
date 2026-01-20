@@ -22,10 +22,12 @@ type Policy struct {
 
 type PolicyResponse struct {
 	Data struct {
-		ContractVersion     string            `json:"contract_version"`
-		EnginePaused        bool              `json:"engine_paused"`
-		EnhancedModeEnabled bool              `json:"enhanced_mode_enabled"`
-		Policies            map[string]Policy `json:"policies"`
+		ContractVersion      string            `json:"contract_version"`
+		EnginePaused         bool              `json:"engine_paused"`
+		EnhancedModeEnabled  bool              `json:"enhanced_mode_enabled"`
+		RoleAccountsBehavior string            `json:"role_accounts_behavior"`
+		RoleAccountsList     []string          `json:"role_accounts_list"`
+		Policies             map[string]Policy `json:"policies"`
 	} `json:"data"`
 }
 

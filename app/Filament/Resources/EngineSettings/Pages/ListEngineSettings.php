@@ -11,6 +11,16 @@ class ListEngineSettings extends ListRecords
 {
     protected static string $resource = EngineSettingResource::class;
 
+    public function mount(): void
+    {
+        parent::mount();
+
+        $record = EngineSetting::query()->first();
+        if ($record !== null) {
+            $this->redirect(EngineSettingResource::getUrl('edit', ['record' => $record]));
+        }
+    }
+
     /**
      * @return array<class-string<CreateAction>>
      */

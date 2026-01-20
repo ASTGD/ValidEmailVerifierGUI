@@ -9,6 +9,8 @@ class EngineSetting extends Model
     protected $fillable = [
         'engine_paused',
         'enhanced_mode_enabled',
+        'role_accounts_behavior',
+        'role_accounts_list',
     ];
 
     protected $casts = [

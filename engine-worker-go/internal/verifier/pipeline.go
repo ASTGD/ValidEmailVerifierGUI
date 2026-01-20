@@ -79,8 +79,11 @@ func (p *PipelineVerifier) Verify(ctx context.Context, email string) Result {
 		return Result{Category: CategoryRisky, Reason: "disposable_domain"}
 	}
 
-	if _, ok := p.roleAccounts[parsed.local]; ok {
-		return Result{Category: CategoryRisky, Reason: "role_account"}
+	behavior := strings.ToLower(strings.TrimSpace(p.config.RoleAccountsBehavior))
+	if behavior == "" || behavior == "risky" {
+		if _, ok := p.roleAccounts[parsed.local]; ok {
+			return Result{Category: CategoryRisky, Reason: "role_account"}
+		}
 	}
 
 	mxRecords, dnsResult := p.lookupMX(ctx, parsed.domain)
