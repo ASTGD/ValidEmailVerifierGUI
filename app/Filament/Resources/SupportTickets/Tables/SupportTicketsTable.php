@@ -22,9 +22,12 @@ class SupportTicketsTable
                     ->label('ID')
                     ->searchable()
                     ->sortable()
-                    ->fontFamily('mono') // Industry standard for IDs
+                    ->fontFamily('mono')
                     ->weight('bold')
-                    ->color('primary'), // Matches your brand blue
+                    ->color('primary')
+                    ->extraCellAttributes([
+                        'style' => 'background-color: #fbf7e9 !important;',
+                    ]),
 
                 TextColumn::make('subject')
                     ->label('Subject')
@@ -99,7 +102,10 @@ class SupportTicketsTable
                 TextColumn::make('updated_at')
                     ->label('Updated')
                     ->dateTime()
-                    ->sortable(),
+                    ->sortable()
+                    ->extraCellAttributes([
+                        'style' => 'background-color: #f3f3f3 !important;',
+                    ]),
             ])
             ->filters([
                 SelectFilter::make('status')

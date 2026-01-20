@@ -63,33 +63,30 @@ class MessagesRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('user.name')
                     ->label('Author')
                     ->icon('heroicon-m-user')
+                    ->color(fn($record) => $record->is_admin ? 'info' : 'warning')
+                    ->description(fn($record) => $record->is_admin ? 'ADMIN REPLY' : 'CUSTOMER REPLY')
                     // Link to Customer Admin List filtered by this user
                     ->url(fn($record) => "/admin/customers?tableSearch=" . urlencode($record->user->email))
                     ->openUrlInNewTab()
-                    ->color(fn($record) => $record->is_admin ? 'info' : 'warning')
-                    ->description(fn($record) => $record->is_admin ? 'ADMIN REPLY' : 'CUSTOMER REPLY')
+                    // THE FIX: Conditional Background Color
                     ->extraCellAttributes(fn($record) => [
-                        'style' => $record->is_admin ? $adminBg : '',
+                        'style' => $record->is_admin
+                            ? 'background-color: #E9F2FB !important; border-right: 1px solid #E2E8F0;' // Admin Blue
+                            : 'background-color: #fffef5ff !important; border-right: 1px solid #E2E8F0;', // Customer Grey
                     ]),
 
                 // 2. Message Content
                 Tables\Columns\TextColumn::make('content')
                     ->label('Message Content')
                     ->wrap()
-                    ->grow()
-                    ->extraCellAttributes(fn($record) => [
-                        'style' => $record->is_admin ? $adminBg : '',
-                    ]),
+                    ->grow(),
 
                 // 3. File
                 Tables\Columns\ImageColumn::make('attachment')
                     ->label('File')
                     ->disk('public')
                     ->size(40)
-                    ->placeholder('-')
-                    ->extraCellAttributes(fn($record) => [
-                        'style' => $record->is_admin ? $adminBg : '',
-                    ]),
+                    ->placeholder('-'),
 
                 // 4. Time
                 Tables\Columns\TextColumn::make('created_at')
@@ -97,8 +94,11 @@ class MessagesRelationManager extends RelationManager
                     ->since()
                     ->alignment('right')
                     ->description(fn($record) => $record->created_at->format('M d, Y H:i'))
+                    // THE FIX: Conditional Background Color
                     ->extraCellAttributes(fn($record) => [
-                        'style' => $record->is_admin ? $adminBg : '',
+                        'style' => $record->is_admin
+                            ? 'background-color: #E9F2FB !important; border-right: 1px solid #E2E8F0;' // Admin Blue
+                            : 'background-color: #fffef5ff !important; border-right: 1px solid #E2E8F0;', // Customer Grey
                     ]),
             ])
             ->actions([

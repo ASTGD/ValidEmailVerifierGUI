@@ -56,12 +56,12 @@
 
     <!-- 3. CHAT MESSAGES THREAD & TICKET INFO -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        
+
         <!-- MESSAGE THREAD (Takes 2/3 of space) -->
         <div class="lg:col-span-2 bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-6 md:p-8 flex flex-col space-y-8">
             @foreach ($messages as $msg)
                 <div class="flex {{ $msg->is_admin ? 'justify-start' : 'justify-end' }} gap-4">
-                    
+
                     @if ($msg->is_admin)
                         <!-- Admin Avatar -->
                         <div class="flex-shrink-0 mt-6">
@@ -82,11 +82,11 @@
                         </div>
 
                         <!-- Message Bubble -->
-                        <div class="p-6 rounded-2xl shadow-sm {{ $msg->is_admin 
-                            ? 'bg-[#1E7CCF] text-white rounded-tl-none' 
+                        <div class="p-6 rounded-2xl shadow-sm {{ $msg->is_admin
+                            ? 'bg-[#1E7CCF] text-white rounded-tl-none'
                             : 'bg-[#F8FAFC] text-[#334155] border border-[#E2E8F0] rounded-tr-none' }}">
-                            
-                            <p class="text-sm md:text-base font-medium leading-relaxed whitespace-pre-wrap">{{ $msg->content }}</p>
+
+                            <p class="text-base md:text-lg font-medium leading-relaxed whitespace-pre-wrap">{{ $msg->content }}</p>
 
                             @if ($msg->attachment)
                                 <div class="mt-4 pt-4 border-t {{ $msg->is_admin ? 'border-white/10' : 'border-[#E2E8F0]' }}">
