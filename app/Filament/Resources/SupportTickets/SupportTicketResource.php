@@ -50,6 +50,8 @@ class SupportTicketResource extends Resource
             RelationGroup::make('Ticket Data', [
                 // MESSAGES FIRST
                 \App\Filament\Resources\SupportTickets\RelationManagers\MessagesRelationManager::class,
+                //THE SPECIFIC LINKED ORDER (NEW)
+                \App\Filament\Resources\SupportTickets\RelationManagers\LinkedOrderRelationManager::class,
                 // ORDERS SECOND
                 \App\Filament\Resources\SupportTickets\RelationManagers\UserOrdersRelationManager::class,
             ]),

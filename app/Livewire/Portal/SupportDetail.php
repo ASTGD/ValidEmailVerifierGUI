@@ -23,7 +23,7 @@ class SupportDetail extends Component
         if ($ticket->user_id !== Auth::id()) {
             abort(403);
         }
-        $this->ticket = $ticket;
+        $this->ticket = $ticket->load('order');
     }
 
     public function sendMessage()

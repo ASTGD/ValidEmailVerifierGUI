@@ -18,6 +18,7 @@ class SupportTicket extends Model
         'status',
         'priority',
         'closed_at',
+        'verification_order_id',
     ];
 
     protected $casts = [
@@ -73,5 +74,19 @@ class SupportTicket extends Model
     {
         // This looks at the user of the ticket and finds their verification orders
         return $this->hasMany(VerificationOrder::class, 'user_id', 'user_id');
+    }
+
+    // Relationship method:
+    public function order(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(VerificationOrder::class, 'verification_order_id');
+    }
+
+    /**
+     * Relationship to the specific order linked to this ticket.
+     */
+    public function linkedOrder(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(VerificationOrder::class, 'verification_order_id');
     }
 }

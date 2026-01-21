@@ -86,7 +86,8 @@
                                         {{ $ticket->updated_at->diffForHumans() }}
                                     </span>
                                     <!-- Muted technical date string -->
-                                    <span class="text-[11px] font-extrabold text-[#94A3B8] uppercase tracking-tighter mt-1">
+                                    <span
+                                        class="text-[11px] font-extrabold text-[#94A3B8] uppercase tracking-tighter mt-1">
                                         {{ $ticket->updated_at->format('M d, Y • H:i') }}
                                     </span>
                                 </div>
@@ -264,6 +265,26 @@
                     @error('message')
                         <span class="text-red-500 text-xs font-bold mt-1">{{ $message }}</span>
                     @enderror
+                </div>
+                <!-- RELATED ORDER DROPDOWN -->
+                <div>
+                    <label
+                        class="block text-sm font-bold text-[#334155] mb-2">{{ __('Related Order (Optional)') }}</label>
+                    <div class="relative">
+                        <select wire:model="verification_order_id"
+                            class="w-full rounded-xl border-[#E2E8F0] bg-[#F8FAFC] text-sm font-bold text-[#334155] focus:ring-[#1E7CCF] focus:border-[#1E7CCF] appearance-none p-3 pr-10">
+                            <option value="">{{ __('--- Select an Order ---') }}</option>
+                            @foreach ($userOrders as $order)
+                                <option value="{{ $order->id }}">
+                                    #{{ substr($order->id, 0, 8) }} - {{ $order->created_at->format('M d, Y') }}
+                                    ({{ number_format($order->email_count) }} emails)
+                                </option>
+                            @endforeach
+                        </select>
+                        <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                            <i data-lucide="chevron-down" class="w-4 h-4 text-[#64748B]"></i>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Attachment -->

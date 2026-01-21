@@ -152,6 +152,7 @@
                             <p class="text-sm font-bold text-[#334155]">{{ $ticket->status }}</p>
                         </div>
                     </div>
+
                     <!-- Customer Info -->
                     <div class="flex items-center gap-4 group">
                         <div
@@ -190,6 +191,57 @@
                             <p class="text-sm font-bold text-[#334155]">{{ $ticket->priority }}</p>
                         </div>
                     </div>
+                    <!-- Check if an order is linked to this ticket -->
+                    @if ($ticket->verification_order_id && $ticket->order)
+                        <div class="mt-6 pt-6 border-t border-[#F8FAFC]">
+                            <p class="text-[10px] font-black text-[#94A3B8] uppercase tracking-widest mb-4">
+                                {{ __('Linked Order') }}</p>
+
+                            <div class="space-y-4">
+                                <!-- Order ID -->
+                                <div class="flex items-start gap-3">
+                                    <div class="p-2 bg-[#E9F2FB] rounded-lg text-[#1E7CCF]"><i
+                                            data-lucide="shopping-bag" class="w-4 h-4"></i></div>
+                                    <div>
+                                        <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-tighter">
+                                            {{ __('Order ID') }}</p>
+                                        <p class="text-xs font-bold text-[#1E7CCF] font-mono">
+                                            #{{ substr($ticket->verification_order_id, 0, 8) }}</p>
+                                    </div>
+                                </div>
+
+                                <!-- Order Amount -->
+                                <div class="flex items-start gap-3">
+                                    <div class="p-2 bg-[#F1F5F9] rounded-lg text-[#64748B]"><i data-lucide="banknote"
+                                            class="w-4 h-4"></i></div>
+                                    <div>
+                                        <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-tighter">
+                                            {{ __('Amount Paid') }}</p>
+                                        <p class="text-xs font-bold text-[#334155]">
+                                            ${{ number_format($ticket->order->amount_cents / 100, 2) }}</p>
+                                    </div>
+                                </div>
+
+                                <!-- Order Date -->
+                                <div class="flex items-start gap-3">
+                                    <div class="p-2 bg-[#F1F5F9] rounded-lg text-[#64748B]"><i data-lucide="calendar"
+                                            class="w-4 h-4"></i></div>
+                                    <div>
+                                        <p class="text-[9px] font-black text-[#94A3B8] uppercase tracking-tighter">
+                                            {{ __('Purchase Date') }}</p>
+                                        <p class="text-xs font-bold text-[#334155]">
+                                            {{ $ticket->order->created_at->format('M d, Y') }}</p>
+                                    </div>
+                                </div>
+
+                                <!-- View Order Link -->
+                                <a href="{{ route('portal.orders.index') }}"
+                                    class="block w-full mt-2 py-2 text-center bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-[10px] font-black uppercase text-[#1E7CCF] hover:bg-[#1E7CCF] hover:text-white transition-all">
+                                    {{ __('View Full Order Details') }}
+                                </a>
+                            </div>
+                        </div>
+                    @endif
 
                 </div>
             </div>
