@@ -32,7 +32,8 @@ class MessagesRelationManager extends RelationManager
                     Forms\Components\FileUpload::make('attachment')
                         ->image()
                         ->directory('support-attachments')
-                        ->disk('public'),
+                        ->disk('public')
+                        ->visibility('public'),
 
                     Forms\Components\Select::make('ticket_status')
                         ->label('Update Ticket Status')

@@ -108,8 +108,10 @@
                             @if ($msg->attachment)
                                 <div
                                     class="mt-4 pt-4 border-t {{ $msg->is_admin ? 'border-white/10' : 'border-[#E2E8F0]' }}">
-                                    <a href="{{ Storage::url($msg->attachment) }}" target="_blank"
-                                        class="inline-flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl backdrop-blur-sm border {{ $msg->is_admin ? 'border-white/10' : 'border-[#1E7CCF]/10' }} text-xs font-bold {{ $msg->is_admin ? 'text-white' : 'text-[#1E7CCF]' }} transition-all">
+                                    {{-- <a href="{{ Storage::url($msg->attachment) }}" target="_blank"
+                                        class="inline-flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl backdrop-blur-sm border {{ $msg->is_admin ? 'border-white/10' : 'border-[#1E7CCF]/10' }} text-xs font-bold {{ $msg->is_admin ? 'text-white' : 'text-[#1E7CCF]' }} transition-all"> --}}
+                                    <a href="{{ asset('storage/' . $msg->attachment) }}" target="_blank"
+                                        class="inline-flex items-center gap-2 p-2 bg-white/50 rounded-xl border border-black/5 text-xs font-bold hover:bg-white transition-all text-[#1E7CCF]">
                                         <i data-lucide="file-image" class="w-4 h-4"></i> {{ __('View Attachment') }}
                                     </a>
                                 </div>
