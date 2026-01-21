@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EngineServers\Schemas;
 
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -49,7 +50,7 @@ class EngineServerForm
                 Section::make('SMTP Identity')
                     ->schema([
                         TextInput::make('helo_name')
-                            ->label('HELO name')
+                            ->label('Host Name')
                             ->maxLength(255)
                             ->helperText('Must resolve and ideally match rDNS.'),
                         TextInput::make('mail_from_address')
@@ -57,10 +58,12 @@ class EngineServerForm
                             ->email()
                             ->maxLength(255)
                             ->helperText('Used for RCPT probing in Enhanced mode.'),
-                        TextInput::make('identity_domain')
-                            ->label('Identity domain')
-                            ->maxLength(255)
-                            ->helperText('Domain used for SPF/DKIM/DMARC alignment.'),
+                        Select::make('verifier_domain_id')
+                            ->label('Verifier domain')
+                            ->relationship('verifierDomain', 'domain', fn ($query) => $query->where('is_active', true))
+                            ->searchable()
+                            ->preload()
+                            ->helperText('Select the base domain used for SPF/DKIM/DMARC alignment.'),
                     ])
                     ->columns(2),
             ]);
