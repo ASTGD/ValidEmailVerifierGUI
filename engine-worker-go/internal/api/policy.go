@@ -15,6 +15,7 @@ type Policy struct {
 	MaxMXAttempts              int      `json:"max_mx_attempts"`
 	MaxConcurrencyDefault      int      `json:"max_concurrency_default"`
 	PerDomainConcurrency       int      `json:"per_domain_concurrency"`
+	CatchAllDetectionEnabled   bool     `json:"catch_all_detection_enabled"`
 	GlobalConnectsPerMinute    *int     `json:"global_connects_per_minute"`
 	TempfailBackoffSeconds     *int     `json:"tempfail_backoff_seconds"`
 	CircuitBreakerTempfailRate *float64 `json:"circuit_breaker_tempfail_rate"`

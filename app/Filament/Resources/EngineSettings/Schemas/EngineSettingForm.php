@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EngineSettings\Schemas;
 
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
@@ -56,7 +57,7 @@ class EngineSettingForm
     {
         $prefix = 'policy_'.$mode.'_';
 
-        return [
+        $fields = [
             Toggle::make($prefix.'enabled')
                 ->label('Enabled')
                 ->default(true),
@@ -108,5 +109,16 @@ class EngineSettingForm
                 ->step('0.01')
                 ->helperText('Optional threshold for tempfail-rate protection.'),
         ];
+
+        if ($mode === 'enhanced') {
+            $fields[] = Toggle::make($prefix.'catch_all_detection_enabled')
+                ->label('Catch-all detection')
+                ->helperText('Attempt a randomized RCPT test to flag catch-all domains.');
+        } else {
+            $fields[] = Hidden::make($prefix.'catch_all_detection_enabled')
+                ->default((bool) config('engine.policy_defaults.standard.catch_all_detection_enabled', false));
+        }
+
+        return $fields;
     }
 }

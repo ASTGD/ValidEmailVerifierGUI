@@ -43,9 +43,11 @@ return [
     'policy_defaults' => [
         'standard' => array_merge($policyDefaults, [
             'enabled' => true,
+            'catch_all_detection_enabled' => (bool) env('ENGINE_POLICY_CATCH_ALL_ENABLED_STANDARD', false),
         ]),
         'enhanced' => array_merge($policyDefaults, [
             'enabled' => (bool) env('ENGINE_POLICY_ENHANCED_ENABLED', false),
+            'catch_all_detection_enabled' => (bool) env('ENGINE_POLICY_CATCH_ALL_ENABLED_ENHANCED', true),
         ]),
     ],
     'feedback_imports_prefix' => env('ENGINE_FEEDBACK_IMPORTS_PREFIX', 'feedback/imports'),
