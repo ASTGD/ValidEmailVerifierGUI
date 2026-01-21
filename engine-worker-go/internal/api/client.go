@@ -89,6 +89,19 @@ type OutputURLsResponse struct {
 	} `json:"data"`
 }
 
+type HeartbeatResponse struct {
+	Data struct {
+		ServerID                 int    `json:"server_id"`
+		Status                   string `json:"status"`
+		HeartbeatThresholdMinute int    `json:"heartbeat_threshold_minutes"`
+		Identity                 struct {
+			HeloName        string `json:"helo_name"`
+			MailFromAddress string `json:"mail_from_address"`
+			IdentityDomain  string `json:"identity_domain"`
+		} `json:"identity"`
+	} `json:"data"`
+}
+
 type APIError struct {
 	Status int
 	Body   string
@@ -125,18 +138,27 @@ func (c *Client) ClaimNext(ctx context.Context, req ClaimNextRequest) (*ClaimNex
 	return &resp, true, nil
 }
 
-func (c *Client) Heartbeat(ctx context.Context, server EngineServerPayload) error {
+func (c *Client) Heartbeat(ctx context.Context, server EngineServerPayload) (*HeartbeatResponse, error) {
 	status, body, err := c.do(ctx, http.MethodPost, "/api/verifier/heartbeat", map[string]EngineServerPayload{
 		"server": server,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if status < 200 || status >= 300 {
-		return APIError{Status: status, Body: string(body)}
+		return nil, APIError{Status: status, Body: string(body)}
 	}
 
-	return nil
+	if len(body) == 0 {
+		return nil, nil
+	}
+
+	var resp HeartbeatResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
 }
 
 func (c *Client) ChunkDetails(ctx context.Context, chunkID string) (*ChunkDetailsResponse, error) {

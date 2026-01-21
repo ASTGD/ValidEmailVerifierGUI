@@ -32,6 +32,18 @@ class EngineServersTable
                 TextColumn::make('region')
                     ->label('Region')
                     ->toggleable(),
+                TextColumn::make('helo_name')
+                    ->label('HELO')
+                    ->toggleable()
+                    ->placeholder('-'),
+                TextColumn::make('mail_from_address')
+                    ->label('MAIL FROM')
+                    ->toggleable()
+                    ->placeholder('-'),
+                TextColumn::make('identity_domain')
+                    ->label('Identity domain')
+                    ->toggleable()
+                    ->placeholder('-'),
                 TextColumn::make('status')
                     ->label('Status')
                     ->badge()

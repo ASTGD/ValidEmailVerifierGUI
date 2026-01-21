@@ -86,6 +86,8 @@ func (p *PipelineVerifier) Verify(ctx context.Context, email string) Result {
 		}
 	}
 
+	emailAddress := fmt.Sprintf("%s@%s", parsed.local, parsed.domain)
+
 	mxRecords, dnsResult := p.lookupMX(ctx, parsed.domain)
 	if dnsResult.Reason != "" {
 		return dnsResult
@@ -98,7 +100,7 @@ func (p *PipelineVerifier) Verify(ctx context.Context, email string) Result {
 		return mxRecords[i].Pref < mxRecords[j].Pref
 	})
 
-	return p.checkSMTP(ctx, parsed.domain, mxRecords)
+	return p.checkSMTP(ctx, parsed.domain, emailAddress, mxRecords)
 }
 
 func (p *PipelineVerifier) lookupMX(ctx context.Context, domain string) ([]*net.MX, Result) {
@@ -138,7 +140,7 @@ func (p *PipelineVerifier) lookupMX(ctx context.Context, domain string) ([]*net.
 	return nil, Result{}
 }
 
-func (p *PipelineVerifier) checkSMTP(ctx context.Context, domain string, mxRecords []*net.MX) Result {
+func (p *PipelineVerifier) checkSMTP(ctx context.Context, domain, email string, mxRecords []*net.MX) Result {
 	maxAttempts := p.config.MaxMXAttempts
 	if maxAttempts <= 0 {
 		maxAttempts = 2
@@ -152,7 +154,7 @@ func (p *PipelineVerifier) checkSMTP(ctx context.Context, domain string, mxRecor
 		}
 
 		host := strings.TrimSuffix(mx.Host, ".")
-		attemptResult := p.checkSMTPHost(ctx, domain, host)
+		attemptResult := p.checkSMTPHost(ctx, domain, host, email)
 
 		if attemptResult.Category == CategoryValid {
 			return attemptResult
@@ -170,7 +172,7 @@ func (p *PipelineVerifier) checkSMTP(ctx context.Context, domain string, mxRecor
 	return best
 }
 
-func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host string) Result {
+func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host, email string) Result {
 	limiterRelease, err := p.limiter.Acquire(ctx, domain)
 	if err != nil {
 		return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
@@ -182,7 +184,7 @@ func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host strin
 	var last Result
 
 	for attempt := 0; attempt <= retries; attempt++ {
-		result := p.smtpChecker.Check(ctx, host)
+		result := p.smtpChecker.Check(ctx, host, email)
 
 		if result.Category == CategoryValid {
 			return result

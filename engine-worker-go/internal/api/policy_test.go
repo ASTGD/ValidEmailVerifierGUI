@@ -21,6 +21,7 @@ func TestPolicyResponseParsing(t *testing.T) {
         "max_mx_attempts": 2,
         "max_concurrency_default": 4,
         "per_domain_concurrency": 2,
+        "catch_all_detection_enabled": true,
         "global_connects_per_minute": 120,
         "tempfail_backoff_seconds": 3,
         "circuit_breaker_tempfail_rate": 0.25
@@ -34,6 +35,7 @@ func TestPolicyResponseParsing(t *testing.T) {
         "max_mx_attempts": 3,
         "max_concurrency_default": 2,
         "per_domain_concurrency": 1,
+        "catch_all_detection_enabled": false,
         "global_connects_per_minute": null,
         "tempfail_backoff_seconds": null,
         "circuit_breaker_tempfail_rate": null

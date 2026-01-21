@@ -88,6 +88,22 @@ Reason codes (output CSV `email,reason`):
 Notes:
 - `domain_typo_suspected` includes the suggested domain in the reason string.
 
+## Mailbox Probing (SG5 Enhanced)
+Enhanced mode performs **RCPT probing** using `HELO` + `MAIL FROM` + `RCPT TO`.
+It does not send a message body.
+
+Classification meaning (Enhanced only):
+- **valid**: RCPT accepted (`rcpt_ok`).
+- **invalid**: RCPT rejected (`rcpt_rejected`).
+- **risky**: catch-all detected or tempfail (`catch_all`, `smtp_tempfail`).
+
+Reason codes (Enhanced only):
+| Category | Reason code |
+| --- | --- |
+| valid | `rcpt_ok` |
+| invalid | `rcpt_rejected` |
+| risky | `catch_all` |
+
 ## Work Distribution / Queue Strategy
 “Workers pull work by calling claim-next; Laravel remains the source of truth and atomically leases chunks to workers. We may introduce a broker queue later, but the worker contract remains unchanged.”
 
@@ -130,7 +146,12 @@ Response:
   "data": {
     "server_id": 12,
     "status": "online",
-    "heartbeat_threshold_minutes": 5
+    "heartbeat_threshold_minutes": 5,
+    "identity": {
+      "helo_name": "verify.example.com",
+      "mail_from_address": "verify@verify.example.com",
+      "identity_domain": "verify.example.com"
+    }
   }
 }
 ```

@@ -16,6 +16,9 @@ class EngineServer extends Model
         'is_active',
         'drain_mode',
         'max_concurrency',
+        'helo_name',
+        'mail_from_address',
+        'identity_domain',
         'notes',
     ];
 

@@ -26,7 +26,7 @@ type fakeSMTP struct {
 	results map[string]Result
 }
 
-func (f *fakeSMTP) Check(ctx context.Context, host string) Result {
+func (f *fakeSMTP) Check(ctx context.Context, host, email string) Result {
 	if result, ok := f.results[host]; ok {
 		return result
 	}
@@ -41,20 +41,22 @@ func (timeoutError) Temporary() bool { return true }
 
 func baseConfig(maxMX int) Config {
 	return Config{
-		DNSTimeout:              1,
-		SMTPConnectTimeout:      1,
-		SMTPReadTimeout:         1,
-		SMTPEhloTimeout:         1,
-		MaxMXAttempts:           maxMX,
-		RetryableNetworkRetries: 0,
-		BackoffBaseMs:           1,
-		HeloName:                "worker.test",
-		PerDomainConcurrency:    0,
-		SMTPRateLimitPerMinute:  0,
-		DisposableDomains:       map[string]struct{}{},
-		RoleAccounts:            map[string]struct{}{},
-		RoleAccountsBehavior:    "risky",
-		DomainTypos:             map[string]string{},
+		DNSTimeout:               1,
+		SMTPConnectTimeout:       1,
+		SMTPReadTimeout:          1,
+		SMTPEhloTimeout:          1,
+		MaxMXAttempts:            maxMX,
+		RetryableNetworkRetries:  0,
+		BackoffBaseMs:            1,
+		HeloName:                 "worker.test",
+		MailFromAddress:          "probe@worker.test",
+		PerDomainConcurrency:     0,
+		SMTPRateLimitPerMinute:   0,
+		DisposableDomains:        map[string]struct{}{},
+		RoleAccounts:             map[string]struct{}{},
+		RoleAccountsBehavior:     "risky",
+		CatchAllDetectionEnabled: false,
+		DomainTypos:              map[string]string{},
 	}
 }
 

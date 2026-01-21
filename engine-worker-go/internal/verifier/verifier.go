@@ -18,18 +18,20 @@ type Verifier interface {
 }
 
 type Config struct {
-	DNSTimeout              int
-	SMTPConnectTimeout      int
-	SMTPReadTimeout         int
-	SMTPEhloTimeout         int
-	MaxMXAttempts           int
-	RetryableNetworkRetries int
-	BackoffBaseMs           int
-	HeloName                string
-	PerDomainConcurrency    int
-	SMTPRateLimitPerMinute  int
-	DisposableDomains       map[string]struct{}
-	RoleAccounts            map[string]struct{}
-	RoleAccountsBehavior    string
-	DomainTypos             map[string]string
+	DNSTimeout               int
+	SMTPConnectTimeout       int
+	SMTPReadTimeout          int
+	SMTPEhloTimeout          int
+	MaxMXAttempts            int
+	RetryableNetworkRetries  int
+	BackoffBaseMs            int
+	HeloName                 string
+	MailFromAddress          string
+	PerDomainConcurrency     int
+	SMTPRateLimitPerMinute   int
+	DisposableDomains        map[string]struct{}
+	RoleAccounts             map[string]struct{}
+	RoleAccountsBehavior     string
+	CatchAllDetectionEnabled bool
+	DomainTypos              map[string]string
 }
