@@ -41,6 +41,9 @@ class VerifierHeartbeatController
 
         $thresholdMinutes = max(1, (int) config('verifier.engine_heartbeat_minutes', 5));
 
+        $server->loadMissing('verifierDomain');
+        $identityDomain = $server->verifierDomain?->domain ?? $server->identity_domain;
+
         return response()->json([
             'data' => [
                 'server_id' => $server->id,
@@ -49,7 +52,7 @@ class VerifierHeartbeatController
                 'identity' => [
                     'helo_name' => $server->helo_name,
                     'mail_from_address' => $server->mail_from_address,
-                    'identity_domain' => $server->identity_domain,
+                    'identity_domain' => $identityDomain,
                 ],
             ],
         ]);

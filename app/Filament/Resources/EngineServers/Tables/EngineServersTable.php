@@ -33,17 +33,19 @@ class EngineServersTable
                     ->label('Region')
                     ->toggleable(),
                 TextColumn::make('helo_name')
-                    ->label('HELO')
+                    ->label('Host Name')
                     ->toggleable()
                     ->placeholder('-'),
                 TextColumn::make('mail_from_address')
                     ->label('MAIL FROM')
                     ->toggleable()
                     ->placeholder('-'),
-                TextColumn::make('identity_domain')
-                    ->label('Identity domain')
+                TextColumn::make('verifierDomain.domain')
+                    ->label('Verifier domain')
                     ->toggleable()
-                    ->placeholder('-'),
+                    ->placeholder('-')
+                    ->getStateUsing(fn (EngineServer $record): string => $record->verifierDomain?->domain
+                        ?? (string) $record->identity_domain),
                 TextColumn::make('status')
                     ->label('Status')
                     ->badge()

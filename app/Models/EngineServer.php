@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class EngineServer extends Model
@@ -19,6 +20,7 @@ class EngineServer extends Model
         'helo_name',
         'mail_from_address',
         'identity_domain',
+        'verifier_domain_id',
         'notes',
     ];
 
@@ -43,5 +45,10 @@ class EngineServer extends Model
     public function chunks(): HasMany
     {
         return $this->hasMany(VerificationJobChunk::class);
+    }
+
+    public function verifierDomain(): BelongsTo
+    {
+        return $this->belongsTo(VerifierDomain::class);
     }
 }
