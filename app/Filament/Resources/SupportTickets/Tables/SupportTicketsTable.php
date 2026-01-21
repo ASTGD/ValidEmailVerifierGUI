@@ -22,14 +22,27 @@ class SupportTicketsTable
                     ->label('ID')
                     ->searchable()
                     ->sortable()
-                    ->fontFamily('mono') // Industry standard for IDs
+                    ->fontFamily('mono')
                     ->weight('bold')
-                    ->color('primary'), // Matches your brand blue
+                    ->color('primary')
+                    ->extraCellAttributes([
+                        'style' => 'background-color: #fbf7e9 !important;',
+                    ]),
 
                 TextColumn::make('subject')
                     ->label('Subject')
                     ->searchable()
                     ->limit(40),
+
+                TextColumn::make('category')
+                    ->label('Department')
+                    ->badge()
+                    ->color(fn($state): string => match ($state) {
+                        'Technical' => 'info',
+                        'Billing' => 'warning',
+                        'Sales' => 'success',
+                        default => 'gray',
+                    }),
 
                 TextColumn::make('user.email')
                     ->label('Requestor')
@@ -45,11 +58,16 @@ class SupportTicketsTable
                         return ucfirst((string) $state);
                     })
                     ->color(function ($state): string {
-                        $value = $state instanceof SupportTicketStatus ? $state->value : (string) $state;
+                        $value = $state instanceof SupportTicketStatus ? $state : SupportTicketStatus::tryFrom((string) $state);
                         return match ($value) {
-                            SupportTicketStatus::Open->value => 'info',
-                            SupportTicketStatus::Pending->value => 'warning',
-                            SupportTicketStatus::Closed->value => 'success',
+                            SupportTicketStatus::Open => 'info',
+                            SupportTicketStatus::Pending => 'amber',
+                            SupportTicketStatus::Answered => 'success',
+                            SupportTicketStatus::CustomerReply => 'danger',
+                            SupportTicketStatus::OnHold => 'gray',
+                            SupportTicketStatus::InProgress => 'primary',
+                            SupportTicketStatus::Resolved => 'success',
+                            SupportTicketStatus::Closed => 'gray',
                             default => 'gray',
                         };
                     }),
@@ -58,18 +76,21 @@ class SupportTicketsTable
                     ->label('Priority')
                     ->badge()
                     ->formatStateUsing(function ($state): string {
-                        if (empty($state)) return '-';
-                        if ($state instanceof SupportTicketPriority) return $state->label();
+                        if (empty($state))
+                            return '-';
+                        if ($state instanceof SupportTicketPriority)
+                            return $state->label();
                         return ucfirst((string) $state);
                     })
                     ->color(function ($state): string {
-                        if (empty($state)) return 'gray';
-                        $value = $state instanceof SupportTicketPriority ? $state->value : (string) $state;
+                        if (empty($state))
+                            return 'gray';
+                        $value = $state instanceof SupportTicketPriority ? $state : SupportTicketPriority::tryFrom((string) $state);
                         return match ($value) {
-                            SupportTicketPriority::Urgent->value => 'danger',
-                            SupportTicketPriority::High->value => 'warning',
-                            SupportTicketPriority::Normal->value => 'info',
-                            SupportTicketPriority::Low->value => 'gray',
+                            SupportTicketPriority::Urgent => 'danger',
+                            SupportTicketPriority::High => 'warning',
+                            SupportTicketPriority::Normal => 'info',
+                            SupportTicketPriority::Low => 'gray',
                             default => 'gray',
                         };
                     }),
@@ -81,7 +102,10 @@ class SupportTicketsTable
                 TextColumn::make('updated_at')
                     ->label('Updated')
                     ->dateTime()
-                    ->sortable(),
+                    ->sortable()
+                    ->extraCellAttributes([
+                        'style' => 'background-color: #f3f3f3 !important;',
+                    ]),
             ])
             ->filters([
                 SelectFilter::make('status')
@@ -95,7 +119,6 @@ class SupportTicketsTable
             ->emptyStateDescription('Tickets will appear here when customers contact support.')
             ->recordActions([
                 ViewAction::make(),
-                EditAction::make(),
             ]);
     }
 

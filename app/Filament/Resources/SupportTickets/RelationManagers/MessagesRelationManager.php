@@ -21,16 +21,28 @@ class MessagesRelationManager extends RelationManager
     public function form(Schema $schema): Schema
     {
         return $schema->components([
-            Forms\Components\Textarea::make('content')
-                ->label('Reply to Customer')
-                ->placeholder('Describe the solution or ask for more details...')
-                ->required()
-                ->columnSpanFull(),
+            Forms\Components\Grid::make(2)
+                ->schema([
+                    Forms\Components\Textarea::make('content')
+                        ->label('Reply to Customer')
+                        ->placeholder('Describe the solution or ask for more details...')
+                        ->required()
+                        ->columnSpanFull(),
 
-            Forms\Components\FileUpload::make('attachment')
-                ->image()
-                ->directory('support-attachments')
-                ->disk('public'),
+                    Forms\Components\FileUpload::make('attachment')
+                        ->image()
+                        ->directory('support-attachments')
+                        ->disk('public')
+                        ->visibility('public'),
+
+                    Forms\Components\Select::make('ticket_status')
+                        ->label('Update Ticket Status')
+                        ->options(SupportTicketStatus::class)
+                        ->default(fn($record) => $this->getOwnerRecord()->status)
+                        ->selectablePlaceholder(false)
+                        ->dehydrated(false) // This field is not for the message model
+                        ->required(),
+                ]),
 
             Forms\Components\Hidden::make('user_id')
                 ->default(auth()->id()),
@@ -39,55 +51,101 @@ class MessagesRelationManager extends RelationManager
                 ->default(true),
         ]);
     }
-
     public function table(Table $table): Table
     {
+        // Define your brand's soft blue background
+        $adminBg = 'background-color: #f4f8fd !important;';
+
         return $table
             ->heading('Conversation Thread')
-            // NEWEST FIRST: Last reply at the top
             ->defaultSort('created_at', 'desc')
             ->columns([
+                // 1. Author
                 Tables\Columns\TextColumn::make('user.name')
                     ->label('Author')
-                    ->weight('bold')
-                    ->color(fn($record) => $record->is_admin ? 'primary' : 'gray')
-                    ->description(fn($record) => $record->is_admin ? 'STAFF REPLY' : 'CUSTOMER MESSAGE'),
+                    ->icon('heroicon-m-user')
+                    ->color(fn($record) => $record->is_admin ? 'info' : 'warning')
+                    ->description(fn($record) => $record->is_admin ? 'ADMIN REPLY' : 'CUSTOMER REPLY')
+                    // Link to Customer Admin List filtered by this user
+                    ->url(fn($record) => "/admin/customers?tableSearch=" . urlencode($record->user->email))
+                    ->openUrlInNewTab()
+                    // THE FIX: Conditional Background Color
+                    ->extraCellAttributes(fn($record) => [
+                        'style' => $record->is_admin
+                            ? 'background-color: #E9F2FB !important; border-right: 1px solid #E2E8F0;' // Admin Blue
+                            : 'background-color: #fffef5ff !important; border-right: 1px solid #E2E8F0;', // Customer Grey
+                    ]),
 
+                // 2. Message Content
                 Tables\Columns\TextColumn::make('content')
                     ->label('Message Content')
                     ->wrap()
                     ->grow(),
 
+                // 3. File
                 Tables\Columns\ImageColumn::make('attachment')
                     ->label('File')
                     ->disk('public')
-                    ->visibility('public')
-                    ->square()
-                    ->size(50)
+                    ->size(40)
                     ->placeholder('-'),
 
+                // 4. Time
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Sent')
                     ->since()
                     ->alignment('right')
-                    ->color('gray')
-                    ->description(fn($record) => $record->created_at->format('M d, Y H:i')),
+                    ->description(fn($record) => $record->created_at->format('M d, Y H:i'))
+                    // THE FIX: Conditional Background Color
+                    ->extraCellAttributes(fn($record) => [
+                        'style' => $record->is_admin
+                            ? 'background-color: #E9F2FB !important; border-right: 1px solid #E2E8F0;' // Admin Blue
+                            : 'background-color: #fffef5ff !important; border-right: 1px solid #E2E8F0;', // Customer Grey
+                    ]),
+            ])
+            ->actions([
+                // No per-row actions needed for now
             ])
             ->headerActions([
-                // Using the corrected Action class
-                CreateAction::make()
+                \Filament\Actions\Action::make('edit_last_message')
+                    ->label('Edit Last Message')
+                    ->icon('heroicon-m-pencil-square')
+                    ->color('warning')
+                    ->visible(fn() => $this->getOwnerRecord()->messages()->exists())
+                    ->mountUsing(function (\Filament\Schemas\Schema $form) {
+                        $lastMessage = $this->getOwnerRecord()->messages()->latest()->first();
+                        $form->fill([
+                            'content' => $lastMessage?->content,
+                        ]);
+                    })
+                    ->form([
+                        Forms\Components\Textarea::make('content')
+                            ->label('Correct Message')
+                            ->required()
+                            ->rows(5),
+                    ])
+                    ->action(function (array $data) {
+                        $lastMessage = $this->getOwnerRecord()->messages()->latest()->first();
+                        if ($lastMessage) {
+                            $lastMessage->update([
+                                'content' => $data['content'],
+                            ]);
+                            \Filament\Notifications\Notification::make()
+                                ->title('Success')
+                                ->body('The last message has been updated.')
+                                ->success()
+                                ->send();
+                        }
+                    }),
+
+                \Filament\Actions\CreateAction::make()
                     ->label('Post New Reply')
                     ->icon('heroicon-m-chat-bubble-left-right')
-                    ->modalHeading('Reply to Customer')
-                    ->modalButton('Send Message')
-                    ->after(fn(SupportMessage $record) => $record->ticket->update([
-                        'status' => SupportTicketStatus::Pending
-                    ])),
+                    ->after(function (array $data) {
+                        $this->getOwnerRecord()->update([
+                            'status' => $data['ticket_status']
+                        ]);
+                    }),
             ]);
-    }
-    public function isCollapsible(): bool
-    {
-        return true;
     }
 
     // Optional: Starts the page with this section closed

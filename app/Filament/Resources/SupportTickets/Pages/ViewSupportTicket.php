@@ -16,18 +16,18 @@ class ViewSupportTicket extends ViewRecord
     /**
      * This sets the big title at the top of the page
      */
-    public function getHeading(): string | Htmlable
-    {
-        return $this->record->subject;
-    }
+    // public function getHeading(): string | Htmlable
+    // {
+    //     return $this->record->subject;
+    // }
 
     /**
      * This adds a sub-heading for extra professional detail
      */
-    public function getSubheading(): string | Htmlable | null
-    {
-        return "Viewing conversation for ticket #" . $this->record->ticket_number;
-    }
+    // public function getSubheading(): string | Htmlable | null
+    // {
+    //     return "Viewing conversation for ticket #" . $this->record->ticket_number;
+    // }
 
     protected function getHeaderActions(): array
     {
@@ -46,6 +46,11 @@ class ViewSupportTicket extends ViewRecord
                     \Filament\Forms\Components\FileUpload::make('attachment')
                         ->directory('support-attachments')
                         ->image(),
+                    \Filament\Forms\Components\Select::make('status')
+                        ->label('Update Ticket Status')
+                        ->options(SupportTicketStatus::class)
+                        ->default(fn() => $this->record->status)
+                        ->required(),
                 ])
                 ->action(function (array $data) {
                     $this->record->messages()->create([
@@ -55,7 +60,7 @@ class ViewSupportTicket extends ViewRecord
                         'is_admin' => true,
                     ]);
 
-                    $this->record->update(['status' => SupportTicketStatus::Pending]);
+                    $this->record->update(['status' => $data['status']]);
                 }),
 
             // MARK AS RESOLVED
@@ -64,8 +69,8 @@ class ViewSupportTicket extends ViewRecord
                 ->icon('heroicon-m-check-badge')
                 ->color('success')
                 ->requiresConfirmation()
-                ->action(fn () => $this->record->update(['status' => SupportTicketStatus::Resolved]))
-                ->visible(fn () => $this->record->status !== SupportTicketStatus::Resolved),
+                ->action(fn() => $this->record->update(['status' => SupportTicketStatus::Resolved]))
+                ->visible(fn() => $this->record->status !== SupportTicketStatus::Resolved),
 
             // CLOSE TICKET
             Action::make('close')
@@ -73,10 +78,9 @@ class ViewSupportTicket extends ViewRecord
                 ->icon('heroicon-m-x-circle')
                 ->color('danger')
                 ->requiresConfirmation()
-                ->action(fn () => $this->record->update(['status' => SupportTicketStatus::Closed]))
-                ->visible(fn () => $this->record->status !== SupportTicketStatus::Closed),
+                ->action(fn() => $this->record->update(['status' => SupportTicketStatus::Closed]))
+                ->visible(fn() => $this->record->status !== SupportTicketStatus::Closed),
 
-            EditAction::make()->label('Edit Details'),
         ];
     }
 }

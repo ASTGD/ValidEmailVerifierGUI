@@ -22,17 +22,26 @@
                 <thead>
                     <tr class="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                         <th class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
-                            {{ __('Ticket ID') }}</th>
+                            {{ __('Ticket ID') }}
+                        </th>
                         <th class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
-                            {{ __('Subject') }}</th>
+                            {{ __('Subject') }}
+                        </th>
                         <th class="px-8 py-5 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
-                            {{ __('Department') }}</th>
+                            {{ __('Department') }}
+                        </th>
                         <th
                             class="px-8 py-5 text-[11px] font-black text-[#64748B] uppercase tracking-widest text-center">
-                            {{ __('Status') }}</th>
+                            {{ __('Priority') }}
+                        </th>
+                        <th
+                            class="px-8 py-5 text-[11px] font-black text-[#64748B] uppercase tracking-widest text-center">
+                            {{ __('Status') }}
+                        </th>
                         <th
                             class="px-8 py-5 text-[11px] font-black text-[#64748B] uppercase tracking-widest text-right">
-                            {{ __('Last Updated') }}</th>
+                            {{ __('Last Updated') }}
+                        </th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#E2E8F0]">
@@ -52,6 +61,12 @@
                                 <span
                                     class="inline-flex items-center px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest {{ $ticket->getCategoryBadgeClasses() }}">
                                     {{ $ticket->category }}
+                                </span>
+                            </td>
+                            <td class="px-8 py-6 text-center">
+                                <span
+                                    class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter {{ $ticket->priority->badgeClasses() }}">
+                                    {{ $ticket->priority->label() }}
                                 </span>
                             </td>
                             <td class="px-8 py-6 text-center">
@@ -250,6 +265,26 @@
                     @error('message')
                         <span class="text-red-500 text-xs font-bold mt-1">{{ $message }}</span>
                     @enderror
+                </div>
+                <!-- RELATED ORDER DROPDOWN -->
+                <div>
+                    <label
+                        class="block text-sm font-bold text-[#334155] mb-2">{{ __('Related Order (Optional)') }}</label>
+                    <div class="relative">
+                        <select wire:model="verification_order_id"
+                            class="w-full rounded-xl border-[#E2E8F0] bg-[#F8FAFC] text-sm font-bold text-[#334155] focus:ring-[#1E7CCF] focus:border-[#1E7CCF] appearance-none p-3 pr-10">
+                            <option value="">{{ __('--- Select an Order ---') }}</option>
+                            @foreach ($userOrders as $order)
+                                <option value="{{ $order->id }}">
+                                    #{{ substr($order->id, 0, 8) }} - {{ $order->created_at->format('M d, Y') }}
+                                    ({{ number_format($order->email_count) }} emails)
+                                </option>
+                            @endforeach
+                        </select>
+                        <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                            <i data-lucide="chevron-down" class="w-4 h-4 text-[#64748B]"></i>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Attachment -->

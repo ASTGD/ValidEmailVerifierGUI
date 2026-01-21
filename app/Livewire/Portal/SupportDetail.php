@@ -23,7 +23,7 @@ class SupportDetail extends Component
         if ($ticket->user_id !== Auth::id()) {
             abort(403);
         }
-        $this->ticket = $ticket;
+        $this->ticket = $ticket->load('order');
     }
 
     public function sendMessage()
@@ -43,8 +43,8 @@ class SupportDetail extends Component
             'is_admin' => false,
         ]);
 
-        // Update status to Open so Admin sees the customer replied
-        $this->ticket->update(['status' => SupportTicketStatus::Open]);
+        // Update status to Customer-Reply so Admin sees the customer replied
+        $this->ticket->update(['status' => SupportTicketStatus::CustomerReply]);
 
         $this->reset(['message', 'attachment']);
         $this->ticket->refresh();
@@ -55,5 +55,24 @@ class SupportDetail extends Component
         return view('livewire.portal.support-detail', [
             'messages' => $this->ticket->messages()->oldest()->get()
         ])->layout('layouts.portal'); // <--- This line is the fix
+    }
+
+    public function closeTicket()
+    {
+        // 1. Security check: Ensure the user owns this ticket
+        if ($this->ticket->user_id !== \Illuminate\Support\Facades\Auth::id()) {
+            abort(403);
+        }
+
+        // 2. Update status using your Enum
+        $this->ticket->update([
+            'status' => \App\Enums\SupportTicketStatus::Closed
+        ]);
+
+        // 3. Optional: Add a log or notification
+        session()->flash('status', 'Ticket has been marked as Closed.');
+
+        // 4. Refresh the page to update the UI
+        $this->ticket->refresh();
     }
 }

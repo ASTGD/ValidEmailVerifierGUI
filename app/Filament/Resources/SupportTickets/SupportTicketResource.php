@@ -48,8 +48,12 @@ class SupportTicketResource extends Resource
         return [
             // We use a RelationGroup to align the tabs to the left
             RelationGroup::make('Ticket Data', [
-                \App\Filament\Resources\SupportTickets\RelationManagers\UserOrdersRelationManager::class,
+                // MESSAGES FIRST
                 \App\Filament\Resources\SupportTickets\RelationManagers\MessagesRelationManager::class,
+                //THE SPECIFIC LINKED ORDER (NEW)
+                \App\Filament\Resources\SupportTickets\RelationManagers\LinkedOrderRelationManager::class,
+                // ORDERS SECOND
+                \App\Filament\Resources\SupportTickets\RelationManagers\UserOrdersRelationManager::class,
             ]),
         ];
     }

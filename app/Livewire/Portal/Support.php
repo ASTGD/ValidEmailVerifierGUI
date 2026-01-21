@@ -28,10 +28,14 @@ class Support extends Component
     public $perPage = 10;
     #[Url(history: true)]
     public $page = 1;
+    public $verification_order_id = '';
 
     public function render()
     {
         return view('livewire.portal.support', [
+            'tickets' => SupportTicket::where('user_id', Auth::id())->latest()->paginate($this->perPage),
+            // FETCH USER'S LAST 15 ORDERS
+            'userOrders' => \App\Models\VerificationOrder::where('user_id', Auth::id())->latest()->take(15)->get(),
             'supportEmail' => config('support.email'),
             'supportUrl' => config('support.url'),
             'tickets' => SupportTicket::where('user_id', Auth::id())
@@ -51,6 +55,7 @@ class Support extends Component
             'category' => 'required',
             'priority' => 'required',
             'attachment' => 'nullable|image|max:2048',
+            'verification_order_id' => 'nullable'
         ]);
 
         // 1. Create the Ticket Header
@@ -60,6 +65,7 @@ class Support extends Component
             'category' => $this->category,
             'priority' => $this->priority,
             'status' => SupportTicketStatus::Open,
+            'verification_order_id' => $this->verification_order_id ?: null,
         ]);
 
         // 2. Create the first message in the chat

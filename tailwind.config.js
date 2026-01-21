@@ -7,6 +7,7 @@ export default {
         './vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php',
         './storage/framework/views/*.php',
         './resources/views/**/*.blade.php',
+        './app/**/*.php',
     ],
 
     theme: {
@@ -64,4 +65,15 @@ export default {
     },
 
     plugins: [forms],
+    safelist: [
+        {
+            pattern: /bg-(emerald|amber|blue|orange|rose|sky|indigo|slate|gray|red)-(50|100|200)/,
+        },
+        {
+            pattern: /text-(emerald|amber|blue|orange|rose|sky|indigo|slate|gray|red)-(600|700|800)/,
+        },
+        {
+            pattern: /border-(emerald|amber|blue|orange|rose|sky|indigo|slate|gray|red)-(200|300)/,
+        },
+    ],
 };
