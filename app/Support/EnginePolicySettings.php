@@ -64,6 +64,8 @@ class EnginePolicySettings
             'max_mx_attempts' => $policy?->max_mx_attempts ?? (int) ($fallback['max_mx_attempts'] ?? 0),
             'max_concurrency_default' => $policy?->max_concurrency_default ?? (int) ($fallback['max_concurrency_default'] ?? 0),
             'per_domain_concurrency' => $policy?->per_domain_concurrency ?? (int) ($fallback['per_domain_concurrency'] ?? 0),
+            'catch_all_detection_enabled' => $policy?->catch_all_detection_enabled
+                ?? (bool) ($fallback['catch_all_detection_enabled'] ?? false),
             'global_connects_per_minute' => $policy?->global_connects_per_minute ?? ($fallback['global_connects_per_minute'] ?? null),
             'tempfail_backoff_seconds' => $policy?->tempfail_backoff_seconds ?? ($fallback['tempfail_backoff_seconds'] ?? null),
             'circuit_breaker_tempfail_rate' => $policy?->circuit_breaker_tempfail_rate ?? ($fallback['circuit_breaker_tempfail_rate'] ?? null),

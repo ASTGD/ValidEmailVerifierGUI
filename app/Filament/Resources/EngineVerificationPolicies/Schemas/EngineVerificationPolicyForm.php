@@ -59,6 +59,9 @@ class EngineVerificationPolicyForm
                             ->numeric()
                             ->minValue(1)
                             ->required(),
+                        Toggle::make('catch_all_detection_enabled')
+                            ->label('Catch-all detection')
+                            ->helperText('Attempt a randomized RCPT test to flag catch-all domains.'),
                         TextInput::make('global_connects_per_minute')
                             ->label('Global connects per minute')
                             ->numeric()

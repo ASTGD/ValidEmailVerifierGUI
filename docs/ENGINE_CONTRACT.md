@@ -157,6 +157,7 @@ Response:
         "max_mx_attempts": 2,
         "max_concurrency_default": 1,
         "per_domain_concurrency": 2,
+        "catch_all_detection_enabled": false,
         "global_connects_per_minute": null,
         "tempfail_backoff_seconds": null,
         "circuit_breaker_tempfail_rate": null
@@ -170,6 +171,7 @@ Response:
         "max_mx_attempts": 2,
         "max_concurrency_default": 1,
         "per_domain_concurrency": 2,
+        "catch_all_detection_enabled": true,
         "global_connects_per_minute": null,
         "tempfail_backoff_seconds": null,
         "circuit_breaker_tempfail_rate": null

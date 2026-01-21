@@ -57,6 +57,7 @@ type policyConfig struct {
 	MaxMXAttempts              int
 	MaxConcurrencyDefault      int
 	PerDomainConcurrency       int
+	CatchAllDetectionEnabled   bool
 	GlobalConnectsPerMinute    *int
 	TempfailBackoffSeconds     *int
 	CircuitBreakerTempfailRate *float64
@@ -456,6 +457,7 @@ func policyConfigFrom(policy api.Policy) policyConfig {
 		MaxMXAttempts:              policy.MaxMXAttempts,
 		MaxConcurrencyDefault:      policy.MaxConcurrencyDefault,
 		PerDomainConcurrency:       policy.PerDomainConcurrency,
+		CatchAllDetectionEnabled:   policy.CatchAllDetectionEnabled,
 		GlobalConnectsPerMinute:    policy.GlobalConnectsPerMinute,
 		TempfailBackoffSeconds:     policy.TempfailBackoffSeconds,
 		CircuitBreakerTempfailRate: policy.CircuitBreakerTempfailRate,
