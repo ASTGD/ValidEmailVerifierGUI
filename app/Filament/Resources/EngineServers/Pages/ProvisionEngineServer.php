@@ -13,7 +13,7 @@ class ProvisionEngineServer extends Page
 
     protected static string $resource = EngineServerResource::class;
 
-    protected static string $view = 'filament.resources.engine-servers.pages.provision-engine-server';
+    protected string $view = 'filament.resources.engine-servers.pages.provision-engine-server';
 
     protected static ?string $title = 'Worker Provisioning';
 
