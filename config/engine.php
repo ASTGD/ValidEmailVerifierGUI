@@ -50,6 +50,9 @@ return [
             'catch_all_detection_enabled' => (bool) env('ENGINE_POLICY_CATCH_ALL_ENABLED_ENHANCED', true),
         ]),
     ],
+    'worker_registry' => env('ENGINE_WORKER_REGISTRY'),
+    'worker_image' => env('ENGINE_WORKER_IMAGE'),
+    'worker_env_path' => env('ENGINE_WORKER_ENV_PATH'),
     'feedback_imports_prefix' => env('ENGINE_FEEDBACK_IMPORTS_PREFIX', 'feedback/imports'),
     'feedback_api_enabled' => (bool) env(
         'ENGINE_FEEDBACK_API_ENABLED',

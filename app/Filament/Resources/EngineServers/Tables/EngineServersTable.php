@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\EngineServers\Tables;
 
+use App\Filament\Resources\EngineServers\EngineServerResource;
 use App\Models\EngineServer;
 use App\Support\AdminAuditLogger;
 use Filament\Actions\Action;
@@ -84,6 +85,9 @@ class EngineServersTable
             ->emptyStateHeading('No engine servers')
             ->emptyStateDescription('Register engine servers to track heartbeat status.')
             ->recordActions([
+                Action::make('provisioning')
+                    ->label('Provisioning')
+                    ->url(fn (EngineServer $record): string => EngineServerResource::getUrl('provision', ['record' => $record])),
                 Action::make('record_heartbeat')
                     ->label('Record heartbeat')
                     ->action(function (EngineServer $record): void {
