@@ -46,6 +46,11 @@ class VerifierHeartbeatController
                 'server_id' => $server->id,
                 'status' => $server->isOnline() ? 'online' : 'offline',
                 'heartbeat_threshold_minutes' => $thresholdMinutes,
+                'identity' => [
+                    'helo_name' => $server->helo_name,
+                    'mail_from_address' => $server->mail_from_address,
+                    'identity_domain' => $server->identity_domain,
+                ],
             ],
         ]);
     }

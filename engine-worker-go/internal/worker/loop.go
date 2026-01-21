@@ -45,6 +45,9 @@ type policyState struct {
 	enhancedModeEnabled  bool
 	roleAccountsBehavior string
 	roleAccounts         map[string]struct{}
+	heloName             string
+	mailFromAddress      string
+	identityDomain       string
 	standard             policyConfig
 	enhanced             policyConfig
 }
@@ -100,8 +103,11 @@ func (w *Worker) Run(ctx context.Context) error {
 		}
 
 		if now.Sub(lastHeartbeat) >= w.cfg.HeartbeatInterval {
-			if err := w.client.Heartbeat(ctx, w.cfg.Server); err != nil {
+			resp, err := w.client.Heartbeat(ctx, w.cfg.Server)
+			if err != nil {
 				fmt.Printf("heartbeat error: %v\n", err)
+			} else {
+				w.applyHeartbeatIdentity(resp)
 			}
 			lastHeartbeat = now
 		}
@@ -169,6 +175,19 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 			"level":   "warning",
 			"event":   "enhanced_mode_requested_but_not_enabled",
 			"message": "Enhanced mode requested but not enabled; running standard pipeline.",
+			"context": map[string]interface{}{
+				"verification_mode": mode,
+			},
+		})
+		mode = "standard"
+		policy, hasPolicy = w.policyForMode(mode)
+	}
+
+	if mode == "enhanced" && !w.hasMailFromIdentity() {
+		_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
+			"level":   "warning",
+			"event":   "enhanced_identity_missing",
+			"message": "Enhanced mode requested but mail-from identity is missing; running standard pipeline.",
 			"context": map[string]interface{}{
 				"verification_mode": mode,
 			},
@@ -420,7 +439,11 @@ func (w *Worker) refreshPolicyIfNeeded(ctx context.Context, now time.Time) {
 		return
 	}
 
+	existing := w.policySnapshot()
 	state := policyStateFrom(resp)
+	state.heloName = existing.heloName
+	state.mailFromAddress = existing.mailFromAddress
+	state.identityDomain = existing.identityDomain
 
 	w.policyMu.Lock()
 	w.policy = state
@@ -502,22 +525,48 @@ func (w *Worker) policySnapshot() policyState {
 	return w.policy
 }
 
+func (w *Worker) hasMailFromIdentity() bool {
+	if w.cfg.BaseVerifierConfig.MailFromAddress != "" {
+		return true
+	}
+
+	state := w.policySnapshot()
+	return state.mailFromAddress != ""
+}
+
 func (w *Worker) verifierForMode(mode string, policy policyConfig, hasPolicy bool) verifier.Verifier {
 	config := w.cfg.BaseVerifierConfig
 	state := w.policySnapshot()
-
-	if state.loaded {
-		config = applyGlobalOverrides(config, state)
-	}
+	config = applyGlobalOverrides(config, state)
 
 	if hasPolicy {
 		config = applyPolicy(config, policy)
 	}
 
-	return verifier.NewPipelineVerifier(config, verifier.NetMXResolver{}, nil)
+	var smtpChecker verifier.SMTPChecker
+	if mode == "enhanced" {
+		smtpChecker = verifier.NetSMTPProber{
+			Dialer:                   nil,
+			ConnectTimeout:           time.Duration(config.SMTPConnectTimeout) * time.Millisecond,
+			ReadTimeout:              time.Duration(config.SMTPReadTimeout) * time.Millisecond,
+			EhloTimeout:              time.Duration(config.SMTPEhloTimeout) * time.Millisecond,
+			HeloName:                 config.HeloName,
+			MailFromAddress:          config.MailFromAddress,
+			RateLimiter:              verifier.NewRateLimiter(config.SMTPRateLimitPerMinute),
+			CatchAllDetectionEnabled: config.CatchAllDetectionEnabled,
+		}
+	}
+
+	return verifier.NewPipelineVerifier(config, verifier.NetMXResolver{}, smtpChecker)
 }
 
 func applyGlobalOverrides(config verifier.Config, state policyState) verifier.Config {
+	if state.heloName != "" {
+		config.HeloName = state.heloName
+	}
+	if state.mailFromAddress != "" {
+		config.MailFromAddress = state.mailFromAddress
+	}
 	if state.roleAccountsBehavior != "" {
 		config.RoleAccountsBehavior = state.roleAccountsBehavior
 	}
@@ -544,6 +593,7 @@ func applyPolicy(config verifier.Config, policy policyConfig) verifier.Config {
 	if policy.PerDomainConcurrency > 0 {
 		config.PerDomainConcurrency = policy.PerDomainConcurrency
 	}
+	config.CatchAllDetectionEnabled = policy.CatchAllDetectionEnabled
 	if policy.GlobalConnectsPerMinute != nil {
 		config.SMTPRateLimitPerMinute = *policy.GlobalConnectsPerMinute
 	}
@@ -642,4 +692,18 @@ func normalizeVerificationMode(value string) string {
 	}
 
 	return "standard"
+}
+
+func (w *Worker) applyHeartbeatIdentity(resp *api.HeartbeatResponse) {
+	if resp == nil {
+		return
+	}
+
+	identity := resp.Data.Identity
+
+	w.policyMu.Lock()
+	w.policy.heloName = strings.TrimSpace(identity.HeloName)
+	w.policy.mailFromAddress = strings.TrimSpace(identity.MailFromAddress)
+	w.policy.identityDomain = strings.TrimSpace(identity.IdentityDomain)
+	w.policyMu.Unlock()
 }

@@ -46,6 +46,23 @@ class EngineServerForm
                             ->columnSpanFull(),
                     ])
                     ->columns(2),
+                Section::make('SMTP Identity')
+                    ->schema([
+                        TextInput::make('helo_name')
+                            ->label('HELO name')
+                            ->maxLength(255)
+                            ->helperText('Must resolve and ideally match rDNS.'),
+                        TextInput::make('mail_from_address')
+                            ->label('MAIL FROM address')
+                            ->email()
+                            ->maxLength(255)
+                            ->helperText('Used for RCPT probing in Enhanced mode.'),
+                        TextInput::make('identity_domain')
+                            ->label('Identity domain')
+                            ->maxLength(255)
+                            ->helperText('Domain used for SPF/DKIM/DMARC alignment.'),
+                    ])
+                    ->columns(2),
             ]);
     }
 }

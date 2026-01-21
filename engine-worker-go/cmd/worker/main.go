@@ -44,6 +44,7 @@ func main() {
 	roleAccountsBehavior := parseRoleAccountsBehavior(os.Getenv("ROLE_ACCOUNTS_BEHAVIOR"))
 	domainTypos := parseDomainTypos(os.Getenv("DOMAIN_TYPOS"))
 	disposableDomains := parseDisposableDomains(workerdata.DisposableDomains)
+	mailFromAddress := strings.TrimSpace(os.Getenv("MAIL_FROM_ADDRESS"))
 
 	var leaseSeconds *int
 	if val := os.Getenv("LEASE_SECONDS"); val != "" {
@@ -66,6 +67,7 @@ func main() {
 		RetryableNetworkRetries: retryableNetworkRetries,
 		BackoffBaseMs:           backoffMs,
 		HeloName:                heloName,
+		MailFromAddress:         mailFromAddress,
 		PerDomainConcurrency:    perDomainConcurrency,
 		SMTPRateLimitPerMinute:  smtpRateLimit,
 		DisposableDomains:       disposableDomains,
