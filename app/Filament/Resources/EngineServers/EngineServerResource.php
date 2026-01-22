@@ -5,7 +5,6 @@ namespace App\Filament\Resources\EngineServers;
 use App\Filament\Resources\EngineServers\Pages\CreateEngineServer;
 use App\Filament\Resources\EngineServers\Pages\EditEngineServer;
 use App\Filament\Resources\EngineServers\Pages\ListEngineServers;
-use App\Filament\Resources\EngineServers\Pages\ProvisionEngineServer;
 use App\Filament\Resources\EngineServers\Schemas\EngineServerForm;
 use App\Filament\Resources\EngineServers\Tables\EngineServersTable;
 use App\Models\EngineServer;
@@ -44,7 +43,6 @@ class EngineServerResource extends Resource
             'index' => ListEngineServers::route('/'),
             'create' => CreateEngineServer::route('/create'),
             'edit' => EditEngineServer::route('/{record}/edit'),
-            'provision' => ProvisionEngineServer::route('/{record}/provision'),
         ];
     }
 }
