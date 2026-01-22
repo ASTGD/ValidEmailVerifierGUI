@@ -53,6 +53,9 @@ return [
     'worker_registry' => env('ENGINE_WORKER_REGISTRY'),
     'worker_image' => env('ENGINE_WORKER_IMAGE'),
     'worker_env_path' => env('ENGINE_WORKER_ENV_PATH'),
+    'worker_provisioning_disk' => env('ENGINE_WORKER_PROVISIONING_DISK', 'local'),
+    'worker_provisioning_prefix' => env('ENGINE_WORKER_PROVISIONING_PREFIX', 'provisioning/worker'),
+    'worker_provisioning_ttl_minutes' => (int) env('ENGINE_WORKER_PROVISIONING_TTL_MINUTES', 60),
     'feedback_imports_prefix' => env('ENGINE_FEEDBACK_IMPORTS_PREFIX', 'feedback/imports'),
     'feedback_api_enabled' => (bool) env(
         'ENGINE_FEEDBACK_API_ENABLED',
