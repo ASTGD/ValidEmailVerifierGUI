@@ -144,7 +144,7 @@ class EngineWorkerProvisioningService
 
         $escapedEnv = rtrim($workerEnv, "\n");
 
-        return <<<"BASH"
+        $template = <<<'BASH'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -190,7 +190,7 @@ fi
 
 mkdir -p "$(dirname "$envPath")"
 cat > "$envPath" <<'ENVFILE'
-$escapedEnv
+{{WORKER_ENV}}
 ENVFILE
 
 printf "%s\n" "$GHCR_TOKEN" | docker login $registry -u "$GHCR_USER" --password-stdin
@@ -204,6 +204,8 @@ docker run -d --name valid-email-worker --restart unless-stopped \
   $image
 
 BASH;
+
+        return str_replace('{{WORKER_ENV}}', $escapedEnv, $template);
     }
 
     private function envLine(string $key, string $value): string
