@@ -18,6 +18,8 @@ trait HandlesProvisioningBundle
 
     public string $ghcrToken = '';
 
+    public bool $bundleGenerated = false;
+
     protected function loadProvisioningBundle(): void
     {
         $latestBundle = EngineServerProvisioningBundle::query()
@@ -43,6 +45,7 @@ trait HandlesProvisioningBundle
         try {
             $bundle = app(EngineWorkerProvisioningService::class)->createBundle($this->getRecord(), auth()->user());
             $this->bundleId = $bundle->id;
+            $this->bundleGenerated = true;
 
             AdminAuditLogger::log('engine_worker_bundle_generated', $this->getRecord(), [
                 'bundle_id' => $bundle->id,
@@ -83,6 +86,7 @@ trait HandlesProvisioningBundle
             'missingConfig' => $this->missingProvisioningConfig(),
             'ghcrUsername' => $this->ghcrUsername,
             'ghcrToken' => $this->ghcrToken,
+            'bundleGenerated' => $this->bundleGenerated,
         ];
     }
 
@@ -175,6 +179,10 @@ trait HandlesProvisioningBundle
     protected function buildInstallCommand(?EngineServerProvisioningBundle $bundle): ?string
     {
         if (! $bundle || $bundle->isExpired()) {
+            return null;
+        }
+
+        if (! $this->bundleGenerated) {
             return null;
         }
 
