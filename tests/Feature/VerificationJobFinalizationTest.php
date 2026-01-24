@@ -92,14 +92,14 @@ class VerificationJobFinalizationTest extends TestCase
             'risky_key' => $storage->chunkOutputKey($job, 2, 'risky'),
         ]);
 
-        Storage::disk('s3')->put($chunkOne->valid_key, "email\nvalid-one@example.com\n");
-        Storage::disk('s3')->put($chunkTwo->valid_key, "email\nvalid-two@example.com\n");
+        Storage::disk('s3')->put($chunkOne->valid_key, "email,reason\nvalid-one@example.com,smtp_connect_ok\n");
+        Storage::disk('s3')->put($chunkTwo->valid_key, "email,reason\nvalid-two@example.com,rcpt_ok\n");
 
-        Storage::disk('s3')->put($chunkOne->invalid_key, "email\ninvalid-one@example.com\n");
-        Storage::disk('s3')->put($chunkTwo->invalid_key, "email\ninvalid-two@example.com\n");
+        Storage::disk('s3')->put($chunkOne->invalid_key, "email,reason\ninvalid-one@example.com,syntax\n");
+        Storage::disk('s3')->put($chunkTwo->invalid_key, "email,reason\ninvalid-two@example.com,mx_missing\n");
 
-        Storage::disk('s3')->put($chunkOne->risky_key, "email\nrisky-one@example.com\n");
-        Storage::disk('s3')->put($chunkTwo->risky_key, "email\nrisky-two@example.com\n");
+        Storage::disk('s3')->put($chunkOne->risky_key, "email,reason\nrisky-one@example.com,catch_all\n");
+        Storage::disk('s3')->put($chunkTwo->risky_key, "email,reason\nrisky-two@example.com,smtp_timeout\n");
 
         FinalizeVerificationJob::dispatchSync($job->id);
 
@@ -111,6 +111,7 @@ class VerificationJobFinalizationTest extends TestCase
         $this->assertSame(2, $job->risky_count);
         $this->assertNotNull($job->valid_key);
         $this->assertTrue(Storage::disk('s3')->exists($job->valid_key));
+        $this->assertStringContainsString('email,status,sub_status,score,reason', Storage::disk('s3')->get($job->valid_key));
     }
 
     public function test_finalization_is_idempotent(): void
@@ -127,9 +128,9 @@ class VerificationJobFinalizationTest extends TestCase
             'risky_key' => $storage->chunkOutputKey($job, 1, 'risky'),
         ]);
 
-        Storage::disk('s3')->put($chunk->valid_key, "email\nvalid@example.com\n");
-        Storage::disk('s3')->put($chunk->invalid_key, "email\ninvalid@example.com\n");
-        Storage::disk('s3')->put($chunk->risky_key, "email\nrisky@example.com\n");
+        Storage::disk('s3')->put($chunk->valid_key, "email,reason\nvalid@example.com,smtp_connect_ok\n");
+        Storage::disk('s3')->put($chunk->invalid_key, "email,reason\ninvalid@example.com,syntax\n");
+        Storage::disk('s3')->put($chunk->risky_key, "email,reason\nrisky@example.com,smtp_timeout\n");
 
         FinalizeVerificationJob::dispatchSync($job->id);
         $job->refresh();
@@ -151,7 +152,7 @@ class VerificationJobFinalizationTest extends TestCase
         $job = $this->makeJob();
 
         $cachedKey = $storage->cachedResultKey($job, 'valid');
-        Storage::disk('s3')->put($cachedKey, "email\ncached@example.com\n");
+        Storage::disk('s3')->put($cachedKey, "email,reason\ncached@example.com,smtp_connect_ok\n");
 
         $job->update([
             'cached_valid_key' => $cachedKey,
@@ -164,9 +165,9 @@ class VerificationJobFinalizationTest extends TestCase
             'risky_key' => $storage->chunkOutputKey($job, 1, 'risky'),
         ]);
 
-        Storage::disk('s3')->put($chunk->valid_key, "email\nchunk@example.com\n");
-        Storage::disk('s3')->put($chunk->invalid_key, "email\ninvalid@example.com\n");
-        Storage::disk('s3')->put($chunk->risky_key, "email\nrisky@example.com\n");
+        Storage::disk('s3')->put($chunk->valid_key, "email,reason\nchunk@example.com,smtp_connect_ok\n");
+        Storage::disk('s3')->put($chunk->invalid_key, "email,reason\ninvalid@example.com,syntax\n");
+        Storage::disk('s3')->put($chunk->risky_key, "email,reason\nrisky@example.com,smtp_timeout\n");
 
         FinalizeVerificationJob::dispatchSync($job->id);
 

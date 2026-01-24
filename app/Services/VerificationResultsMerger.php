@@ -2,15 +2,21 @@
 
 namespace App\Services;
 
+use App\Contracts\EmailVerificationCacheStore;
 use App\Models\VerificationJob;
 use App\Models\VerificationJobChunk;
+use App\Support\EmailHashing;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 class VerificationResultsMerger
 {
-    public function __construct(private JobStorage $storage)
+    public function __construct(
+        private JobStorage $storage,
+        private EmailVerificationCacheStore $cacheStore,
+        private VerificationOutputMapper $outputMapper
+    )
     {
     }
 
@@ -22,23 +28,36 @@ class VerificationResultsMerger
     {
         $outputDisk = $outputDisk ?: ($job->output_disk ?: ($job->input_disk ?: $this->storage->disk()));
         $missing = [];
-        $keys = [];
-        $counts = [];
+
+        $writers = $this->initializeWriters($job);
+        $batchSize = max(1, (int) config('engine.cache_batch_size', 100));
 
         foreach (['valid', 'invalid', 'risky'] as $type) {
             $sources = $this->collectSources($job, $chunks, $type, $outputDisk);
-            $headerLine = $this->detectHeaderLine($sources);
-            $targetKey = $this->storage->finalResultKey($job, $type);
 
-            $counts[$type] = $this->mergeSources(
-                $sources,
-                $outputDisk,
-                $targetKey,
-                $headerLine,
-                $missing
-            );
+            foreach ($sources as $source) {
+                $this->processSource($source, $type, $writers, $missing, $batchSize);
+            }
+        }
+
+        $keys = [];
+        $counts = [];
+
+        foreach ($writers as $type => $writer) {
+            $stream = $writer['stream'] ?? null;
+
+            if (! is_resource($stream)) {
+                throw new RuntimeException('Unable to finalize merge stream.');
+            }
+
+            $targetKey = $writer['key'];
+
+            rewind($stream);
+            Storage::disk($outputDisk)->put($targetKey, $stream);
+            fclose($stream);
 
             $keys[$type] = $targetKey;
+            $counts[$type] = $writer['count'] ?? 0;
         }
 
         return [
@@ -82,118 +101,95 @@ class VerificationResultsMerger
     }
 
     /**
-     * @param array<int, array{disk: string, key: string}> $sources
-     */
-    private function detectHeaderLine(array $sources): ?string
-    {
-        foreach ($sources as $source) {
-            $stream = Storage::disk($source['disk'])->readStream($source['key']);
-
-            if (! is_resource($stream)) {
-                continue;
-            }
-
-            $line = $this->firstNonEmptyLine($stream);
-            fclose($stream);
-
-            if ($line !== null && $this->isHeaderLine($line)) {
-                return $this->normalizeLine($line);
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @param array<int, array{disk: string, key: string}> $sources
      * @param array<int, array{disk: string, key: string}> $missing
      */
-    private function mergeSources(
-        array $sources,
-        string $outputDisk,
-        string $targetKey,
-        ?string $headerLine,
-        array &$missing
-    ): int {
-        $temp = tmpfile();
+    private function processSource(
+        array $source,
+        string $sourceStatus,
+        array &$writers,
+        array &$missing,
+        int $batchSize
+    ): void {
+        if (! Storage::disk($source['disk'])->exists($source['key'])) {
+            $missing[] = $source;
 
-        if (! is_resource($temp)) {
-            throw new RuntimeException('Unable to create temporary merge stream.');
+            return;
         }
 
-        $count = 0;
+        $stream = Storage::disk($source['disk'])->readStream($source['key']);
 
-        if ($headerLine) {
-            fwrite($temp, $headerLine.PHP_EOL);
+        if (! is_resource($stream)) {
+            $missing[] = $source;
+
+            return;
         }
 
-        foreach ($sources as $source) {
-            if (! Storage::disk($source['disk'])->exists($source['key'])) {
-                $missing[] = $source;
-                continue;
-            }
+        $buffer = [];
 
-            $stream = Storage::disk($source['disk'])->readStream($source['key']);
-
-            if (! is_resource($stream)) {
-                $missing[] = $source;
-                continue;
-            }
-
-            $firstLine = null;
-
-            while (($line = fgets($stream)) !== false) {
-                $normalized = $this->normalizeLine($line);
-
-                if ($normalized === '') {
-                    continue;
-                }
-
-                $firstLine = $normalized;
-                break;
-            }
-
-            if ($firstLine !== null) {
-                $isHeader = $this->isHeaderLine($firstLine);
-
-                if (! $isHeader) {
-                    fwrite($temp, $firstLine.PHP_EOL);
-                    $count++;
-                }
-            }
-
-            while (($line = fgets($stream)) !== false) {
-                $normalized = $this->normalizeLine($line);
-
-                if ($normalized === '') {
-                    continue;
-                }
-
-                fwrite($temp, $normalized.PHP_EOL);
-                $count++;
-            }
-
-            fclose($stream);
-        }
-
-        rewind($temp);
-        Storage::disk($outputDisk)->put($targetKey, $temp);
-        fclose($temp);
-
-        return $count;
-    }
-
-    private function firstNonEmptyLine($stream): ?string
-    {
         while (($line = fgets($stream)) !== false) {
             $normalized = $this->normalizeLine($line);
 
-            if ($normalized !== '') {
-                return $normalized;
+            if ($normalized === '' || $this->isHeaderLine($normalized)) {
+                continue;
+            }
+
+            $parsed = $this->parseRow($normalized);
+
+            if (! $parsed) {
+                continue;
+            }
+
+            $buffer[] = [
+                'email' => $parsed['email'],
+                'reason' => $parsed['reason'],
+                'status' => $sourceStatus,
+            ];
+
+            if (count($buffer) >= $batchSize) {
+                $this->flushBuffer($buffer, $writers);
+                $buffer = [];
             }
         }
 
-        return null;
+        if ($buffer !== []) {
+            $this->flushBuffer($buffer, $writers);
+        }
+
+        fclose($stream);
+    }
+
+    /**
+     * @param array<int, array{email: string, reason: string, status: string}> $buffer
+     * @param array<string, array{stream: resource, key: string, count: int}> $writers
+     */
+    private function flushBuffer(array $buffer, array &$writers): void
+    {
+        $emails = array_column($buffer, 'email');
+        $cacheHits = $this->cacheStore->lookupMany($emails);
+
+        foreach ($buffer as $row) {
+            $normalized = EmailHashing::normalizeEmail($row['email']);
+            $cacheOutcome = $normalized !== '' && isset($cacheHits[$normalized]) && is_array($cacheHits[$normalized])
+                ? $cacheHits[$normalized]
+                : null;
+
+            $output = $this->outputMapper->map($row['email'], $row['status'], $row['reason'], $cacheOutcome);
+            $status = $output['status'];
+
+            if (! isset($writers[$status])) {
+                $status = 'risky';
+            }
+
+            fputcsv($writers[$status]['stream'], [
+                $output['email'],
+                $output['status'],
+                $output['sub_status'],
+                $output['score'],
+                $output['reason'],
+            ]);
+
+            $writers[$status]['count']++;
+        }
     }
 
     private function normalizeLine(string $line): string
@@ -204,5 +200,62 @@ class VerificationResultsMerger
     private function isHeaderLine(string $line): bool
     {
         return ! str_contains($line, '@');
+    }
+
+    /**
+     * @return array{email: string, reason: string}|null
+     */
+    private function parseRow(string $line): ?array
+    {
+        $columns = str_getcsv($line);
+
+        if ($columns === []) {
+            return null;
+        }
+
+        $email = trim((string) ($columns[0] ?? ''));
+
+        if ($email === '') {
+            return null;
+        }
+
+        if (count($columns) >= 5 && in_array(strtolower((string) $columns[1]), ['valid', 'invalid', 'risky'], true)) {
+            return [
+                'email' => $email,
+                'reason' => trim((string) ($columns[4] ?? '')),
+            ];
+        }
+
+        return [
+            'email' => $email,
+            'reason' => trim((string) ($columns[1] ?? '')),
+        ];
+    }
+
+    /**
+     * @return array<string, array{stream: resource, key: string, count: int}>
+     */
+    private function initializeWriters(VerificationJob $job): array
+    {
+        $writers = [];
+        $header = ['email', 'status', 'sub_status', 'score', 'reason'];
+
+        foreach (['valid', 'invalid', 'risky'] as $type) {
+            $stream = tmpfile();
+
+            if (! is_resource($stream)) {
+                throw new RuntimeException('Unable to create temporary merge stream.');
+            }
+
+            fputcsv($stream, $header);
+
+            $writers[$type] = [
+                'stream' => $stream,
+                'key' => $this->storage->finalResultKey($job, $type),
+                'count' => 0,
+            ];
+        }
+
+        return $writers;
     }
 }
