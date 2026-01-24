@@ -30,6 +30,16 @@ trait HandlesProvisioningBundle
 
     public function generateBundle(): void
     {
+        if (trim($this->ghcrUsername) === '' || trim($this->ghcrToken) === '') {
+            Notification::make()
+                ->title('GHCR credentials required.')
+                ->body('Enter your GHCR username and token to generate the provisioning bundle.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
         try {
             $bundle = app(EngineWorkerProvisioningService::class)->createBundle($this->getRecord(), auth()->user());
             $this->bundleId = $bundle->id;
