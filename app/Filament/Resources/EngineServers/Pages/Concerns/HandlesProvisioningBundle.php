@@ -81,6 +81,8 @@ trait HandlesProvisioningBundle
             'installCommand' => $this->buildInstallCommand($bundle),
             'workerEnv' => $this->resolveWorkerEnv($record, $apiBaseUrl, $identityDomain, $bundle),
             'missingConfig' => $this->missingProvisioningConfig(),
+            'ghcrUsername' => $this->ghcrUsername,
+            'ghcrToken' => $this->ghcrToken,
         ];
     }
 
