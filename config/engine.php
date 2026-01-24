@@ -39,6 +39,10 @@ return [
     'enhanced_mode_enabled' => env('ENGINE_ENHANCED_MODE_ENABLED', false),
     'role_accounts_behavior' => env('ENGINE_ROLE_ACCOUNTS_BEHAVIOR', 'risky'),
     'role_accounts_list' => env('ENGINE_ROLE_ACCOUNTS_LIST', 'info,admin,support,sales,contact,hello,hr'),
+    'catch_all_policy' => env('ENGINE_CATCH_ALL_POLICY', 'risky_only'),
+    'catch_all_promote_threshold' => env('ENGINE_CATCH_ALL_PROMOTE_THRESHOLD') !== null
+        ? (int) env('ENGINE_CATCH_ALL_PROMOTE_THRESHOLD')
+        : null,
     'policy_contract_version' => env('ENGINE_POLICY_CONTRACT_VERSION', 'v1'),
     'policy_defaults' => [
         'standard' => array_merge($policyDefaults, [
@@ -56,6 +60,38 @@ return [
     'worker_provisioning_disk' => env('ENGINE_WORKER_PROVISIONING_DISK', 'local'),
     'worker_provisioning_prefix' => env('ENGINE_WORKER_PROVISIONING_PREFIX', 'provisioning/worker'),
     'worker_provisioning_ttl_minutes' => (int) env('ENGINE_WORKER_PROVISIONING_TTL_MINUTES', 60),
+    'deliverability_score' => [
+        'base' => [
+            'valid' => (int) env('ENGINE_SCORE_BASE_VALID', 90),
+            'invalid' => (int) env('ENGINE_SCORE_BASE_INVALID', 10),
+            'risky' => (int) env('ENGINE_SCORE_BASE_RISKY', 55),
+        ],
+        'reason_overrides' => [
+            'smtp_connect_ok' => (int) env('ENGINE_SCORE_REASON_SMTP_CONNECT_OK', 95),
+            'rcpt_ok' => (int) env('ENGINE_SCORE_REASON_RCPT_OK', 95),
+            'syntax' => (int) env('ENGINE_SCORE_REASON_SYNTAX', 5),
+            'mx_missing' => (int) env('ENGINE_SCORE_REASON_MX_MISSING', 10),
+            'rcpt_rejected' => (int) env('ENGINE_SCORE_REASON_RCPT_REJECTED', 10),
+            'smtp_unavailable' => (int) env('ENGINE_SCORE_REASON_SMTP_UNAVAILABLE', 10),
+            'catch_all' => (int) env('ENGINE_SCORE_REASON_CATCH_ALL', 55),
+            'disposable_domain' => (int) env('ENGINE_SCORE_REASON_DISPOSABLE', 40),
+            'role_account' => (int) env('ENGINE_SCORE_REASON_ROLE_ACCOUNT', 65),
+            'domain_typo_suspected' => (int) env('ENGINE_SCORE_REASON_DOMAIN_TYPO', 50),
+            'smtp_timeout' => (int) env('ENGINE_SCORE_REASON_SMTP_TIMEOUT', 45),
+            'smtp_connect_timeout' => (int) env('ENGINE_SCORE_REASON_SMTP_CONNECT_TIMEOUT', 45),
+            'smtp_tempfail' => (int) env('ENGINE_SCORE_REASON_SMTP_TEMPFAIL', 40),
+            'dns_timeout' => (int) env('ENGINE_SCORE_REASON_DNS_TIMEOUT', 45),
+            'dns_servfail' => (int) env('ENGINE_SCORE_REASON_DNS_SERVFAIL', 40),
+        ],
+        'sub_status_caps' => [
+            'catch_all' => (int) env('ENGINE_SCORE_CAP_CATCH_ALL', 80),
+        ],
+        'cache_adjustments' => [
+            'valid' => (int) env('ENGINE_SCORE_CACHE_VALID', 10),
+            'invalid' => (int) env('ENGINE_SCORE_CACHE_INVALID', -30),
+            'risky' => (int) env('ENGINE_SCORE_CACHE_RISKY', -10),
+        ],
+    ],
     'feedback_imports_prefix' => env('ENGINE_FEEDBACK_IMPORTS_PREFIX', 'feedback/imports'),
     'feedback_api_enabled' => (bool) env(
         'ENGINE_FEEDBACK_API_ENABLED',

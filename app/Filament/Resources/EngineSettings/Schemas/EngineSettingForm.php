@@ -7,6 +7,7 @@ use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Get;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
@@ -39,6 +40,24 @@ class EngineSettingForm
                             ->label('Role accounts list')
                             ->rows(3)
                             ->helperText('Comma-separated local-parts (no domain). Example: info,admin,support.'),
+                    ])
+                    ->columns(2),
+                Section::make('Catch-all Output Policy')
+                    ->schema([
+                        Select::make('catch_all_policy')
+                            ->label('Catch-all policy')
+                            ->options([
+                                'risky_only' => 'Always risky',
+                                'promote_if_score_gte' => 'Promote if score meets threshold',
+                            ])
+                            ->helperText('Controls how catch-all results are classified in final outputs.'),
+                        TextInput::make('catch_all_promote_threshold')
+                            ->label('Promotion threshold (score)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(100)
+                            ->helperText('Used only when promotion is enabled. Leave blank to disable.')
+                            ->visible(fn (Get $get): bool => $get('catch_all_policy') === 'promote_if_score_gte'),
                     ])
                     ->columns(2),
                 Section::make('Standard Policy')
