@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\VerificationJobOrigin;
 use App\Enums\VerificationJobStatus;
 use App\Enums\VerificationMode;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -26,7 +27,9 @@ class VerificationJob extends Model
         'user_id',
         'status',
         'verification_mode',
+        'origin',
         'original_filename',
+        'subject_email',
         'input_disk',
         'input_key',
         'output_disk',
@@ -54,16 +57,23 @@ class VerificationJob extends Model
         'risky_count',
         'unknown_count',
         'cached_count',
+        'single_result_status',
+        'single_result_sub_status',
+        'single_result_score',
+        'single_result_reason',
+        'single_result_verified_at',
     ];
 
     protected $casts = [
         'status' => VerificationJobStatus::class,
         'verification_mode' => VerificationMode::class,
+        'origin' => VerificationJobOrigin::class,
         'claimed_at' => 'datetime',
         'claim_expires_at' => 'datetime',
         'started_at' => 'datetime',
         'prepared_at' => 'datetime',
         'finished_at' => 'datetime',
+        'single_result_verified_at' => 'datetime',
         'engine_attempts' => 'integer',
         'total_emails' => 'integer',
         'valid_count' => 'integer',
@@ -71,10 +81,12 @@ class VerificationJob extends Model
         'risky_count' => 'integer',
         'unknown_count' => 'integer',
         'cached_count' => 'integer',
+        'single_result_score' => 'integer',
     ];
 
     protected $attributes = [
         'verification_mode' => VerificationMode::Standard->value,
+        'origin' => VerificationJobOrigin::ListUpload->value,
     ];
 
     public function scopeExcludeAdminFailures($query)

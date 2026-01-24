@@ -9,6 +9,7 @@ use App\Http\Requests\Portal\UploadVerificationJobRequest;
 use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
+use App\Support\EnhancedModeGate;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\RateLimiter;
@@ -58,6 +59,12 @@ class UploadController extends Controller
 
         $file = $request->file('file');
         $mode = data_get($request->validated(), 'verification_mode', VerificationMode::Standard->value);
+
+        if ($mode === VerificationMode::Enhanced->value && ! EnhancedModeGate::canUse($user)) {
+            return back()->withErrors([
+                'verification_mode' => EnhancedModeGate::message($user),
+            ]);
+        }
 
         $job = new VerificationJob([
             'user_id' => $user->id,

@@ -78,4 +78,15 @@ class JobStorage
 
         return [$disk, $key];
     }
+
+    public function storeSingleInput(string $email, VerificationJob $job, ?string $disk = null, ?string $key = null): array
+    {
+        $disk = $disk ?: $this->disk();
+        $key = $key ?: $this->inputKey($job);
+        $payload = trim($email);
+
+        Storage::disk($disk)->put($key, $payload === '' ? '' : $payload."\n");
+
+        return [$disk, $key];
+    }
 }
