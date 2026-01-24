@@ -3,16 +3,20 @@
     $ghcrUsername = $ghcrUsername ?? '';
     $ghcrToken = $ghcrToken ?? '';
     $installCommand = $installCommand ?? null;
-    $workerEnv = $workerEnv ?? '';
+    $bundleGenerated = $bundleGenerated ?? false;
     $hasCredentials = trim($ghcrUsername) !== '' && trim($ghcrToken) !== '';
 @endphp
 
-<div class="fi-fo-field-content-col" style="row-gap: 1rem;">
+<div class="fi-fo-field-content-col" style="display: grid; row-gap: 1.75rem;">
     <div class="fi-prose">
-        <p>Generate a short-lived bundle with a fresh worker token and install script.</p>
+        <p>
+            Provision a worker for this server with a short-lived bundle. Enter your GHCR
+            credentials, click Generate bundle, then run the one-line install command on the VPS.
+            Bundles expire automatically.
+        </p>
     </div>
 
-    <div class="fi-fo-field">
+    <div class="fi-fo-field" style="display: grid; row-gap: 0.75rem;">
         <div class="fi-fo-field-label-col">
             <label class="fi-fo-field-label">
                 <span class="fi-fo-field-label-content">GHCR Username</span>
@@ -30,7 +34,7 @@
         </div>
     </div>
 
-    <div class="fi-fo-field">
+    <div class="fi-fo-field" style="display: grid; row-gap: 0.75rem;">
         <div class="fi-fo-field-label-col">
             <label class="fi-fo-field-label">
                 <span class="fi-fo-field-label-content">GHCR Token</span>
@@ -48,105 +52,86 @@
         </div>
     </div>
 
-    <div class="fi-fo-field">
-        <div class="fi-fo-field-label-col">
-            <span class="fi-fo-field-label">
-                <span class="fi-fo-field-label-content">Provisioning bundle</span>
-            </span>
-        </div>
+    <div class="fi-fo-field" style="display: grid; row-gap: 0.75rem;">
         <div class="fi-fo-field-content-col">
-            <div class="fi-fo-field-content-ctn">
-                <div class="fi-fo-field-content">
-                    @if ($bundle)
-                        <div class="fi-fo-field-content-ctn">
-                            @if ($bundle->isExpired())
-                                <x-filament::badge color="danger">Expired</x-filament::badge>
-                            @else
-                                <x-filament::badge color="success">Active</x-filament::badge>
-                            @endif
-                            <span class="fi-fo-field-label-content">
-                                Expires {{ $bundle->expires_at?->diffForHumans() ?? 'soon' }}
-                            </span>
-                        </div>
+            @if ($bundleGenerated && $bundle)
+                <div class="fi-fo-field-content-ctn" style="margin-bottom: 0.75rem;">
+                    @if ($bundle->isExpired())
+                        <x-filament::badge color="danger">Expired</x-filament::badge>
                     @else
-                        <span class="fi-fo-field-label-content">No bundle generated yet.</span>
+                        <x-filament::badge color="success">Active</x-filament::badge>
                     @endif
-                </div>
-                <x-filament::button
-                    wire:click="generateBundle"
-                    wire:loading.attr="disabled"
-                    :disabled="! $hasCredentials"
-                >
-                    Generate bundle
-                </x-filament::button>
-            </div>
-
-            @if (! $hasCredentials)
-                <div class="fi-prose">
-                    <p>Enter GHCR credentials to enable bundle generation.</p>
+                    <span class="fi-fo-field-label-content">
+                        Expires {{ $bundle->expires_at?->diffForHumans() ?? 'soon' }}
+                    </span>
                 </div>
             @endif
+            <x-filament::button
+                class="w-full"
+                wire:click="generateBundle"
+                wire:loading.attr="disabled"
+                :disabled="! $hasCredentials"
+            >
+                Generate bundle
+            </x-filament::button>
         </div>
     </div>
 
-    <div class="fi-fo-field">
-        <div class="fi-fo-field-label-col">
-            <label class="fi-fo-field-label">
-                <span class="fi-fo-field-label-content">Install command (run as root)</span>
-            </label>
-        </div>
-        <div class="fi-fo-field-content-col">
-            @if ($installCommand)
-                <div x-data="{ copied: false }" class="fi-fo-field-content-ctn">
+    @if ($installCommand)
+        <div class="fi-fo-field" style="display: grid; row-gap: 0.75rem;">
+            <div class="fi-fo-field-label-col">
+                <label class="fi-fo-field-label">
+                    <span class="fi-fo-field-label-content">Install command (run as root)</span>
+                </label>
+            </div>
+            <div class="fi-fo-field-content-col">
+                <div x-data="{ copied: false }" class="fi-fo-field-content-ctn" style="align-items: flex-start;">
                     <div class="fi-fo-field-content">
-                        <x-filament::input.wrapper class="fi-fo-textarea">
-                            <textarea
-                                class="fi-input"
-                                rows="2"
-                                readonly
-                                style="font-family: var(--font-mono);"
-                            >{{ $installCommand }}</textarea>
-                        </x-filament::input.wrapper>
+                        <pre
+                            class="fi-fo-field-label-content"
+                            style="background: #0b0f1a; color: #e2e8f0; padding: 0.75rem 1rem; border-radius: 0.75rem; white-space: pre-wrap; word-break: break-all; font-family: var(--font-mono); margin: 0;"
+                        ><code x-ref="installCommand">{{ $installCommand }}</code></pre>
                     </div>
                     <x-filament::button
+                        type="button"
                         color="gray"
                         size="sm"
-                        x-on:click="navigator.clipboard.writeText(@js($installCommand)); copied = true; setTimeout(() => copied = false, 1500)"
+                        x-on:click="
+                            const text = $refs.installCommand.textContent;
+                            if (navigator.clipboard && window.isSecureContext) {
+                                navigator.clipboard.writeText(text).then(() => {
+                                    copied = true;
+                                    setTimeout(() => copied = false, 1500);
+                                }).catch(() => {
+                                    const selection = window.getSelection();
+                                    const range = document.createRange();
+                                    range.selectNodeContents($refs.installCommand);
+                                    selection.removeAllRanges();
+                                    selection.addRange(range);
+                                    document.execCommand('copy');
+                                    selection.removeAllRanges();
+                                    copied = true;
+                                    setTimeout(() => copied = false, 1500);
+                                });
+                            } else {
+                                const selection = window.getSelection();
+                                const range = document.createRange();
+                                range.selectNodeContents($refs.installCommand);
+                                selection.removeAllRanges();
+                                selection.addRange(range);
+                                document.execCommand('copy');
+                                selection.removeAllRanges();
+                                copied = true;
+                                setTimeout(() => copied = false, 1500);
+                            }
+                        "
                     >
                         <span x-show="! copied">Copy</span>
                         <span x-show="copied" x-cloak>Copied</span>
                     </x-filament::button>
                 </div>
-            @elseif ($bundle)
-                <div class="fi-prose">
-                    <p>Enter GHCR credentials to build the one-line installer.</p>
-                </div>
-            @else
-                <div class="fi-prose">
-                    <p>Generate a bundle to get the one-line installer.</p>
-                </div>
-            @endif
+            </div>
         </div>
-    </div>
+    @endif
 
-    <div class="fi-fo-field">
-        <div class="fi-fo-field-label-col">
-            <label class="fi-fo-field-label">
-                <span class="fi-fo-field-label-content">Worker env (preview)</span>
-            </label>
-        </div>
-        <div class="fi-fo-field-content-col">
-            <details>
-                <summary class="fi-fo-field-label-content">Preview worker.env</summary>
-                <x-filament::input.wrapper class="fi-fo-textarea" style="margin-top: 0.5rem;">
-                    <textarea
-                        class="fi-input"
-                        rows="8"
-                        readonly
-                        style="font-family: var(--font-mono);"
-                    >{{ $workerEnv }}</textarea>
-                </x-filament::input.wrapper>
-            </details>
-        </div>
-    </div>
 </div>
