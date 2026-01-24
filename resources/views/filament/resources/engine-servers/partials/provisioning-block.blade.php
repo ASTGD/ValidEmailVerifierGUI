@@ -34,7 +34,7 @@
     <div class="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div class="text-xs uppercase tracking-wide text-gray-400">Bundle status</div>
-            <x-filament::button wire:click="generateBundle" wire:loading.attr="disabled" @disabled(! $hasCredentials)>
+            <x-filament::button wire:click="generateBundle" wire:loading.attr="disabled" :disabled="! $hasCredentials">
                 Generate bundle
             </x-filament::button>
         </div>
