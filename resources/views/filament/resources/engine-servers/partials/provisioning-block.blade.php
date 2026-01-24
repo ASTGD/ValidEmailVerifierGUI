@@ -72,7 +72,11 @@
                         <span class="fi-fo-field-label-content">No bundle generated yet.</span>
                     @endif
                 </div>
-                <x-filament::button wire:click="generateBundle" :disabled="! $hasCredentials">
+                <x-filament::button
+                    wire:click="generateBundle"
+                    wire:loading.attr="disabled"
+                    :disabled="! $hasCredentials"
+                >
                     Generate bundle
                 </x-filament::button>
             </div>
