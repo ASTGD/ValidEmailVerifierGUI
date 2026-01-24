@@ -12,6 +12,7 @@ use App\Livewire\Portal\JobShow;
 use App\Livewire\Portal\JobsIndex;
 use App\Livewire\Portal\OrdersIndex;
 use App\Livewire\Portal\Settings;
+use App\Livewire\Portal\SingleCheck;
 use App\Livewire\Portal\Support;
 use App\Livewire\Portal\Upload;
 use Illuminate\Support\Facades\Route;
@@ -51,6 +52,7 @@ Route::middleware(['auth', 'verified'])
         Route::get('dashboard', Dashboard::class)->name('dashboard');
         Route::get('upload', Upload::class)->name('upload');
         Route::post('upload', UploadController::class)->name('upload.store');
+        Route::get('single-check', SingleCheck::class)->name('single-check');
         Route::get('jobs', JobsIndex::class)->name('jobs.index');
         Route::get('jobs/{job}', JobShow::class)
             ->whereUuid('job')

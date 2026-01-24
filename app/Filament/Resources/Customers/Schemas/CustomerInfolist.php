@@ -62,6 +62,11 @@ class CustomerInfolist
                         TextEntry::make('verification_jobs_count')
                             ->label('Total jobs')
                             ->getStateUsing(fn (User $record): int => $record->verificationJobs()->count()),
+                        TextEntry::make('enhanced_enabled')
+                            ->label('Enhanced access')
+                            ->badge()
+                            ->formatStateUsing(fn (bool $state): string => $state ? 'Enabled' : 'Disabled')
+                            ->color(fn (string $state): string => $state === 'Enabled' ? 'success' : 'gray'),
                     ])
                     ->columns(3),
             ]);

@@ -61,6 +61,10 @@ Guardrails for `enhanced` mode (design-level):
 - Strict rate limits and safety thresholds.
 - Kill switch available to admins to disable enhanced mode globally.
 
+Portal usage:
+- Customer list uploads and single-check requests set `verification_mode` at job creation.
+- Enhanced is only selectable when global settings, enhanced policy, and customer entitlement allow it.
+
 ## Connectivity-Based Classification (Phase 8B)
 In Phase 8B the worker performs **DNS/MX + SMTP connectivity checks** (EHLO + QUIT only). No mailbox-level RCPT probing is performed.
 
