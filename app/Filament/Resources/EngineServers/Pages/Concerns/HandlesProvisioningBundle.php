@@ -163,17 +163,35 @@ trait HandlesProvisioningBundle
         }
 
         $expiresAt = $bundle->expires_at ?? now();
+        $appUrl = trim((string) config('app.url'), '/');
+        $scheme = $appUrl !== '' ? parse_url($appUrl, PHP_URL_SCHEME) : null;
 
-        return [
-            'install' => URL::temporarySignedRoute('provisioning-bundles.download', $expiresAt, [
-                'bundle' => $bundle->bundle_uuid,
-                'file' => 'install.sh',
-            ]),
-            'env' => URL::temporarySignedRoute('provisioning-bundles.download', $expiresAt, [
-                'bundle' => $bundle->bundle_uuid,
-                'file' => 'worker.env',
-            ]),
-        ];
+        if ($appUrl !== '') {
+            URL::forceRootUrl($appUrl);
+        }
+        if ($scheme) {
+            URL::forceScheme($scheme);
+        }
+
+        try {
+            return [
+                'install' => URL::temporarySignedRoute('provisioning-bundles.download', $expiresAt, [
+                    'bundle' => $bundle->bundle_uuid,
+                    'file' => 'install.sh',
+                ]),
+                'env' => URL::temporarySignedRoute('provisioning-bundles.download', $expiresAt, [
+                    'bundle' => $bundle->bundle_uuid,
+                    'file' => 'worker.env',
+                ]),
+            ];
+        } finally {
+            if ($appUrl !== '') {
+                URL::forceRootUrl(null);
+            }
+            if ($scheme) {
+                URL::forceScheme(null);
+            }
+        }
     }
 
     protected function buildInstallCommand(?EngineServerProvisioningBundle $bundle): ?string
