@@ -6,6 +6,7 @@ use App\Filament\Widgets\AdminDashboardHighlights;
 use App\Filament\Widgets\AdminQuickLinks;
 use App\Filament\Widgets\AdminStatsOverview;
 use App\Filament\Widgets\FeedbackAnalytics;
+use App\Filament\Widgets\EngineWarmupOverview;
 use App\Filament\Widgets\FinalizationHealth;
 use Filament\Support\Assets\Css;
 use Filament\Http\Middleware\Authenticate;
@@ -52,6 +53,7 @@ class AdminPanelProvider extends PanelProvider
                 AdminStatsOverview::class,
                 FeedbackAnalytics::class,
                 FinalizationHealth::class,
+                EngineWarmupOverview::class,
                 AccountWidget::class,
                 AdminQuickLinks::class,
             ])
