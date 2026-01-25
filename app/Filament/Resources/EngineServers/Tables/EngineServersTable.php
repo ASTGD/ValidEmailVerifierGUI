@@ -94,6 +94,19 @@ class EngineServersTable
                     ->requiresConfirmation()
                     ->visible(fn (EngineServer $record): bool => $record->is_active),
                 EditAction::make(),
+                Action::make('delete_server')
+                    ->label('Delete')
+                    ->color('danger')
+                    ->icon('heroicon-m-trash')
+                    ->requiresConfirmation()
+                    ->action(function (EngineServer $record): void {
+                        AdminAuditLogger::log('engine_server_deleted', $record, [
+                            'name' => $record->name,
+                            'ip_address' => $record->ip_address,
+                        ]);
+
+                        $record->delete();
+                    }),
             ]);
     }
 }
