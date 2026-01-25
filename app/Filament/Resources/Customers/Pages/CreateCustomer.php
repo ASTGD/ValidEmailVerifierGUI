@@ -21,4 +21,9 @@ class CreateCustomer extends CreateRecord
     {
         $this->record->assignRole(Roles::CUSTOMER);
     }
+
+    public function getMaxContentWidth(): \Filament\Support\Enums\Width|string|null
+    {
+        return 'full';
+    }
 }

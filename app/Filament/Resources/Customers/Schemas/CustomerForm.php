@@ -131,7 +131,7 @@ class CustomerForm
 
                 Section::make('Email Notifications')
                     ->description('Manage email notification preferences')
-                    ->collapsible()
+                    // ->collapsible()
                     ->schema([
                         Grid::make(1)
                             ->schema([

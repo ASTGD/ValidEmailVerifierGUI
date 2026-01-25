@@ -17,4 +17,9 @@ class ViewCustomer extends ViewRecord
     {
         return [];
     }
+
+    public function getMaxContentWidth(): \Filament\Support\Enums\Width|string|null
+    {
+        return 'full';
+    }
 }

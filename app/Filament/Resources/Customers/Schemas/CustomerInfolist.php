@@ -18,6 +18,7 @@ class CustomerInfolist
         return $schema
             ->components([
                 Tabs::make('Tabs')
+                    ->columnSpan('full')
                     ->tabs([
                         Tab::make('Summary')
                             ->schema([
