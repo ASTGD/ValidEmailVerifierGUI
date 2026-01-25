@@ -97,6 +97,11 @@ class VerificationJob extends Model
         });
     }
 
+    public function scopeExcludeSingleCheck($query)
+    {
+        return $query->where('origin', '!=', VerificationJobOrigin::SingleCheck->value);
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

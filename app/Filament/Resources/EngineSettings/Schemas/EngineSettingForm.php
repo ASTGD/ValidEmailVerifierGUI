@@ -27,6 +27,9 @@ class EngineSettingForm
                         Toggle::make('enhanced_mode_enabled')
                             ->label('Enhanced mode enabled')
                             ->helperText('Enables Enhanced mode selection (pipeline remains standard for now).'),
+                        Toggle::make('show_single_checks_in_admin')
+                            ->label('Show single checks in admin')
+                            ->helperText('Disabled hides single-email checks from job lists.'),
                     ])
                     ->columns(2),
                 Section::make('Role Accounts Policy')

@@ -162,6 +162,11 @@ class EngineSettings
         return max(0.0, (float) $value);
     }
 
+    public static function showSingleChecksInAdmin(): bool
+    {
+        return self::boolValue('show_single_checks_in_admin', (bool) config('engine.show_single_checks_in_admin', false));
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */

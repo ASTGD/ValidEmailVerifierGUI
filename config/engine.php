@@ -58,6 +58,7 @@ return [
     'reputation_min_samples' => (int) env('ENGINE_REPUTATION_MIN_SAMPLES', 100),
     'reputation_tempfail_warn_rate' => (float) env('ENGINE_REPUTATION_TEMPFAIL_WARN_RATE', 0.2),
     'reputation_tempfail_critical_rate' => (float) env('ENGINE_REPUTATION_TEMPFAIL_CRITICAL_RATE', 0.4),
+    'show_single_checks_in_admin' => (bool) env('ENGINE_SHOW_SINGLE_CHECKS_IN_ADMIN', false),
     'provider_policies' => [],
     'policy_contract_version' => env('ENGINE_POLICY_CONTRACT_VERSION', 'v1'),
     'policy_defaults' => [
