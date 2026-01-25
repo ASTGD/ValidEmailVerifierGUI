@@ -47,6 +47,11 @@ class EngineServer extends Model
         return $this->hasMany(VerificationJobChunk::class);
     }
 
+    public function reputationSamples(): HasMany
+    {
+        return $this->hasMany(EngineServerReputationSample::class);
+    }
+
     public function provisioningBundles(): HasMany
     {
         return $this->hasMany(EngineServerProvisioningBundle::class);

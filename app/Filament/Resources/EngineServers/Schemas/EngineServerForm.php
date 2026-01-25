@@ -80,6 +80,14 @@ class EngineServerForm
                                     : []),
                         ])
                         ->visible(fn ($livewire): bool => method_exists($livewire, 'provisioningViewData')),
+                    Section::make('Reputation Status')
+                        ->schema([
+                            View::make('filament.resources.engine-servers.partials.reputation-summary')
+                                ->viewData(fn ($livewire): array => method_exists($livewire, 'reputationViewData')
+                                    ? $livewire->reputationViewData()
+                                    : []),
+                        ])
+                        ->visible(fn ($livewire): bool => method_exists($livewire, 'reputationViewData')),
                 ])->columnSpan(1),
             ]);
     }
