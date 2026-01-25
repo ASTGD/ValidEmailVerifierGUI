@@ -143,10 +143,17 @@ class EngineWorkerProvisioningService
         $envPath = (string) config('engine.worker_env_path');
 
         $escapedEnv = rtrim($workerEnv, "\n");
+        $registryArg = escapeshellarg($registry);
+        $imageArg = escapeshellarg($image);
+        $envPathArg = escapeshellarg($envPath);
 
         $template = <<<'BASH'
 #!/usr/bin/env bash
 set -euo pipefail
+
+REGISTRY={{REGISTRY}}
+IMAGE={{IMAGE}}
+ENV_PATH={{ENV_PATH}}
 
 GHCR_USER=""
 GHCR_TOKEN=""
@@ -188,24 +195,28 @@ if ! command -v docker >/dev/null 2>&1; then
   systemctl enable --now docker
 fi
 
-mkdir -p "$(dirname "$envPath")"
-cat > "$envPath" <<'ENVFILE'
+mkdir -p "$(dirname "$ENV_PATH")"
+cat > "$ENV_PATH" <<'ENVFILE'
 {{WORKER_ENV}}
 ENVFILE
 
-printf "%s\n" "$GHCR_TOKEN" | docker login $registry -u "$GHCR_USER" --password-stdin
+printf "%s\n" "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GHCR_USER" --password-stdin
 
-docker pull $image
+docker pull "$IMAGE"
 
 docker rm -f valid-email-worker >/dev/null 2>&1 || true
 
 docker run -d --name valid-email-worker --restart unless-stopped \
-  --env-file "$envPath" \
-  $image
+  --env-file "$ENV_PATH" \
+  "$IMAGE"
 
 BASH;
 
-        return str_replace('{{WORKER_ENV}}', $escapedEnv, $template);
+        return str_replace(
+            ['{{WORKER_ENV}}', '{{REGISTRY}}', '{{IMAGE}}', '{{ENV_PATH}}'],
+            [$escapedEnv, $registryArg, $imageArg, $envPathArg],
+            $template
+        );
     }
 
     private function envLine(string $key, string $value): string
