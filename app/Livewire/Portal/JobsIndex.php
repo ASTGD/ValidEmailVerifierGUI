@@ -32,7 +32,8 @@ class JobsIndex extends Component
     public function getJobsProperty()
     {
         $query = VerificationJob::query()
-            ->where('user_id', Auth::id());
+            ->where('user_id', Auth::id())
+            ->excludeSingleCheck();
 
         if ($this->status) {
             $query->where('status', $this->status);
@@ -58,6 +59,7 @@ class JobsIndex extends Component
     {
         return VerificationJob::query()
             ->where('user_id', Auth::id())
+            ->excludeSingleCheck()
             ->whereIn('status', [VerificationJobStatus::Pending, VerificationJobStatus::Processing])
             ->exists();
     }

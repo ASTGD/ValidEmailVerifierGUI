@@ -22,6 +22,7 @@ class EngineSetting extends Model
         'reputation_min_samples',
         'reputation_tempfail_warn_rate',
         'reputation_tempfail_critical_rate',
+        'show_single_checks_in_admin',
     ];
 
     protected $casts = [
@@ -35,5 +36,6 @@ class EngineSetting extends Model
         'reputation_min_samples' => 'integer',
         'reputation_tempfail_warn_rate' => 'decimal:2',
         'reputation_tempfail_critical_rate' => 'decimal:2',
+        'show_single_checks_in_admin' => 'boolean',
     ];
 }
