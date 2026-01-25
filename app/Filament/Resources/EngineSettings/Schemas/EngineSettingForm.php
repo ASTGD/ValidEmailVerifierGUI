@@ -68,6 +68,52 @@ class EngineSettingForm
                 Section::make('Enhanced Policy')
                     ->schema(self::policyFields('enhanced'))
                     ->columns(2),
+                Section::make('Tempfail Retry Queue')
+                    ->description('Schedule delayed retries for tempfail results before finalizing outputs.')
+                    ->schema([
+                        Toggle::make('tempfail_retry_enabled')
+                            ->label('Enable tempfail retries')
+                            ->default(false),
+                        TextInput::make('tempfail_retry_max_attempts')
+                            ->label('Max retry attempts')
+                            ->numeric()
+                            ->minValue(0)
+                            ->required(),
+                        TextInput::make('tempfail_retry_backoff_minutes')
+                            ->label('Backoff schedule (minutes)')
+                            ->helperText('Comma-separated delays per attempt. Example: 10,30,60.'),
+                        TextInput::make('tempfail_retry_reasons')
+                            ->label('Retry reasons')
+                            ->helperText('Comma-separated reason codes eligible for retry.'),
+                    ])
+                    ->columns(2),
+                Section::make('Reputation Thresholds')
+                    ->description('Used for server warm-up and tempfail rate status in Admin.')
+                    ->schema([
+                        TextInput::make('reputation_window_hours')
+                            ->label('Window (hours)')
+                            ->numeric()
+                            ->minValue(1)
+                            ->required(),
+                        TextInput::make('reputation_min_samples')
+                            ->label('Minimum samples')
+                            ->numeric()
+                            ->minValue(1)
+                            ->required(),
+                        TextInput::make('reputation_tempfail_warn_rate')
+                            ->label('Warn tempfail rate')
+                            ->numeric()
+                            ->minValue(0)
+                            ->step('0.01')
+                            ->required(),
+                        TextInput::make('reputation_tempfail_critical_rate')
+                            ->label('Critical tempfail rate')
+                            ->numeric()
+                            ->minValue(0)
+                            ->step('0.01')
+                            ->required(),
+                    ])
+                    ->columns(2),
                 Section::make('Provider Policies')
                     ->description('Optional overrides for specific mailbox providers to reduce tempfails.')
                     ->schema([

@@ -290,4 +290,46 @@ class VerifierChunkApiTest extends TestCase
         $this->assertNull($chunk->claim_expires_at);
         $this->assertNull($chunk->assigned_worker_id);
     }
+
+    public function test_claim_next_skips_unavailable_chunks(): void
+    {
+        $this->actingAsVerifier();
+        EngineSetting::query()->update(['engine_paused' => false]);
+
+        $job = $this->makeJob();
+        $futureChunk = $this->makeChunk($job, [
+            'chunk_no' => 1,
+            'status' => 'pending',
+            'available_at' => now()->addMinutes(15),
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+        ]);
+
+        $readyChunk = $this->makeChunk($job, [
+            'chunk_no' => 2,
+            'status' => 'pending',
+            'available_at' => null,
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+        ]);
+
+        $response = $this->postJson(route('api.verifier.chunks.claim-next'), [
+            'engine_server' => [
+                'name' => 'engine-available',
+                'ip_address' => '127.0.0.9',
+                'environment' => 'test',
+                'region' => 'local',
+            ],
+            'worker_id' => 'worker-available',
+        ])->assertOk();
+
+        $response->assertJsonFragment([
+            'chunk_id' => (string) $readyChunk->id,
+        ]);
+
+        $futureChunk->refresh();
+        $this->assertSame('pending', $futureChunk->status);
+    }
 }

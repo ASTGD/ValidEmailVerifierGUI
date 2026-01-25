@@ -47,6 +47,17 @@ return [
     'catch_all_promote_threshold' => env('ENGINE_CATCH_ALL_PROMOTE_THRESHOLD') !== null
         ? (int) env('ENGINE_CATCH_ALL_PROMOTE_THRESHOLD')
         : null,
+    'tempfail_retry_enabled' => (bool) env('ENGINE_TEMPFAIL_RETRY_ENABLED', false),
+    'tempfail_retry_max_attempts' => (int) env('ENGINE_TEMPFAIL_RETRY_MAX_ATTEMPTS', 2),
+    'tempfail_retry_backoff_minutes' => env('ENGINE_TEMPFAIL_RETRY_BACKOFF_MINUTES', '10,30,60'),
+    'tempfail_retry_reasons' => env(
+        'ENGINE_TEMPFAIL_RETRY_REASONS',
+        'smtp_tempfail,smtp_timeout,smtp_connect_timeout,dns_timeout,dns_servfail'
+    ),
+    'reputation_window_hours' => (int) env('ENGINE_REPUTATION_WINDOW_HOURS', 24),
+    'reputation_min_samples' => (int) env('ENGINE_REPUTATION_MIN_SAMPLES', 100),
+    'reputation_tempfail_warn_rate' => (float) env('ENGINE_REPUTATION_TEMPFAIL_WARN_RATE', 0.2),
+    'reputation_tempfail_critical_rate' => (float) env('ENGINE_REPUTATION_TEMPFAIL_CRITICAL_RATE', 0.4),
     'provider_policies' => [],
     'policy_contract_version' => env('ENGINE_POLICY_CONTRACT_VERSION', 'v1'),
     'policy_defaults' => [

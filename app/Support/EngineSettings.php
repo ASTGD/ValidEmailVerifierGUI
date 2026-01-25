@@ -68,6 +68,100 @@ class EngineSettings
         return $threshold >= 0 ? $threshold : null;
     }
 
+    public static function tempfailRetryEnabled(): bool
+    {
+        return self::boolValue('tempfail_retry_enabled', (bool) config('engine.tempfail_retry_enabled', false));
+    }
+
+    public static function tempfailRetryMaxAttempts(): int
+    {
+        $value = self::stringValue('tempfail_retry_max_attempts', '');
+        if ($value === '') {
+            return (int) config('engine.tempfail_retry_max_attempts', 2);
+        }
+
+        return max(0, (int) $value);
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public static function tempfailRetryBackoffMinutes(): array
+    {
+        $raw = self::stringValue('tempfail_retry_backoff_minutes', (string) config('engine.tempfail_retry_backoff_minutes', ''));
+
+        $parts = array_filter(array_map('trim', explode(',', $raw)));
+        $values = array_values(array_filter(array_map(static function (string $value): int {
+            $value = trim($value);
+            if ($value === '' || ! is_numeric($value)) {
+                return 0;
+            }
+
+            return max(0, (int) $value);
+        }, $parts)));
+
+        if ($values === []) {
+            return [10];
+        }
+
+        return $values;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function tempfailRetryReasons(): array
+    {
+        $raw = self::stringValue(
+            'tempfail_retry_reasons',
+            (string) config('engine.tempfail_retry_reasons', '')
+        );
+
+        $parts = array_filter(array_map('trim', explode(',', $raw)));
+
+        return array_values(array_unique(array_filter(array_map('strtolower', $parts))));
+    }
+
+    public static function reputationWindowHours(): int
+    {
+        $value = self::stringValue('reputation_window_hours', '');
+        if ($value === '') {
+            return (int) config('engine.reputation_window_hours', 24);
+        }
+
+        return max(1, (int) $value);
+    }
+
+    public static function reputationMinSamples(): int
+    {
+        $value = self::stringValue('reputation_min_samples', '');
+        if ($value === '') {
+            return (int) config('engine.reputation_min_samples', 100);
+        }
+
+        return max(1, (int) $value);
+    }
+
+    public static function reputationTempfailWarnRate(): float
+    {
+        $value = self::stringValue('reputation_tempfail_warn_rate', '');
+        if ($value === '') {
+            return (float) config('engine.reputation_tempfail_warn_rate', 0.2);
+        }
+
+        return max(0.0, (float) $value);
+    }
+
+    public static function reputationTempfailCriticalRate(): float
+    {
+        $value = self::stringValue('reputation_tempfail_critical_rate', '');
+        if ($value === '') {
+            return (float) config('engine.reputation_tempfail_critical_rate', 0.4);
+        }
+
+        return max(0.0, (float) $value);
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */
