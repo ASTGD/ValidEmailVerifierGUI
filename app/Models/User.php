@@ -109,4 +109,14 @@ class User extends Authenticatable implements FilamentUser
     {
         return $this->hasMany(CheckoutIntent::class);
     }
+
+    public function supportTickets(): HasMany
+    {
+        return $this->hasMany(SupportTicket::class);
+    }
+
+    public function auditLogs(): HasMany
+    {
+        return $this->hasMany(AdminAuditLog::class);
+    }
 }

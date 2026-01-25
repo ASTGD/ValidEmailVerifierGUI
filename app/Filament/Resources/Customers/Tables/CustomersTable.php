@@ -19,13 +19,9 @@ class CustomersTable
                 TextColumn::make('id')
                     ->label('ID')
                     ->sortable(),
-                TextColumn::make('first_name')
-                    ->label('First Name')
-                    ->searchable()
-                    ->sortable(),
-                TextColumn::make('last_name')
-                    ->label('Last Name')
-                    ->searchable()
+                TextColumn::make('name')
+                    ->label('Full Name')
+                    ->searchable(['first_name', 'last_name', 'name'])
                     ->sortable(),
                 TextColumn::make('company_name')
                     ->label('Company Name')
