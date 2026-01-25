@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources\EngineSettings\Schemas;
 
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
@@ -66,6 +68,45 @@ class EngineSettingForm
                 Section::make('Enhanced Policy')
                     ->schema(self::policyFields('enhanced'))
                     ->columns(2),
+                Section::make('Provider Policies')
+                    ->description('Optional overrides for specific mailbox providers to reduce tempfails.')
+                    ->schema([
+                        Repeater::make('provider_policies')
+                            ->label('Provider overrides')
+                            ->default([])
+                            ->schema([
+                                TextInput::make('name')
+                                    ->label('Provider name')
+                                    ->required(),
+                                Toggle::make('enabled')
+                                    ->label('Enabled')
+                                    ->default(true),
+                                TagsInput::make('domains')
+                                    ->label('Domains')
+                                    ->helperText('Add root domains or subdomains (e.g. outlook.com).')
+                                    ->required(),
+                                TextInput::make('per_domain_concurrency')
+                                    ->label('Per-domain concurrency')
+                                    ->numeric()
+                                    ->minValue(0),
+                                TextInput::make('connects_per_minute')
+                                    ->label('Connects per minute')
+                                    ->numeric()
+                                    ->minValue(0),
+                                TextInput::make('tempfail_backoff_seconds')
+                                    ->label('Tempfail backoff (seconds)')
+                                    ->numeric()
+                                    ->minValue(0),
+                                TextInput::make('retryable_network_retries')
+                                    ->label('Retryable network retries')
+                                    ->numeric()
+                                    ->minValue(0),
+                            ])
+                            ->columns(2)
+                            ->itemLabel(fn (array $state): ?string => $state['name'] ?? null)
+                            ->collapsed()
+                            ->helperText('Overrides apply to any email domain that matches the list.'),
+                    ]),
             ]);
     }
 

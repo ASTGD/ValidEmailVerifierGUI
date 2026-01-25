@@ -47,6 +47,7 @@ return [
     'catch_all_promote_threshold' => env('ENGINE_CATCH_ALL_PROMOTE_THRESHOLD') !== null
         ? (int) env('ENGINE_CATCH_ALL_PROMOTE_THRESHOLD')
         : null,
+    'provider_policies' => [],
     'policy_contract_version' => env('ENGINE_POLICY_CONTRACT_VERSION', 'v1'),
     'policy_defaults' => [
         'standard' => array_merge($policyDefaults, [

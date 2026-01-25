@@ -13,11 +13,13 @@ class EngineSetting extends Model
         'role_accounts_list',
         'catch_all_policy',
         'catch_all_promote_threshold',
+        'provider_policies',
     ];
 
     protected $casts = [
         'engine_paused' => 'boolean',
         'enhanced_mode_enabled' => 'boolean',
         'catch_all_promote_threshold' => 'integer',
+        'provider_policies' => 'array',
     ];
 }

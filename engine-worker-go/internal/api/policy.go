@@ -21,6 +21,16 @@ type Policy struct {
 	CircuitBreakerTempfailRate *float64 `json:"circuit_breaker_tempfail_rate"`
 }
 
+type ProviderPolicy struct {
+	Name                    string   `json:"name"`
+	Enabled                 bool     `json:"enabled"`
+	Domains                 []string `json:"domains"`
+	PerDomainConcurrency    *int     `json:"per_domain_concurrency"`
+	ConnectsPerMinute       *int     `json:"connects_per_minute"`
+	TempfailBackoffSeconds  *int     `json:"tempfail_backoff_seconds"`
+	RetryableNetworkRetries *int     `json:"retryable_network_retries"`
+}
+
 type PolicyResponse struct {
 	Data struct {
 		ContractVersion      string            `json:"contract_version"`
@@ -28,6 +38,7 @@ type PolicyResponse struct {
 		EnhancedModeEnabled  bool              `json:"enhanced_mode_enabled"`
 		RoleAccountsBehavior string            `json:"role_accounts_behavior"`
 		RoleAccountsList     []string          `json:"role_accounts_list"`
+		ProviderPolicies     []ProviderPolicy  `json:"provider_policies"`
 		Policies             map[string]Policy `json:"policies"`
 	} `json:"data"`
 }

@@ -68,6 +68,17 @@ class EngineSettings
         return $threshold >= 0 ? $threshold : null;
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public static function providerPolicies(): array
+    {
+        $default = config('engine.provider_policies', []);
+        $value = self::arrayValue('provider_policies', is_array($default) ? $default : []);
+
+        return self::normalizeProviderPolicies($value);
+    }
+
     private static function boolValue(string $field, bool $default): bool
     {
         if (! Schema::hasTable('engine_settings') || ! Schema::hasColumn('engine_settings', $field)) {
@@ -88,5 +99,75 @@ class EngineSettings
         $value = EngineSetting::query()->value($field);
 
         return is_null($value) ? $default : (string) $value;
+    }
+
+    /**
+     * @param  array<int, mixed>  $default
+     * @return array<int, mixed>
+     */
+    private static function arrayValue(string $field, array $default): array
+    {
+        if (! Schema::hasTable('engine_settings') || ! Schema::hasColumn('engine_settings', $field)) {
+            return $default;
+        }
+
+        $value = EngineSetting::query()->value($field);
+
+        return is_array($value) ? $value : $default;
+    }
+
+    /**
+     * @param  array<int, mixed>  $policies
+     * @return array<int, array<string, mixed>>
+     */
+    private static function normalizeProviderPolicies(array $policies): array
+    {
+        $normalized = [];
+
+        foreach ($policies as $policy) {
+            if (! is_array($policy)) {
+                continue;
+            }
+
+            $name = trim((string) ($policy['name'] ?? ''));
+            $domains = $policy['domains'] ?? [];
+
+            if ($name === '' || ! is_array($domains)) {
+                continue;
+            }
+
+            $domains = array_values(array_unique(array_filter(array_map(static function ($domain): string {
+                $domain = strtolower(trim((string) $domain));
+                $domain = ltrim($domain, '.');
+                $domain = preg_replace('/^\*\./', '', $domain) ?? $domain;
+
+                return $domain;
+            }, $domains))));
+
+            if ($domains === []) {
+                continue;
+            }
+
+            $normalized[] = [
+                'name' => $name,
+                'enabled' => (bool) ($policy['enabled'] ?? true),
+                'domains' => $domains,
+                'per_domain_concurrency' => self::optionalInt($policy['per_domain_concurrency'] ?? null),
+                'connects_per_minute' => self::optionalInt($policy['connects_per_minute'] ?? null),
+                'tempfail_backoff_seconds' => self::optionalInt($policy['tempfail_backoff_seconds'] ?? null),
+                'retryable_network_retries' => self::optionalInt($policy['retryable_network_retries'] ?? null),
+            ];
+        }
+
+        return $normalized;
+    }
+
+    private static function optionalInt(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return (int) $value;
     }
 }

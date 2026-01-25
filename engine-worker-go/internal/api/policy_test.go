@@ -11,6 +11,17 @@ func TestPolicyResponseParsing(t *testing.T) {
     "contract_version": "v1",
     "engine_paused": false,
     "enhanced_mode_enabled": true,
+    "provider_policies": [
+      {
+        "name": "outlook",
+        "enabled": true,
+        "domains": ["outlook.com", "hotmail.com"],
+        "per_domain_concurrency": 1,
+        "connects_per_minute": 30,
+        "tempfail_backoff_seconds": 8,
+        "retryable_network_retries": 2
+      }
+    ],
     "policies": {
       "standard": {
         "mode": "standard",
@@ -73,5 +84,12 @@ func TestPolicyResponseParsing(t *testing.T) {
 	}
 	if enhanced.GlobalConnectsPerMinute != nil {
 		t.Fatalf("expected enhanced global connects to be nil")
+	}
+
+	if len(resp.Data.ProviderPolicies) != 1 {
+		t.Fatalf("expected provider policies to be parsed")
+	}
+	if resp.Data.ProviderPolicies[0].Name != "outlook" {
+		t.Fatalf("expected provider name outlook")
 	}
 }
