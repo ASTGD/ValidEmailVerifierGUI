@@ -52,6 +52,21 @@ class EngineServer extends Model
         return $this->hasMany(EngineServerReputationSample::class);
     }
 
+    public function reputationChecks(): HasMany
+    {
+        return $this->hasMany(EngineServerReputationCheck::class);
+    }
+
+    public function blacklistEvents(): HasMany
+    {
+        return $this->hasMany(EngineServerBlacklistEvent::class);
+    }
+
+    public function delistRequests(): HasMany
+    {
+        return $this->hasMany(EngineServerDelistRequest::class);
+    }
+
     public function provisioningBundles(): HasMany
     {
         return $this->hasMany(EngineServerProvisioningBundle::class);

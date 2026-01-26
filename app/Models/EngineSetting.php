@@ -23,6 +23,12 @@ class EngineSetting extends Model
         'reputation_tempfail_warn_rate',
         'reputation_tempfail_critical_rate',
         'show_single_checks_in_admin',
+        'monitor_enabled',
+        'monitor_interval_minutes',
+        'monitor_rbl_list',
+        'monitor_dns_mode',
+        'monitor_dns_server_ip',
+        'monitor_dns_server_port',
     ];
 
     protected $casts = [
@@ -37,5 +43,8 @@ class EngineSetting extends Model
         'reputation_tempfail_warn_rate' => 'decimal:2',
         'reputation_tempfail_critical_rate' => 'decimal:2',
         'show_single_checks_in_admin' => 'boolean',
+        'monitor_enabled' => 'boolean',
+        'monitor_interval_minutes' => 'integer',
+        'monitor_dns_server_port' => 'integer',
     ];
 }

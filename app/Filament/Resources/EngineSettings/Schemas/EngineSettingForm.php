@@ -117,6 +117,43 @@ class EngineSettingForm
                             ->required(),
                     ])
                     ->columns(2),
+                Section::make('Blacklist Monitor')
+                    ->description('Controls the external blacklist monitor service.')
+                    ->schema([
+                        Toggle::make('monitor_enabled')
+                            ->label('Enable blacklist monitor')
+                            ->default(false),
+                        TextInput::make('monitor_interval_minutes')
+                            ->label('Check interval (minutes)')
+                            ->numeric()
+                            ->minValue(1)
+                            ->required(),
+                        Textarea::make('monitor_rbl_list')
+                            ->label('RBL list')
+                            ->rows(3)
+                            ->helperText('Comma-separated RBL domains (no IP prefix).'),
+                        Select::make('monitor_dns_mode')
+                            ->label('Resolver mode')
+                            ->options([
+                                'system' => 'System DNS (host)',
+                                'custom' => 'Custom DNS server',
+                            ])
+                            ->default('system')
+                            ->live()
+                            ->helperText('Use the host resolver or specify a custom DNS server.'),
+                        TextInput::make('monitor_dns_server_ip')
+                            ->label('Custom DNS IP')
+                            ->placeholder('Resolver IP')
+                            ->visible(fn (Get $get): bool => $get('monitor_dns_mode') === 'custom'),
+                        TextInput::make('monitor_dns_server_port')
+                            ->label('Custom DNS port')
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(65535)
+                            ->default(53)
+                            ->visible(fn (Get $get): bool => $get('monitor_dns_mode') === 'custom'),
+                    ])
+                    ->columns(2),
                 Section::make('Provider Policies')
                     ->description('Optional overrides for specific mailbox providers to reduce tempfails.')
                     ->schema([

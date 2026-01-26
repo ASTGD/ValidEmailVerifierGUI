@@ -1,6 +1,6 @@
 # SG5 and Monitoring plan
 
-Status: future plan (no implementation yet).
+Status: SG5 implemented; blacklist monitor in progress.
 
 ## Goals
 - SG5 Enhanced RCPT probing (opt-in, safe, compliant, accurate).
@@ -66,6 +66,12 @@ Admin controls
 - Adjust rate limits + concurrency.
 - Track delist requests with instructions + status.
 - Alerting (email/Slack).
+
+Implementation notes (current)
+- Service runs as a lightweight Go binary (or container) and can be managed by `systemd` on the main app host.
+- Config is fetched from `GET /api/monitor/config`; servers from `GET /api/monitor/servers`.
+- Results are posted to `POST /api/monitor/checks`.
+- Resolver mode can be set to **System DNS (host)** or a **Custom DNS server** (IP + port).
 
 ## Provider APIs + scoring (later)
 Inputs
