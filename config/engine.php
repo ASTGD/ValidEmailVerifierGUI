@@ -59,6 +59,14 @@ return [
     'reputation_tempfail_warn_rate' => (float) env('ENGINE_REPUTATION_TEMPFAIL_WARN_RATE', 0.2),
     'reputation_tempfail_critical_rate' => (float) env('ENGINE_REPUTATION_TEMPFAIL_CRITICAL_RATE', 0.4),
     'show_single_checks_in_admin' => (bool) env('ENGINE_SHOW_SINGLE_CHECKS_IN_ADMIN', false),
+    'monitor_enabled' => (bool) env('ENGINE_MONITOR_ENABLED', false),
+    'monitor_interval_minutes' => (int) env('ENGINE_MONITOR_INTERVAL_MINUTES', 60),
+    'monitor_rbl_list' => env('ENGINE_MONITOR_RBL_LIST', ''),
+    'monitor_dns_mode' => env('ENGINE_MONITOR_DNS_MODE', 'system'),
+    'monitor_dns_server_ip' => env('ENGINE_MONITOR_DNS_SERVER_IP'),
+    'monitor_dns_server_port' => env('ENGINE_MONITOR_DNS_SERVER_PORT') !== null
+        ? (int) env('ENGINE_MONITOR_DNS_SERVER_PORT')
+        : 53,
     'provider_policies' => [],
     'policy_contract_version' => env('ENGINE_POLICY_CONTRACT_VERSION', 'v1'),
     'policy_defaults' => [

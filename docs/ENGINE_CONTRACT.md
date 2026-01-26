@@ -425,6 +425,88 @@ Response:
 
 ---
 
+## Blacklist Monitor API
+Used by the external blacklist monitor service (Go) to report RBL checks.
+
+All endpoints require:
+- `auth:sanctum`
+- `EnsureVerifierService`
+- `throttle:verifier-api`
+
+### Config
+**GET** `/api/monitor/config`
+
+Response:
+```json
+{
+  "data": {
+    "enabled": true,
+    "interval_minutes": 60,
+    "rbl_list": [
+      "rbl.example"
+    ],
+    "resolver_mode": "system",
+    "resolver_ip": null,
+    "resolver_port": 53
+  }
+}
+```
+
+### Servers
+**GET** `/api/monitor/servers`
+
+Response:
+```json
+{
+  "data": {
+    "servers": [
+      {
+        "id": 1,
+        "name": "engine-1",
+        "ip_address": "192.0.2.10",
+        "environment": "prod",
+        "region": "us-east-1",
+        "is_active": true,
+        "drain_mode": false,
+        "last_heartbeat_at": "2026-01-25T12:00:00Z"
+      }
+    ]
+  }
+}
+```
+
+### Checks
+**POST** `/api/monitor/checks`
+
+Payload:
+```json
+{
+  "server_id": 1,
+  "server_ip": "192.0.2.10",
+  "checked_at": "2026-01-25T12:05:00Z",
+  "results": [
+    {
+      "rbl": "rbl.example",
+      "listed": false,
+      "response": null,
+      "error_message": null
+    }
+  ]
+}
+```
+
+Response:
+```json
+{
+  "data": {
+    "checks": 1,
+    "listed": 0
+  }
+}
+```
+
+---
+
 ## Reference Worker Flow (Phase 8A/8B)
 1) Claim a chunk via `POST /api/verifier/chunks/claim-next`.
 2) Fetch `input-url` and download chunk input.

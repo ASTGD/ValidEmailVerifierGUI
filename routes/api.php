@@ -16,6 +16,9 @@ use App\Http\Controllers\Api\Verifier\VerifierJobsController;
 use App\Http\Controllers\Api\Verifier\VerifierPolicyController;
 use App\Http\Controllers\Api\Verifier\VerifierStorageDownloadController;
 use App\Http\Controllers\Api\Verifier\VerifierStorageUploadController;
+use App\Http\Controllers\Api\Monitor\MonitorChecksController;
+use App\Http\Controllers\Api\Monitor\MonitorConfigController;
+use App\Http\Controllers\Api\Monitor\MonitorServersController;
 use App\Http\Controllers\Api\Feedback\FeedbackOutcomesController;
 use App\Http\Middleware\EnsureFeedbackIngestor;
 use App\Http\Middleware\EnsureVerifierService;
@@ -77,4 +80,13 @@ Route::middleware(['auth:sanctum', EnsureFeedbackIngestor::class, 'throttle:feed
     ->name('api.feedback.')
     ->group(function () {
         Route::post('outcomes', FeedbackOutcomesController::class)->name('outcomes.store');
+    });
+
+Route::middleware(['auth:sanctum', EnsureVerifierService::class, 'throttle:verifier-api'])
+    ->prefix('monitor')
+    ->name('api.monitor.')
+    ->group(function () {
+        Route::get('config', MonitorConfigController::class)->name('config');
+        Route::get('servers', MonitorServersController::class)->name('servers');
+        Route::post('checks', MonitorChecksController::class)->name('checks');
     });

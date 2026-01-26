@@ -167,6 +167,73 @@ class EngineSettings
         return self::boolValue('show_single_checks_in_admin', (bool) config('engine.show_single_checks_in_admin', false));
     }
 
+    public static function monitorEnabled(): bool
+    {
+        return self::boolValue('monitor_enabled', (bool) config('engine.monitor_enabled', false));
+    }
+
+    public static function monitorIntervalMinutes(): int
+    {
+        $value = self::stringValue('monitor_interval_minutes', '');
+        if ($value === '') {
+            return (int) config('engine.monitor_interval_minutes', 60);
+        }
+
+        return max(1, (int) $value);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function monitorRblList(): array
+    {
+        $raw = self::stringValue('monitor_rbl_list', (string) config('engine.monitor_rbl_list', ''));
+        $entries = array_map('trim', explode(',', $raw));
+
+        return array_values(array_unique(array_filter(array_map(static function (string $value): string {
+            $value = strtolower(trim($value));
+            $value = ltrim($value, '.');
+
+            return $value;
+        }, $entries))));
+    }
+
+    public static function monitorDnsMode(): string
+    {
+        $mode = self::stringValue('monitor_dns_mode', (string) config('engine.monitor_dns_mode', 'system'));
+        $mode = strtolower(trim($mode));
+
+        if (! in_array($mode, ['system', 'custom'], true)) {
+            return 'system';
+        }
+
+        return $mode;
+    }
+
+    public static function monitorDnsServerIp(): ?string
+    {
+        $value = self::stringValue('monitor_dns_server_ip', (string) config('engine.monitor_dns_server_ip', ''));
+        $value = trim($value);
+
+        return $value === '' ? null : $value;
+    }
+
+    public static function monitorDnsServerPort(): int
+    {
+        $value = self::stringValue('monitor_dns_server_port', '');
+        if ($value === '') {
+            return (int) config('engine.monitor_dns_server_port', 53);
+        }
+
+        $port = (int) $value;
+
+        if ($port < 1 || $port > 65535) {
+            return (int) config('engine.monitor_dns_server_port', 53);
+        }
+
+        return $port;
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */
