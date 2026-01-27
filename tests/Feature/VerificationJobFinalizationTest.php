@@ -178,4 +178,32 @@ class VerificationJobFinalizationTest extends TestCase
         $this->assertStringContainsString('cached@example.com', $content);
         $this->assertStringContainsString('chunk@example.com', $content);
     }
+
+    public function test_finalization_runs_with_only_cached_outputs(): void
+    {
+        Storage::fake('s3');
+
+        $storage = app(JobStorage::class);
+        $job = $this->makeJob();
+
+        $job->update([
+            'cached_valid_key' => $storage->cachedResultKey($job, 'valid'),
+            'cached_invalid_key' => $storage->cachedResultKey($job, 'invalid'),
+            'cached_risky_key' => $storage->cachedResultKey($job, 'risky'),
+        ]);
+
+        Storage::disk('s3')->put($job->cached_valid_key, "email,reason\nvalid@example.com,cache_hit\n");
+        Storage::disk('s3')->put($job->cached_invalid_key, "email,reason\ninvalid@example.com,cache_hit\n");
+        Storage::disk('s3')->put($job->cached_risky_key, "email,reason\nrisky@example.com,cache_miss\n");
+
+        FinalizeVerificationJob::dispatchSync($job->id);
+
+        $job->refresh();
+
+        $this->assertSame(VerificationJobStatus::Completed, $job->status);
+        $this->assertSame(1, $job->valid_count);
+        $this->assertSame(1, $job->invalid_count);
+        $this->assertSame(1, $job->risky_count);
+        $this->assertNotNull($job->valid_key);
+    }
 }

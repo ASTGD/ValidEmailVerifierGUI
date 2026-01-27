@@ -7,6 +7,7 @@ use App\Contracts\EngineStorageUrlSigner;
 use App\Models\VerificationJob;
 use App\Policies\VerificationJobPolicy;
 use App\Services\EmailVerificationCache\DatabaseEmailVerificationCacheStore;
+use App\Services\EmailVerificationCache\DynamoDbEmailVerificationCacheStore;
 use App\Services\EmailVerificationCache\NullCacheStore;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -30,7 +31,7 @@ class AppServiceProvider extends ServiceProvider
 
             $storeClass = match ($driver) {
                 'database' => DatabaseEmailVerificationCacheStore::class,
-                'dynamodb' => NullCacheStore::class,
+                'dynamodb' => DynamoDbEmailVerificationCacheStore::class,
                 'null' => NullCacheStore::class,
                 null => config('verifier.cache_store', NullCacheStore::class),
                 default => (string) $driver,
