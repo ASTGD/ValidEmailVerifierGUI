@@ -32,7 +32,7 @@ class VerificationOrdersRelationManager extends RelationManager
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('id')
-                    ->label('ID')
+                    ->label('Order ID')
                     ->sortable()
                     ->color('warning')
                     ->weight('bold')
@@ -40,6 +40,7 @@ class VerificationOrdersRelationManager extends RelationManager
                 TextColumn::make('order_number')
                     ->label('Order Number')
                     ->searchable()
+                    ->sortable()
                     ->weight('bold')
                     ->copyable(),
                 TextColumn::make('created_at')
@@ -58,8 +59,7 @@ class VerificationOrdersRelationManager extends RelationManager
                         $currency = strtoupper((string) ($record->currency ?: 'usd'));
                         $amount = $state !== null ? ((int) $state) / 100 : 0;
                         return sprintf('%s %.2f', $currency, $amount);
-                    })
-                    ->sortable(),
+                    }),
                 TextColumn::make('payment_status')
                     ->label('Payment Status')
                     ->badge()

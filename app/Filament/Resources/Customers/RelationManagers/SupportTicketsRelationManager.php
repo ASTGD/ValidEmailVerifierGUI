@@ -32,7 +32,7 @@ class SupportTicketsRelationManager extends RelationManager
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('ticket_number')
-                    ->label('ID')
+                    ->label('Ticket ID')
                     ->searchable()
                     ->sortable()
                     ->fontFamily('mono')

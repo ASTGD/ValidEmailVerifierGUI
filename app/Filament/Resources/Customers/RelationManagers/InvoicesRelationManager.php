@@ -30,22 +30,25 @@ class InvoicesRelationManager extends RelationManager
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('order_number')
-                    ->label('Invoice #')
+                    ->label('Invoice Number')
+                    ->sortable()
                     ->searchable()
                     ->weight('bold')
                     ->color('warning')
                     ->url(fn(VerificationOrder $record): string => VerificationOrderResource::getUrl('view', ['record' => $record])),
                 TextColumn::make('created_at')
                     ->label('Invoice Date')
-                    ->date()
-                    ->sortable(),
+                    ->sortable()
+                    ->dateTime(),
                 TextColumn::make('created_at')
                     ->label('Due Date')
-                    ->date()
+                    ->dateTime()
+                    ->sortable()
                     ->color('gray'), // Placeholder as we don't have due_date in model
                 TextColumn::make('refunded_at')
                     ->label('Date Paid')
-                    ->date()
+                    ->dateTime()
+                    ->sortable()
                     ->placeholder('-'),
                 TextColumn::make('amount_cents')
                     ->label('Total')
@@ -53,8 +56,7 @@ class InvoicesRelationManager extends RelationManager
                         $currency = strtoupper((string) ($record->currency ?: 'usd'));
                         $amount = $state !== null ? ((int) $state) / 100 : 0;
                         return sprintf('%s %.2f', $currency, $amount);
-                    })
-                    ->sortable(),
+                    }),
                 TextColumn::make('payment_method')
                     ->label('Payment Method')
                     ->state(fn(VerificationOrder $record): string => $record->paymentMethodLabel()),

@@ -34,7 +34,7 @@ class CustomersTable
                     ->sortable(),
                 TextColumn::make('verification_jobs_count')
                     ->label('Services')
-                    ->counts('verificationJobs')
+                    ->state(fn(User $record) => $record->verificationOrders()->count())
                     ->sortable(),
                 TextColumn::make('created_at')
                     ->label('Created')
@@ -43,6 +43,7 @@ class CustomersTable
                 TextColumn::make('status')
                     ->label('Status')
                     ->badge()
+                    ->sortable()
                     ->color(fn(string $state): string => match ($state) {
                         'active' => 'success',
                         'inactive' => 'gray',
