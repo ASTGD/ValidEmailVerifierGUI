@@ -11,6 +11,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 
 class EngineSettingForm
@@ -82,6 +83,14 @@ class EngineSettingForm
                             ->helperText('Status assigned to emails not found in cache during test mode.'),
                     ])
                     ->columns(2),
+                Section::make('Catche Server Health Check')
+                    ->schema([
+                        View::make('filament.resources.engine-settings.partials.cache-health-check')
+                            ->viewData(fn ($livewire): array => method_exists($livewire, 'cacheHealthCheckViewData')
+                                ? $livewire->cacheHealthCheckViewData()
+                                : []),
+                    ])
+                    ->visible(fn ($livewire): bool => method_exists($livewire, 'cacheHealthCheckViewData')),
                 Section::make('Standard Policy')
                     ->schema(self::policyFields('standard'))
                     ->columns(2),
