@@ -11,6 +11,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 
 class EngineSettingForm
@@ -65,6 +66,31 @@ class EngineSettingForm
                             ->visible(fn (Get $get): bool => $get('catch_all_policy') === 'promote_if_score_gte'),
                     ])
                     ->columns(2),
+                Section::make('Cache Test Mode')
+                    ->description('For testing only. Uses cache hits and assigns a status to cache misses without running verification.')
+                    ->schema([
+                        Toggle::make('cache_only_mode_enabled')
+                            ->label('Enable cache-only mode')
+                            ->helperText('When enabled, uploads skip worker verification and finalize using cache results.'),
+                        Select::make('cache_only_miss_status')
+                            ->label('Cache miss status')
+                            ->options([
+                                'valid' => 'Valid',
+                                'invalid' => 'Invalid',
+                                'risky' => 'Risky',
+                            ])
+                            ->default('risky')
+                            ->helperText('Status assigned to emails not found in cache during test mode.'),
+                    ])
+                    ->columns(2),
+                Section::make('Catche Server Health Check')
+                    ->schema([
+                        View::make('filament.resources.engine-settings.partials.cache-health-check')
+                            ->viewData(fn ($livewire): array => method_exists($livewire, 'cacheHealthCheckViewData')
+                                ? $livewire->cacheHealthCheckViewData()
+                                : []),
+                    ])
+                    ->visible(fn ($livewire): bool => method_exists($livewire, 'cacheHealthCheckViewData')),
                 Section::make('Standard Policy')
                     ->schema(self::policyFields('standard'))
                     ->columns(2),

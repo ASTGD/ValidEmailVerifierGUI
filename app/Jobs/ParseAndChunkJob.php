@@ -8,6 +8,7 @@ use App\Models\VerificationJob;
 use App\Models\VerificationJobChunk;
 use App\Services\EmailDedupeStore;
 use App\Services\JobStorage;
+use App\Support\EngineSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -47,6 +48,8 @@ class ParseAndChunkJob implements ShouldQueue
     private ?VerificationJob $verificationJob = null;
     private ?EmailDedupeStore $deduper = null;
     private array $batch = [];
+    private bool $cacheOnlyMode = false;
+    private string $cacheOnlyMissStatus = 'risky';
 
     private $chunkStream = null;
     private int $chunkNo = 1;
@@ -112,6 +115,11 @@ class ParseAndChunkJob implements ShouldQueue
                 'chunks_created' => $this->chunksCreated,
                 'cached_counts' => $this->cachedCounts,
             ]);
+
+            if ($this->cacheOnlyMode && $this->chunksCreated === 0) {
+                $this->verificationJob->addLog('finalize_queued', 'Finalization queued for cache-only run.');
+                FinalizeVerificationJob::dispatch($this->verificationJob->id);
+            }
         } catch (Throwable $exception) {
             $this->failJob('Failed to prepare verification job.', [
                 'error' => $exception->getMessage(),
@@ -130,6 +138,8 @@ class ParseAndChunkJob implements ShouldQueue
         $this->cacheBatchSize = max(1, (int) $this->engineConfig('cache_batch_size', 100));
         $this->dedupeMemoryLimit = max(0, (int) $this->engineConfig('dedupe_in_memory_limit', 100000));
         $this->xlsxRowBatchSize = max(100, (int) $this->engineConfig('xlsx_row_batch_size', 1000));
+        $this->cacheOnlyMode = EngineSettings::cacheOnlyEnabled();
+        $this->cacheOnlyMissStatus = EngineSettings::cacheOnlyMissStatus();
     }
 
     private function engineConfig(string $key, mixed $fallback = null): mixed
@@ -307,7 +317,11 @@ class ParseAndChunkJob implements ShouldQueue
                 continue;
             }
 
-            $this->writeToChunk($email, $storage, $disk);
+            if ($this->cacheOnlyMode) {
+                $this->handleCacheMiss($email, $storage, $disk);
+            } else {
+                $this->writeToChunk($email, $storage, $disk);
+            }
         }
 
         $this->batch = [];
@@ -376,6 +390,18 @@ class ParseAndChunkJob implements ShouldQueue
         $reason = trim((string) ($hit['reason_code'] ?? ''));
         $fallbackLine = $reason !== '' ? $email.','.$reason : $email.',';
         $line = (string) ($hit['row'] ?? $fallbackLine);
+
+        $this->writeCached($status, $line, $storage, $disk);
+        $this->cachedCounts[$status]++;
+    }
+
+    private function handleCacheMiss(string $email, JobStorage $storage, string $disk): void
+    {
+        $status = in_array($this->cacheOnlyMissStatus, ['valid', 'invalid', 'risky'], true)
+            ? $this->cacheOnlyMissStatus
+            : 'risky';
+
+        $line = $email.',cache_miss';
 
         $this->writeCached($status, $line, $storage, $disk);
         $this->cachedCounts[$status]++;

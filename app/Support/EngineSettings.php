@@ -68,6 +68,19 @@ class EngineSettings
         return $threshold >= 0 ? $threshold : null;
     }
 
+    public static function cacheOnlyEnabled(): bool
+    {
+        return self::boolValue('cache_only_mode_enabled', (bool) config('engine.cache_only_mode_enabled', false));
+    }
+
+    public static function cacheOnlyMissStatus(): string
+    {
+        $status = self::stringValue('cache_only_miss_status', (string) config('engine.cache_only_miss_status', 'risky'));
+        $status = strtolower(trim($status));
+
+        return in_array($status, ['valid', 'invalid', 'risky'], true) ? $status : 'risky';
+    }
+
     public static function tempfailRetryEnabled(): bool
     {
         return self::boolValue('tempfail_retry_enabled', (bool) config('engine.tempfail_retry_enabled', false));

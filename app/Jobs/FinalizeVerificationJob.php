@@ -37,7 +37,9 @@ class FinalizeVerificationJob implements ShouldQueue
             return;
         }
 
-        if ($job->chunks->isEmpty()) {
+        $hasCached = $job->cached_valid_key || $job->cached_invalid_key || $job->cached_risky_key;
+
+        if ($job->chunks->isEmpty() && ! $hasCached) {
             return;
         }
 
@@ -51,13 +53,13 @@ class FinalizeVerificationJob implements ShouldQueue
             return;
         }
 
-        if ($job->chunks->contains(fn ($chunk) => $chunk->status === 'failed')) {
+        if ($job->chunks->isNotEmpty() && $job->chunks->contains(fn ($chunk) => $chunk->status === 'failed')) {
             $this->markJobFailed($job, 'One or more chunks failed.');
 
             return;
         }
 
-        if ($job->chunks->contains(fn ($chunk) => $chunk->status !== 'completed')) {
+        if ($job->chunks->isNotEmpty() && $job->chunks->contains(fn ($chunk) => $chunk->status !== 'completed')) {
             return;
         }
 
