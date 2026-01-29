@@ -106,6 +106,11 @@ class EngineSettingForm
                             ->grouped()
                             ->inline()
                             ->default('on_demand')
+                            ->afterStateHydrated(function (ToggleButtons $component, $state): void {
+                                if (blank($state)) {
+                                    $component->state('on_demand');
+                                }
+                            })
                             ->live()
                             ->columnSpanFull()
                             ->helperText('Switch read profile between on-demand and provisioned behavior.'),
