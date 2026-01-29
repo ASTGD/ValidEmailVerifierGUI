@@ -6,6 +6,7 @@ use App\Contracts\EmailVerificationCacheStore;
 use App\Support\EmailHashing;
 use App\Support\EngineSettings;
 use Aws\DynamoDb\DynamoDbClient;
+use Aws\Exception\AwsException;
 use Illuminate\Support\Carbon;
 
 class DynamoDbEmailVerificationCacheStore implements EmailVerificationCacheStore
@@ -15,6 +16,7 @@ class DynamoDbEmailVerificationCacheStore implements EmailVerificationCacheStore
     private string $keyAttribute;
     private string $resultAttribute;
     private ?string $datetimeAttribute;
+    private float $lastBatchAt = 0.0;
 
     public function __construct()
     {
@@ -51,6 +53,10 @@ class DynamoDbEmailVerificationCacheStore implements EmailVerificationCacheStore
             return [];
         }
 
+        $mode = EngineSettings::cacheCapacityMode();
+        $batchSize = EngineSettings::cacheBatchSize();
+        $consistentRead = EngineSettings::cacheConsistentRead();
+
         $cutoff = null;
         $freshnessDays = (int) config('engine.cache_freshness_days', config('verifier.cache_freshness_days', 30));
 
@@ -63,58 +69,48 @@ class DynamoDbEmailVerificationCacheStore implements EmailVerificationCacheStore
         }
         $results = [];
 
-        foreach (array_chunk($normalized, 100) as $batch) {
+        foreach (array_chunk($normalized, $batchSize) as $batch) {
+            $this->throttleBeforeBatch($mode);
+
             $request = [
                 $this->table => [
                     'Keys' => array_map(fn (string $email): array => [
                         $this->keyAttribute => ['S' => $email],
                     ], $batch),
+                    'ConsistentRead' => $consistentRead,
                 ],
             ];
 
-            $unprocessed = $request;
+            $response = $this->batchGetWithRetries($request, $mode);
+            $items = $response['Responses'][$this->table] ?? [];
 
-            for ($attempt = 0; $attempt < 3 && $unprocessed !== []; $attempt++) {
-                $response = $this->client->batchGetItem([
-                    'RequestItems' => $unprocessed,
-                ]);
-
-                $items = $response['Responses'][$this->table] ?? [];
-
-                foreach ($items as $item) {
-                    $email = $item[$this->keyAttribute]['S'] ?? null;
-                    if (! $email) {
-                        continue;
-                    }
-
-                    $normalizedEmail = EmailHashing::normalizeEmail($email);
-                    if ($normalizedEmail === '') {
-                        continue;
-                    }
-
-                    $status = $this->normalizeStatus($item[$this->resultAttribute]['S'] ?? '');
-                    if ($status === null) {
-                        continue;
-                    }
-
-                    $observedAt = $this->parseObservedAt($item);
-                    if ($cutoff && $observedAt && $observedAt->lt($cutoff)) {
-                        continue;
-                    }
-
-                    $results[$normalizedEmail] = [
-                        'outcome' => $status,
-                        'status' => $status,
-                        'reason_code' => 'cache_hit',
-                        'observed_at' => $observedAt?->toISOString(),
-                    ];
+            foreach ($items as $item) {
+                $email = $item[$this->keyAttribute]['S'] ?? null;
+                if (! $email) {
+                    continue;
                 }
 
-                $unprocessed = $response['UnprocessedKeys'] ?? [];
-
-                if ($unprocessed !== []) {
-                    usleep(200000);
+                $normalizedEmail = EmailHashing::normalizeEmail($email);
+                if ($normalizedEmail === '') {
+                    continue;
                 }
+
+                $status = $this->normalizeStatus($item[$this->resultAttribute]['S'] ?? '');
+                if ($status === null) {
+                    continue;
+                }
+
+                $observedAt = $this->parseObservedAt($item);
+                if ($cutoff && $observedAt && $observedAt->lt($cutoff)) {
+                    continue;
+                }
+
+                $results[$normalizedEmail] = [
+                    'outcome' => $status,
+                    'status' => $status,
+                    'reason_code' => 'cache_hit',
+                    'observed_at' => $observedAt?->toISOString(),
+                ];
             }
         }
 
@@ -164,5 +160,128 @@ class DynamoDbEmailVerificationCacheStore implements EmailVerificationCacheStore
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    private function throttleBeforeBatch(string $mode): void
+    {
+        $maxBatchesPerSecond = $mode === 'provisioned'
+            ? EngineSettings::cacheProvisionedMaxBatchesPerSecond()
+            : EngineSettings::cacheOnDemandMaxBatchesPerSecond();
+
+        if ($maxBatchesPerSecond) {
+            $minInterval = 1 / $maxBatchesPerSecond;
+            if ($this->lastBatchAt > 0) {
+                $elapsed = microtime(true) - $this->lastBatchAt;
+                if ($elapsed < $minInterval) {
+                    usleep((int) (($minInterval - $elapsed) * 1_000_000));
+                }
+            }
+        }
+
+        $sleepMs = $mode === 'provisioned'
+            ? EngineSettings::cacheProvisionedSleepMsBetweenBatches()
+            : EngineSettings::cacheOnDemandSleepMsBetweenBatches();
+
+        if ($sleepMs > 0) {
+            usleep($sleepMs * 1000);
+        }
+
+        $this->lastBatchAt = microtime(true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $request
+     * @return array<string, mixed>
+     */
+    private function batchGetWithRetries(array $request, string $mode): array
+    {
+        $maxRetries = $mode === 'provisioned'
+            ? EngineSettings::cacheProvisionedMaxRetries()
+            : 1;
+
+        $attempt = 0;
+        $pending = $request;
+        $responses = [];
+
+        while ($pending !== [] && $attempt <= $maxRetries) {
+            $attempt++;
+
+            try {
+                $response = $this->client->batchGetItem(['RequestItems' => $pending]);
+            } catch (AwsException $exception) {
+                if ($this->isThrottleException($exception) && $attempt <= $maxRetries) {
+                    $this->sleepForBackoff($attempt, $mode);
+                    continue;
+                }
+
+                throw $exception;
+            }
+
+            $responses[] = $response;
+            $pending = $response['UnprocessedKeys'] ?? [];
+
+            if ($pending !== [] && $attempt <= $maxRetries) {
+                $this->sleepForBackoff($attempt, $mode);
+            }
+        }
+
+        return $this->mergeBatchResponses($responses);
+    }
+
+    private function isThrottleException(AwsException $exception): bool
+    {
+        $code = $exception->getAwsErrorCode();
+
+        return in_array($code, [
+            'ProvisionedThroughputExceededException',
+            'ThrottlingException',
+            'Throttling',
+            'RequestLimitExceeded',
+        ], true);
+    }
+
+    private function sleepForBackoff(int $attempt, string $mode): void
+    {
+        if ($mode !== 'provisioned') {
+            return;
+        }
+
+        $base = EngineSettings::cacheProvisionedBackoffBaseMs();
+        $max = EngineSettings::cacheProvisionedBackoffMaxMs();
+
+        if ($base <= 0 || $max <= 0) {
+            return;
+        }
+
+        $delay = min($base * (2 ** max(0, $attempt - 1)), $max);
+
+        if (EngineSettings::cacheProvisionedJitterEnabled()) {
+            $min = (int) max(1, $delay * 0.5);
+            $delay = random_int($min, (int) $delay);
+        }
+
+        usleep((int) $delay * 1000);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $responses
+     * @return array<string, mixed>
+     */
+    private function mergeBatchResponses(array $responses): array
+    {
+        $merged = [
+            'Responses' => [
+                $this->table => [],
+            ],
+        ];
+
+        foreach ($responses as $response) {
+            $items = $response['Responses'][$this->table] ?? [];
+            if ($items !== []) {
+                $merged['Responses'][$this->table] = array_merge($merged['Responses'][$this->table], $items);
+            }
+        }
+
+        return $merged;
     }
 }

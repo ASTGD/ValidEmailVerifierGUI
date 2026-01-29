@@ -91,6 +91,88 @@ class EngineSettingForm
                                 : []),
                     ])
                     ->visible(fn ($livewire): bool => method_exists($livewire, 'cacheHealthCheckViewData')),
+                Section::make('Cache Connection (read-only)')
+                    ->schema([
+                        View::make('filament.resources.engine-settings.partials.cache-connection'),
+                    ]),
+                Section::make('Cache Read Controls')
+                    ->description('Tune DynamoDB read behavior for On-Demand or Provisioned capacity.')
+                    ->schema([
+                        Select::make('cache_capacity_mode')
+                            ->label('Capacity mode')
+                            ->options([
+                                'on_demand' => 'On-Demand',
+                                'provisioned' => 'Provisioned',
+                            ])
+                            ->default('on_demand')
+                            ->live()
+                            ->helperText('Select which read profile the app should use.'),
+                        TextInput::make('cache_batch_size')
+                            ->label('Batch size')
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(100)
+                            ->required()
+                            ->helperText('Number of emails per DynamoDB batch call (max 100).'),
+                        Toggle::make('cache_consistent_read')
+                            ->label('Consistent read')
+                            ->helperText('Strongly consistent reads cost more and are slower.'),
+                        TextInput::make('cache_ondemand_max_batches_per_second')
+                            ->label('On-demand max batches per second')
+                            ->numeric()
+                            ->minValue(1)
+                            ->visible(fn (Get $get): bool => $get('cache_capacity_mode') === 'on_demand')
+                            ->helperText('Soft limit for DynamoDB batch calls per second. Leave blank for max throughput.'),
+                        TextInput::make('cache_ondemand_sleep_ms_between_batches')
+                            ->label('On-demand sleep between batches (ms)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->visible(fn (Get $get): bool => $get('cache_capacity_mode') === 'on_demand')
+                            ->helperText('Optional delay to smooth spikes even in On-Demand mode.'),
+                        TextInput::make('cache_provisioned_max_batches_per_second')
+                            ->label('Provisioned max batches per second')
+                            ->numeric()
+                            ->minValue(1)
+                            ->visible(fn (Get $get): bool => $get('cache_capacity_mode') === 'provisioned')
+                            ->helperText('Hard cap on DynamoDB batch calls per second.'),
+                        TextInput::make('cache_provisioned_sleep_ms_between_batches')
+                            ->label('Provisioned sleep between batches (ms)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->visible(fn (Get $get): bool => $get('cache_capacity_mode') === 'provisioned')
+                            ->helperText('Delay between batch calls to stay under RCU limits.'),
+                        TextInput::make('cache_provisioned_max_retries')
+                            ->label('Provisioned max retries')
+                            ->numeric()
+                            ->minValue(0)
+                            ->visible(fn (Get $get): bool => $get('cache_capacity_mode') === 'provisioned')
+                            ->helperText('How many times to retry when DynamoDB throttles.'),
+                        TextInput::make('cache_provisioned_backoff_base_ms')
+                            ->label('Provisioned backoff base (ms)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->visible(fn (Get $get): bool => $get('cache_capacity_mode') === 'provisioned')
+                            ->helperText('Initial delay before retry (milliseconds).'),
+                        TextInput::make('cache_provisioned_backoff_max_ms')
+                            ->label('Provisioned backoff max (ms)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->visible(fn (Get $get): bool => $get('cache_capacity_mode') === 'provisioned')
+                            ->helperText('Maximum delay between retries (milliseconds).'),
+                        Toggle::make('cache_provisioned_jitter_enabled')
+                            ->label('Provisioned jitter')
+                            ->visible(fn (Get $get): bool => $get('cache_capacity_mode') === 'provisioned')
+                            ->helperText('Randomizes backoff delays to reduce synchronized spikes.'),
+                        Select::make('cache_failure_mode')
+                            ->label('Failure handling')
+                            ->options([
+                                'fail_job' => 'Fail job',
+                                'treat_miss' => 'Treat as cache miss',
+                                'skip_cache' => 'Skip cache and continue',
+                            ])
+                            ->helperText('Defines behavior when DynamoDB is throttled or unavailable.'),
+                    ])
+                    ->columns(2),
                 Section::make('Standard Policy')
                     ->schema(self::policyFields('standard'))
                     ->columns(2),

@@ -50,6 +50,8 @@ class ParseAndChunkJob implements ShouldQueue
     private array $batch = [];
     private bool $cacheOnlyMode = false;
     private string $cacheOnlyMissStatus = 'risky';
+    private string $cacheFailureMode = 'fail_job';
+    private bool $skipCache = false;
 
     private $chunkStream = null;
     private int $chunkNo = 1;
@@ -135,11 +137,12 @@ class ParseAndChunkJob implements ShouldQueue
     {
         $this->chunkSize = max(1, (int) $this->engineConfig('chunk_size_default', 5000));
         $this->maxEmails = max(0, (int) $this->engineConfig('max_emails_per_upload', 0));
-        $this->cacheBatchSize = max(1, (int) $this->engineConfig('cache_batch_size', 100));
+        $this->cacheBatchSize = EngineSettings::cacheBatchSize();
         $this->dedupeMemoryLimit = max(0, (int) $this->engineConfig('dedupe_in_memory_limit', 100000));
         $this->xlsxRowBatchSize = max(100, (int) $this->engineConfig('xlsx_row_batch_size', 1000));
         $this->cacheOnlyMode = EngineSettings::cacheOnlyEnabled();
         $this->cacheOnlyMissStatus = EngineSettings::cacheOnlyMissStatus();
+        $this->cacheFailureMode = EngineSettings::cacheFailureMode();
     }
 
     private function engineConfig(string $key, mixed $fallback = null): mixed
@@ -302,7 +305,31 @@ class ParseAndChunkJob implements ShouldQueue
             'batch_size' => $batchSize,
         ]);
 
-        $hits = $cacheStore->lookupMany($this->batch);
+        if ($this->skipCache) {
+            $hits = [];
+        } else {
+            try {
+                $hits = $cacheStore->lookupMany($this->batch);
+            } catch (Throwable $exception) {
+                $this->verificationJob?->addLog('cache_lookup_failed', 'Cache lookup failed.', [
+                    'batch_size' => $batchSize,
+                    'error' => $exception->getMessage(),
+                ]);
+
+                if ($this->cacheFailureMode === 'treat_miss') {
+                    $hits = [];
+                } elseif ($this->cacheFailureMode === 'skip_cache') {
+                    $this->skipCache = true;
+                    $this->cacheOnlyMode = false;
+                    $hits = [];
+                    $this->verificationJob?->addLog('cache_lookup_skipped', 'Cache disabled after failure; continuing without cache.', [
+                        'batch_size' => $batchSize,
+                    ]);
+                } else {
+                    throw $exception;
+                }
+            }
+        }
         $hitCount = count($hits);
 
         $this->verificationJob?->addLog('cache_hits_found', 'Cache hits found.', [

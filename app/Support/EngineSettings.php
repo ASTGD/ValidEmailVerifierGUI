@@ -81,6 +81,76 @@ class EngineSettings
         return in_array($status, ['valid', 'invalid', 'risky'], true) ? $status : 'risky';
     }
 
+    public static function cacheCapacityMode(): string
+    {
+        $mode = self::stringValue('cache_capacity_mode', (string) config('engine.cache_capacity_mode', 'on_demand'));
+        $mode = strtolower(trim($mode));
+
+        return in_array($mode, ['on_demand', 'provisioned'], true) ? $mode : 'on_demand';
+    }
+
+    public static function cacheBatchSize(): int
+    {
+        $value = self::intValue('cache_batch_size', (int) config('engine.cache_batch_size', 100));
+
+        return max(1, min(100, $value));
+    }
+
+    public static function cacheConsistentRead(): bool
+    {
+        return self::boolValue('cache_consistent_read', (bool) config('engine.cache_consistent_read', false));
+    }
+
+    public static function cacheOnDemandMaxBatchesPerSecond(): ?int
+    {
+        $value = self::intValue('cache_ondemand_max_batches_per_second', (int) config('engine.cache_ondemand_max_batches_per_second', 0));
+
+        return $value > 0 ? $value : null;
+    }
+
+    public static function cacheOnDemandSleepMsBetweenBatches(): int
+    {
+        return max(0, self::intValue('cache_ondemand_sleep_ms_between_batches', (int) config('engine.cache_ondemand_sleep_ms_between_batches', 0)));
+    }
+
+    public static function cacheProvisionedMaxBatchesPerSecond(): int
+    {
+        return max(1, self::intValue('cache_provisioned_max_batches_per_second', (int) config('engine.cache_provisioned_max_batches_per_second', 5)));
+    }
+
+    public static function cacheProvisionedSleepMsBetweenBatches(): int
+    {
+        return max(0, self::intValue('cache_provisioned_sleep_ms_between_batches', (int) config('engine.cache_provisioned_sleep_ms_between_batches', 100)));
+    }
+
+    public static function cacheProvisionedMaxRetries(): int
+    {
+        return max(0, self::intValue('cache_provisioned_max_retries', (int) config('engine.cache_provisioned_max_retries', 5)));
+    }
+
+    public static function cacheProvisionedBackoffBaseMs(): int
+    {
+        return max(0, self::intValue('cache_provisioned_backoff_base_ms', (int) config('engine.cache_provisioned_backoff_base_ms', 200)));
+    }
+
+    public static function cacheProvisionedBackoffMaxMs(): int
+    {
+        return max(0, self::intValue('cache_provisioned_backoff_max_ms', (int) config('engine.cache_provisioned_backoff_max_ms', 2000)));
+    }
+
+    public static function cacheProvisionedJitterEnabled(): bool
+    {
+        return self::boolValue('cache_provisioned_jitter_enabled', (bool) config('engine.cache_provisioned_jitter_enabled', true));
+    }
+
+    public static function cacheFailureMode(): string
+    {
+        $mode = self::stringValue('cache_failure_mode', (string) config('engine.cache_failure_mode', 'fail_job'));
+        $mode = strtolower(trim($mode));
+
+        return in_array($mode, ['fail_job', 'treat_miss', 'skip_cache'], true) ? $mode : 'fail_job';
+    }
+
     public static function tempfailRetryEnabled(): bool
     {
         return self::boolValue('tempfail_retry_enabled', (bool) config('engine.tempfail_retry_enabled', false));
@@ -278,6 +348,21 @@ class EngineSettings
         $value = EngineSetting::query()->value($field);
 
         return is_null($value) ? $default : (string) $value;
+    }
+
+    private static function intValue(string $field, int $default): int
+    {
+        if (! Schema::hasTable('engine_settings') || ! Schema::hasColumn('engine_settings', $field)) {
+            return $default;
+        }
+
+        $value = EngineSetting::query()->value($field);
+
+        if (is_null($value)) {
+            return $default;
+        }
+
+        return (int) $value;
     }
 
     /**
