@@ -28,6 +28,19 @@ return [
     'cache_store_driver' => env('ENGINE_CACHE_STORE_DRIVER'),
     'cache_only_mode_enabled' => (bool) env('ENGINE_CACHE_ONLY_MODE_ENABLED', false),
     'cache_only_miss_status' => env('ENGINE_CACHE_ONLY_MISS_STATUS', 'risky'),
+    'cache_capacity_mode' => env('ENGINE_CACHE_CAPACITY_MODE', 'on_demand'),
+    'cache_consistent_read' => (bool) env('ENGINE_CACHE_CONSISTENT_READ', false),
+    'cache_ondemand_max_batches_per_second' => env('ENGINE_CACHE_ONDEMAND_MAX_BATCHES_PER_SECOND') !== null
+        ? (int) env('ENGINE_CACHE_ONDEMAND_MAX_BATCHES_PER_SECOND')
+        : null,
+    'cache_ondemand_sleep_ms_between_batches' => (int) env('ENGINE_CACHE_ONDEMAND_SLEEP_MS_BETWEEN_BATCHES', 0),
+    'cache_provisioned_max_batches_per_second' => (int) env('ENGINE_CACHE_PROVISIONED_MAX_BATCHES_PER_SECOND', 5),
+    'cache_provisioned_sleep_ms_between_batches' => (int) env('ENGINE_CACHE_PROVISIONED_SLEEP_MS_BETWEEN_BATCHES', 100),
+    'cache_provisioned_max_retries' => (int) env('ENGINE_CACHE_PROVISIONED_MAX_RETRIES', 5),
+    'cache_provisioned_backoff_base_ms' => (int) env('ENGINE_CACHE_PROVISIONED_BACKOFF_BASE_MS', 200),
+    'cache_provisioned_backoff_max_ms' => (int) env('ENGINE_CACHE_PROVISIONED_BACKOFF_MAX_MS', 2000),
+    'cache_provisioned_jitter_enabled' => (bool) env('ENGINE_CACHE_PROVISIONED_JITTER_ENABLED', true),
+    'cache_failure_mode' => env('ENGINE_CACHE_FAILURE_MODE', 'fail_job'),
     'cache_dynamodb' => [
         'table' => env('ENGINE_CACHE_DYNAMODB_TABLE'),
         'key_attribute' => env('ENGINE_CACHE_DYNAMODB_KEY_ATTRIBUTE', 'email'),
