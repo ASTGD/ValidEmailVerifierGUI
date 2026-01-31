@@ -28,7 +28,7 @@ class CheckoutIntentService
         $emailCount = $this->analyzer->countEmails($file);
         $quote = $this->pricing->quoteForEmailCount($emailCount);
 
-        if (! $quote['plan']) {
+        if (!$quote['plan']) {
             throw ValidationException::withMessages([
                 'file' => __('Pricing is not configured yet.'),
             ]);
@@ -72,7 +72,7 @@ class CheckoutIntentService
             ]);
         }
 
-        if (! config('cashier.secret') || ! config('cashier.key')) {
+        if (!config('cashier.secret') || !config('cashier.key')) {
             throw ValidationException::withMessages([
                 'file' => __('Payment gateway is not configured yet.'),
             ]);
@@ -82,7 +82,7 @@ class CheckoutIntentService
             abort(403);
         }
 
-        if (! $intent->user_id) {
+        if (!$intent->user_id) {
             $intent->user_id = $user->id;
             $intent->save();
         }
@@ -99,17 +99,19 @@ class CheckoutIntentService
             'count' => number_format($intent->email_count),
         ]);
 
-        $lineItems = [[
-            'price_data' => [
-                'currency' => $intent->currency,
-                'product_data' => [
-                    'name' => $productName,
-                    'description' => $description,
+        $lineItems = [
+            [
+                'price_data' => [
+                    'currency' => $intent->currency,
+                    'product_data' => [
+                        'name' => $productName,
+                        'description' => $description,
+                    ],
+                    'unit_amount' => $intent->amount_cents,
                 ],
-                'unit_amount' => $intent->amount_cents,
-            ],
-            'quantity' => 1,
-        ]];
+                'quantity' => 1,
+            ]
+        ];
 
         $checkout = Checkout::customer($user)->create($lineItems, [
             'success_url' => route('portal.orders.index', ['checkout' => 'success']),
@@ -146,7 +148,7 @@ class CheckoutIntentService
         }
 
         return DB::transaction(function () use ($intent, $user) {
-            if (! $intent->user_id) {
+            if (!$intent->user_id) {
                 $intent->user_id = $user->id;
             }
 
@@ -172,6 +174,8 @@ class CheckoutIntentService
             $intent->status = CheckoutIntentStatus::Completed;
             $intent->paid_at = $intent->paid_at ?: now();
             $intent->save();
+
+            \App\Support\AdminAuditLogger::log('order_placed', $order);
 
             return $order;
         });

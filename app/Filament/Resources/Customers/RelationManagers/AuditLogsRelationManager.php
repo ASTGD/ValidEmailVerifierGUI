@@ -16,7 +16,23 @@ class AuditLogsRelationManager extends RelationManager
 
     public static function getBadge(\Illuminate\Database\Eloquent\Model $ownerRecord, string $pageClass): ?string
     {
-        return $ownerRecord->auditLogs()->count();
+        $user = $ownerRecord;
+        return \App\Models\AdminAuditLog::query()
+            ->where(function ($query) use ($user) {
+                $query->where('user_id', $user->id)
+                    ->orWhere(function ($q) use ($user) {
+                        $q->where('subject_type', \App\Models\User::class)
+                            ->where('subject_id', $user->id);
+                    })
+                    ->orWhere(function ($q) use ($user) {
+                        $q->where('subject_type', \App\Models\VerificationOrder::class)
+                            ->whereIn('subject_id', $user->verificationOrders()->pluck('id'));
+                    })
+                    ->orWhere(function ($q) use ($user) {
+                        $q->where('subject_type', \App\Models\SupportTicket::class)
+                            ->whereIn('subject_id', $user->supportTickets()->pluck('id'));
+                    });
+            })->count();
     }
 
     public function table(Table $table): Table
@@ -35,9 +51,15 @@ class AuditLogsRelationManager extends RelationManager
                         'login' => 'Customer Logged In',
                         'logout' => 'Customer Logged Out',
                         'order_placed' => 'New Order Placed',
+                        'order_created' => 'Order Created by Admin',
                         'ticket_opened' => 'New Support Ticket Opened',
+                        'ticket_reply_sent' => 'Support Ticket Reply Sent',
+                        'ticket_resolved' => 'Support Ticket Resolved',
+                        'ticket_closed' => 'Support Ticket Closed',
                         'order_activated' => 'Order Activated',
                         'order_cancelled' => 'Order Cancelled',
+                        'order_requeued' => 'Order Requeued',
+                        'order_reopened' => 'Order Reopened',
                         'order_marked_fraud' => 'Order Marked Fraud',
                         default => ucfirst(str_replace('_', ' ', $state)),
                     })
@@ -57,8 +79,28 @@ class AuditLogsRelationManager extends RelationManager
                     ->label('IP Address')
                     ->placeholder('-'),
             ])
-            ->filters([])
-            ->headerActions([])
+            ->modifyQueryUsing(function (\Illuminate\Database\Eloquent\Builder $query) {
+                $user = $this->getOwnerRecord();
+
+                // We want to show logs where:
+                // 1. The user performed the action (user_id = $user->id)
+                // 2. The action was performed ON the user (subject = User:$user->id)
+                // 3. The action was performed ON the user's order
+                // 4. The action was performed ON the user's ticket
+    
+                return $query->orWhere(function ($q) use ($user) {
+                    $q->where('subject_type', \App\Models\User::class)
+                        ->where('subject_id', $user->id);
+                })
+                    ->orWhere(function ($q) use ($user) {
+                        $q->where('subject_type', \App\Models\VerificationOrder::class)
+                            ->whereIn('subject_id', $user->verificationOrders()->pluck('id'));
+                    })
+                    ->orWhere(function ($q) use ($user) {
+                        $q->where('subject_type', \App\Models\SupportTicket::class)
+                            ->whereIn('subject_id', $user->supportTickets()->pluck('id'));
+                    });
+            })
             ->actions([
                 \Filament\Actions\Action::make('view_related')
                     ->label('View Record')
