@@ -107,3 +107,49 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Retry strategy improvements (partial unprocessed keys)
 - Cache write-back to DynamoDB (write settings in UI)
 
+
+---
+
+## Update log
+
+### 2026-02-01 — Settings tabs (feature/settings-tabs)
+- Reorganized Engine Settings form into Filament tabs: Verification, Cache (DynamoDB), Monitoring.
+- All existing cards/sections were grouped under these tabs.
+- File updated: `app/Filament/Resources/EngineSettings/Schemas/EngineSettingForm.php`.
+
+### 2026-02-01 — Fix Filament Tabs class
+- Tabs/Tab imports corrected to use Filament\Schemas\Components\Tabs.*
+- Fixes "Class Filament\\Forms\\Components\\Tabs not found" on settings page.
+
+### 2026-02-01 — Settings tabs layout width
+- Wrapped each settings tab content in a Grid (2 columns on lg) for full-width layout.
+- File updated: `app/Filament/Resources/EngineSettings/Schemas/EngineSettingForm.php`.
+
+### 2026-02-01 — Settings page full-width layout
+- Set Engine Settings edit page to use full-width layout via maxContentWidth.
+- File updated: `app/Filament/Resources/EngineSettings/Pages/EditEngineSetting.php`.
+
+### 2026-02-01 — Settings width 1280px + 3-column tabs
+- Settings page max width set to 1280px.
+- Tab grids updated to 3 columns on large screens.
+- Files updated: `app/Filament/Resources/EngineSettings/Pages/EditEngineSetting.php`, `app/Filament/Resources/EngineSettings/Schemas/EngineSettingForm.php`.
+
+### 2026-02-01 — Fix maxContentWidth type
+- Engine Settings maxContentWidth set to Filament Width::ScreenExtraLarge to satisfy type constraints.
+- File updated: `app/Filament/Resources/EngineSettings/Pages/EditEngineSetting.php`.
+
+### 2026-02-01 — Settings width fixed to 1280px
+- Engine Settings maxContentWidth set to explicit 1280px string with correct type.
+- File updated: `app/Filament/Resources/EngineSettings/Pages/EditEngineSetting.php`.
+
+### 2026-02-01 — Settings page switched to full width
+- Engine Settings maxContentWidth set to Width::Full to remove right-side empty space.
+- File updated: `app/Filament/Resources/EngineSettings/Pages/EditEngineSetting.php`.
+
+### 2026-02-01 — Tabs container full width
+- Added `w-full` class to the tabs container to ensure it spans the full content width.
+- File updated: `app/Filament/Resources/EngineSettings/Schemas/EngineSettingForm.php`.
+
+### 2026-02-01 — Tabs span full form width
+- Tabs component now `columnSpanFull()` to occupy full form grid width.
+- File updated: `app/Filament/Resources/EngineSettings/Schemas/EngineSettingForm.php`.

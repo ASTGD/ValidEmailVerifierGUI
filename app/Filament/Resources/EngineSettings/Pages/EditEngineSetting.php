@@ -7,6 +7,7 @@ use App\Filament\Resources\EngineSettings\Pages\Concerns\HandlesPolicySettings;
 use App\Services\EmailVerificationCache\CacheHealthCheckService;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Support\Enums\Width;
 use Illuminate\Support\Carbon;
 
 class EditEngineSetting extends EditRecord
@@ -14,6 +15,8 @@ class EditEngineSetting extends EditRecord
     use HandlesPolicySettings;
 
     protected static string $resource = EngineSettingResource::class;
+
+    protected Width | string | null $maxContentWidth = Width::Full;
 
     /**
      * @var array<string, mixed>|null
