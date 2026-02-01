@@ -151,6 +151,92 @@ class EngineSettings
         return in_array($mode, ['fail_job', 'treat_miss', 'skip_cache'], true) ? $mode : 'fail_job';
     }
 
+    public static function cacheWritebackEnabled(): bool
+    {
+        return self::boolValue('cache_writeback_enabled', (bool) config('engine.cache_writeback_enabled', false));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function cacheWritebackStatuses(): array
+    {
+        $default = config('engine.cache_writeback_statuses', ['valid', 'invalid']);
+
+        if (is_string($default)) {
+            $default = array_filter(array_map('trim', explode(',', $default)));
+        }
+
+        $value = self::arrayValue('cache_writeback_statuses', is_array($default) ? $default : []);
+        $normalized = array_values(array_unique(array_filter(array_map(static function ($status): string {
+            return strtolower(trim((string) $status));
+        }, $value))));
+
+        $allowed = ['valid', 'invalid'];
+
+        return array_values(array_intersect($normalized, $allowed));
+    }
+
+    public static function cacheWritebackBatchSize(): int
+    {
+        $value = self::intValue('cache_writeback_batch_size', (int) config('engine.cache_writeback_batch_size', 25));
+
+        return max(1, min(25, $value));
+    }
+
+    public static function cacheWritebackMaxWritesPerSecond(): ?int
+    {
+        $value = self::intValue('cache_writeback_max_writes_per_second', (int) config('engine.cache_writeback_max_writes_per_second', 0));
+
+        return $value > 0 ? $value : null;
+    }
+
+    public static function cacheWritebackRetryAttempts(): int
+    {
+        $value = self::intValue('cache_writeback_retry_attempts', (int) config('engine.cache_writeback_retry_attempts', 5));
+
+        return max(0, $value);
+    }
+
+    public static function cacheWritebackBackoffBaseMs(): int
+    {
+        return max(0, self::intValue('cache_writeback_backoff_base_ms', (int) config('engine.cache_writeback_backoff_base_ms', 200)));
+    }
+
+    public static function cacheWritebackBackoffMaxMs(): int
+    {
+        return max(0, self::intValue('cache_writeback_backoff_max_ms', (int) config('engine.cache_writeback_backoff_max_ms', 2000)));
+    }
+
+    public static function cacheWritebackFailureMode(): string
+    {
+        $mode = self::stringValue('cache_writeback_failure_mode', (string) config('engine.cache_writeback_failure_mode', 'fail_job'));
+        $mode = strtolower(trim($mode));
+
+        return in_array($mode, ['fail_job', 'skip_writes', 'continue'], true) ? $mode : 'fail_job';
+    }
+
+    public static function cacheWritebackTestEnabled(): bool
+    {
+        return self::boolValue('cache_writeback_test_mode_enabled', (bool) config('engine.cache_writeback_test_mode_enabled', false));
+    }
+
+    public static function cacheWritebackTestTable(): ?string
+    {
+        $value = self::stringValue('cache_writeback_test_table', (string) config('engine.cache_writeback_test_table', ''));
+        $value = trim($value);
+
+        return $value === '' ? null : $value;
+    }
+
+    public static function cacheWritebackTestResult(): string
+    {
+        $value = self::stringValue('cache_writeback_test_result', (string) config('engine.cache_writeback_test_result', 'Cache_miss'));
+        $value = trim($value);
+
+        return $value === '' ? 'Cache_miss' : $value;
+    }
+
     public static function tempfailRetryEnabled(): bool
     {
         return self::boolValue('tempfail_retry_enabled', (bool) config('engine.tempfail_retry_enabled', false));

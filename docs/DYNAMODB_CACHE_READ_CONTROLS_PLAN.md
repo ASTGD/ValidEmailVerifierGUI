@@ -9,6 +9,7 @@ This plan covers:
 - Tooltips/descriptions for admin clarity
 
 > Note: These controls do **not** change AWS capacity; they only adjust application read behavior.
+> Cache write-back is tracked separately (see Engine Contract notes) and uses its own settings.
 
 ---
 

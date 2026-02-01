@@ -16,7 +16,10 @@ class EditEngineSetting extends EditRecord
 
     protected static string $resource = EngineSettingResource::class;
 
-    protected Width | string | null $maxContentWidth = Width::Full;
+    public function getMaxContentWidth(): Width | string | null
+    {
+        return Width::Full;
+    }
 
     /**
      * @var array<string, mixed>|null

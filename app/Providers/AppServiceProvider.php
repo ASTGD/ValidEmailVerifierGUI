@@ -2,11 +2,13 @@
 
 namespace App\Providers;
 
+use App\Contracts\CacheWriteBackService;
 use App\Contracts\EmailVerificationCacheStore;
 use App\Contracts\EngineStorageUrlSigner;
 use App\Models\VerificationJob;
 use App\Policies\VerificationJobPolicy;
 use App\Services\EmailVerificationCache\DatabaseEmailVerificationCacheStore;
+use App\Services\EmailVerificationCache\DynamoDbCacheWriteBackService;
 use App\Services\EmailVerificationCache\DynamoDbEmailVerificationCacheStore;
 use App\Services\EmailVerificationCache\NullCacheStore;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -38,6 +40,10 @@ class AppServiceProvider extends ServiceProvider
             };
 
             return $app->make($storeClass);
+        });
+
+        $this->app->bind(CacheWriteBackService::class, function ($app) {
+            return $app->make(DynamoDbCacheWriteBackService::class);
         });
 
         $this->app->bind(EngineStorageUrlSigner::class, function ($app) {
