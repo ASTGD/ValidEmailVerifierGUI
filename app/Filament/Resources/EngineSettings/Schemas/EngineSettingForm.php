@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EngineSettings\Schemas;
 
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
@@ -274,6 +275,65 @@ class EngineSettingForm
                             'skip_cache' => 'Skip cache and continue',
                         ])
                         ->helperText('Choose behavior when DynamoDB is unavailable or throttled.'),
+                ])
+                ->columns(2),
+            Section::make('Cache Write-back')
+                ->description('Write verified cache-miss outcomes back to DynamoDB after finalization.')
+                ->schema([
+                    Toggle::make('cache_writeback_enabled')
+                        ->label('Enable cache write-back')
+                        ->helperText('When enabled, only verified cache-miss emails are written to DynamoDB.'),
+                    CheckboxList::make('cache_writeback_statuses')
+                        ->label('Write statuses')
+                        ->options([
+                            'valid' => 'Valid',
+                            'invalid' => 'Invalid',
+                        ])
+                        ->columns(2)
+                        ->default(['valid', 'invalid'])
+                        ->helperText('Only Valid and Invalid are written. Risky is skipped.'),
+                    TextInput::make('cache_writeback_batch_size')
+                        ->label('Batch size')
+                        ->numeric()
+                        ->minValue(1)
+                        ->maxValue(25)
+                        ->required()
+                        ->helperText('Number of items per DynamoDB batch write (max 25).'),
+                    TextInput::make('cache_writeback_max_writes_per_second')
+                        ->label('Max writes per second')
+                        ->numeric()
+                        ->minValue(1)
+                        ->helperText('Soft cap for batch write calls per second. Leave blank to allow maximum throughput.'),
+                    TextInput::make('cache_writeback_retry_attempts')
+                        ->label('Retry attempts')
+                        ->numeric()
+                        ->minValue(0)
+                        ->helperText('How many times to retry unprocessed write items.'),
+                    TextInput::make('cache_writeback_backoff_base_ms')
+                        ->label('Backoff base (ms)')
+                        ->numeric()
+                        ->minValue(0)
+                        ->helperText('Initial delay before retry (milliseconds). Doubles each retry.'),
+                    TextInput::make('cache_writeback_backoff_max_ms')
+                        ->label('Backoff max (ms)')
+                        ->numeric()
+                        ->minValue(0)
+                        ->helperText('Maximum delay between retries (milliseconds).'),
+                    Select::make('cache_writeback_failure_mode')
+                        ->label('Failure handling')
+                        ->options([
+                            'fail_job' => 'Fail job',
+                            'skip_writes' => 'Skip write-back',
+                            'continue' => 'Continue without failing',
+                        ])
+                        ->helperText('Choose behavior when write-back fails.'),
+                    Toggle::make('cache_writeback_test_mode_enabled')
+                        ->label('Enable cache write-back test mode')
+                        ->helperText('Writes cache-miss emails to the test table with result Cache_miss when cache-only mode is enabled.'),
+                    TextInput::make('cache_writeback_test_table')
+                        ->label('Cache write-back test table')
+                        ->helperText('DynamoDB table name for test writes. Leave blank to use the env default.')
+                        ->visible(fn (Get $get): bool => (bool) $get('cache_writeback_test_mode_enabled')),
                 ])
                 ->columns(2),
         ];

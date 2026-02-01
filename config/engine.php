@@ -18,6 +18,11 @@ $policyDefaults = [
         : null,
 ];
 
+$cacheWritebackStatuses = env('ENGINE_CACHE_WRITEBACK_STATUSES', 'valid,invalid');
+$cacheWritebackStatuses = is_string($cacheWritebackStatuses)
+    ? array_values(array_filter(array_map('trim', explode(',', $cacheWritebackStatuses))))
+    : (is_array($cacheWritebackStatuses) ? $cacheWritebackStatuses : ['valid', 'invalid']);
+
 return [
     'lease_seconds' => (int) env('ENGINE_LEASE_SECONDS', env('VERIFIER_ENGINE_CLAIM_LEASE_SECONDS', 600)),
     'max_attempts' => (int) env('ENGINE_MAX_ATTEMPTS', 3),
@@ -41,6 +46,19 @@ return [
     'cache_provisioned_backoff_max_ms' => (int) env('ENGINE_CACHE_PROVISIONED_BACKOFF_MAX_MS', 2000),
     'cache_provisioned_jitter_enabled' => (bool) env('ENGINE_CACHE_PROVISIONED_JITTER_ENABLED', true),
     'cache_failure_mode' => env('ENGINE_CACHE_FAILURE_MODE', 'fail_job'),
+    'cache_writeback_enabled' => (bool) env('ENGINE_CACHE_WRITEBACK_ENABLED', false),
+    'cache_writeback_statuses' => $cacheWritebackStatuses,
+    'cache_writeback_batch_size' => (int) env('ENGINE_CACHE_WRITEBACK_BATCH_SIZE', 25),
+    'cache_writeback_max_writes_per_second' => env('ENGINE_CACHE_WRITEBACK_MAX_WRITES_PER_SECOND') !== null
+        ? (int) env('ENGINE_CACHE_WRITEBACK_MAX_WRITES_PER_SECOND')
+        : null,
+    'cache_writeback_retry_attempts' => (int) env('ENGINE_CACHE_WRITEBACK_RETRY_ATTEMPTS', 5),
+    'cache_writeback_backoff_base_ms' => (int) env('ENGINE_CACHE_WRITEBACK_BACKOFF_BASE_MS', 200),
+    'cache_writeback_backoff_max_ms' => (int) env('ENGINE_CACHE_WRITEBACK_BACKOFF_MAX_MS', 2000),
+    'cache_writeback_failure_mode' => env('ENGINE_CACHE_WRITEBACK_FAILURE_MODE', 'fail_job'),
+    'cache_writeback_test_mode_enabled' => (bool) env('ENGINE_CACHE_WRITEBACK_TEST_MODE_ENABLED', false),
+    'cache_writeback_test_table' => env('ENGINE_CACHE_WRITEBACK_TEST_TABLE'),
+    'cache_writeback_test_result' => env('ENGINE_CACHE_WRITEBACK_TEST_RESULT', 'Cache_miss'),
     'cache_dynamodb' => [
         'table' => env('ENGINE_CACHE_DYNAMODB_TABLE'),
         'key_attribute' => env('ENGINE_CACHE_DYNAMODB_KEY_ATTRIBUTE', 'email'),

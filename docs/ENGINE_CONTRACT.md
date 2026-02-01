@@ -48,6 +48,14 @@ Safety controls:
 - Payload limits: `engine.feedback_max_items_per_request` and `engine.feedback_max_payload_kb`.
 - Retention: outcomes pruned after `engine.feedback_retention_days`, imports pruned after `engine.feedback_import_retention_days`.
 
+Cache write-back (DynamoDB, optional):
+- After finalization, Laravel can write verified cache-miss outcomes back to DynamoDB.
+- Only emails that were **cache misses during parsing** are eligible for write-back.
+- Only `valid` and `invalid` statuses are written (risky/unknown are skipped).
+- Items written with attributes: `email`, `result` (`Valid`/`Invalid`), `DateTime` (ISO-8601).
+- Write-back is controlled by admin settings (batch size, throttle, retry/backoff, failure mode).
+- Test-only mode (cache-only runs) can write cache-miss emails to a separate test table with `result = Cache_miss`.
+
 ## Verification Modes
 Workers must honor the `verification_mode` supplied by Laravel:
 - `standard` (default): Signal Groups 1–4.

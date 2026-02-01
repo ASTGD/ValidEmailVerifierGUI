@@ -43,6 +43,13 @@ class JobStorage
         return sprintf('%s/%s/cached-%s.%s', $prefix, $job->id, $type, $extension);
     }
 
+    public function cacheMissKey(VerificationJob $job): string
+    {
+        $prefix = trim((string) config('engine.result_prefix', 'results/jobs'), '/');
+
+        return sprintf('%s/%s/cache-miss/emails.txt', $prefix, $job->id);
+    }
+
     public function reportKey(VerificationJob $job): string
     {
         return sprintf('results/%s/%s/report.json', $job->user_id, $job->id);

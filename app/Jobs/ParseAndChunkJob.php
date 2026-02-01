@@ -44,6 +44,8 @@ class ParseAndChunkJob implements ShouldQueue
     ];
     private array $cachedStreams = [];
     private array $cachedKeys = [];
+    private $cacheMissStream = null;
+    private ?string $cacheMissKey = null;
 
     private ?VerificationJob $verificationJob = null;
     private ?EmailDedupeStore $deduper = null;
@@ -52,6 +54,7 @@ class ParseAndChunkJob implements ShouldQueue
     private string $cacheOnlyMissStatus = 'risky';
     private string $cacheFailureMode = 'fail_job';
     private bool $skipCache = false;
+    private bool $cacheWritebackTestEnabled = false;
 
     private $chunkStream = null;
     private int $chunkNo = 1;
@@ -99,6 +102,7 @@ class ParseAndChunkJob implements ShouldQueue
             $this->flushBatch($cacheStore, $storage, $disk);
             $this->finalizeChunk($storage, $disk);
             $this->finalizeCachedOutputs($storage, $disk);
+            $this->finalizeCacheMissList($storage, $disk);
 
             $this->verificationJob->update([
                 'total_emails' => $this->totalUnique,
@@ -108,6 +112,7 @@ class ParseAndChunkJob implements ShouldQueue
                 'cached_valid_key' => $this->cachedKeys['valid'] ?? null,
                 'cached_invalid_key' => $this->cachedKeys['invalid'] ?? null,
                 'cached_risky_key' => $this->cachedKeys['risky'] ?? null,
+                'cache_miss_key' => $this->cacheMissKey,
             ]);
 
             $this->verificationJob->addLog('parse_completed', 'Input parsing complete.', [
@@ -143,6 +148,7 @@ class ParseAndChunkJob implements ShouldQueue
         $this->cacheOnlyMode = EngineSettings::cacheOnlyEnabled();
         $this->cacheOnlyMissStatus = EngineSettings::cacheOnlyMissStatus();
         $this->cacheFailureMode = EngineSettings::cacheFailureMode();
+        $this->cacheWritebackTestEnabled = EngineSettings::cacheWritebackTestEnabled();
     }
 
     private function engineConfig(string $key, mixed $fallback = null): mixed
@@ -347,6 +353,7 @@ class ParseAndChunkJob implements ShouldQueue
             if ($this->cacheOnlyMode) {
                 $this->handleCacheMiss($email, $storage, $disk);
             } else {
+                $this->recordCacheMiss($email, $storage, $disk);
                 $this->writeToChunk($email, $storage, $disk);
             }
         }
@@ -424,6 +431,10 @@ class ParseAndChunkJob implements ShouldQueue
 
     private function handleCacheMiss(string $email, JobStorage $storage, string $disk): void
     {
+        if ($this->cacheWritebackTestEnabled) {
+            $this->recordCacheMiss($email, $storage, $disk);
+        }
+
         $status = in_array($this->cacheOnlyMissStatus, ['valid', 'invalid', 'risky'], true)
             ? $this->cacheOnlyMissStatus
             : 'risky';
@@ -459,6 +470,27 @@ class ParseAndChunkJob implements ShouldQueue
             Storage::disk($disk)->put($key, $stream);
             fclose($stream);
         }
+    }
+
+    private function recordCacheMiss(string $email, JobStorage $storage, string $disk): void
+    {
+        if (! $this->cacheMissStream) {
+            $this->cacheMissStream = tmpfile();
+            $this->cacheMissKey = $storage->cacheMissKey($this->verificationJob);
+        }
+
+        fwrite($this->cacheMissStream, $email.PHP_EOL);
+    }
+
+    private function finalizeCacheMissList(JobStorage $storage, string $disk): void
+    {
+        if (! $this->cacheMissStream || ! is_resource($this->cacheMissStream) || ! $this->cacheMissKey) {
+            return;
+        }
+
+        rewind($this->cacheMissStream);
+        Storage::disk($disk)->put($this->cacheMissKey, $this->cacheMissStream);
+        fclose($this->cacheMissStream);
     }
 
     private function normalizeEmail(string $email): ?string

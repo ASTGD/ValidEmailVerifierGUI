@@ -40,6 +40,7 @@ class VerificationJob extends Model
         'cached_valid_key',
         'cached_invalid_key',
         'cached_risky_key',
+        'cache_miss_key',
         'engine_server_id',
         'claimed_at',
         'claim_expires_at',

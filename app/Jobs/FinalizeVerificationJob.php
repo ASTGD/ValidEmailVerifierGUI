@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Enums\VerificationJobOrigin;
 use App\Enums\VerificationJobStatus;
+use App\Contracts\CacheWriteBackService;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
 use App\Services\VerificationOutputMapper;
@@ -27,7 +28,7 @@ class FinalizeVerificationJob implements ShouldQueue
     {
     }
 
-    public function handle(VerificationResultsMerger $merger, JobStorage $storage): void
+    public function handle(VerificationResultsMerger $merger, JobStorage $storage, CacheWriteBackService $writeBack): void
     {
         $job = VerificationJob::query()
             ->with('chunks')
@@ -74,6 +75,8 @@ class FinalizeVerificationJob implements ShouldQueue
 
                 return;
             }
+
+            $writeBack->writeBack($job, $result);
 
             $counts = $result['counts'];
             $validCount = (int) ($counts['valid'] ?? 0);
