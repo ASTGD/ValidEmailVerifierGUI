@@ -403,6 +403,14 @@ class EngineSettings
         return $port;
     }
 
+    public static function metricsSource(): string
+    {
+        $source = self::stringValue('metrics_source', (string) config('engine.metrics_source', 'container'));
+        $source = strtolower(trim($source));
+
+        return in_array($source, ['container', 'host'], true) ? $source : 'container';
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */

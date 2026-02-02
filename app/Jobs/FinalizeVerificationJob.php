@@ -7,6 +7,7 @@ use App\Enums\VerificationJobStatus;
 use App\Contracts\CacheWriteBackService;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
+use App\Services\JobMetricsRecorder;
 use App\Services\VerificationOutputMapper;
 use App\Services\VerificationResultsMerger;
 use Illuminate\Bus\Queueable;
@@ -28,7 +29,12 @@ class FinalizeVerificationJob implements ShouldQueue
     {
     }
 
-    public function handle(VerificationResultsMerger $merger, JobStorage $storage, CacheWriteBackService $writeBack): void
+    public function handle(
+        VerificationResultsMerger $merger,
+        JobStorage $storage,
+        CacheWriteBackService $writeBack,
+        JobMetricsRecorder $metricsRecorder
+    ): void
     {
         $job = VerificationJob::query()
             ->with('chunks')
@@ -55,7 +61,7 @@ class FinalizeVerificationJob implements ShouldQueue
         }
 
         if ($job->chunks->isNotEmpty() && $job->chunks->contains(fn ($chunk) => $chunk->status === 'failed')) {
-            $this->markJobFailed($job, 'One or more chunks failed.');
+            $this->markJobFailed($job, 'One or more chunks failed.', [], $metricsRecorder);
 
             return;
         }
@@ -65,18 +71,34 @@ class FinalizeVerificationJob implements ShouldQueue
         }
 
         try {
+            $metricPayload = [
+                'progress_percent' => 75,
+                'total_emails' => $job->total_emails,
+                'cache_hit_count' => $job->cached_count,
+            ];
+
+            if ($job->total_emails !== null) {
+                $metricPayload['cache_miss_count'] = max(0, (int) $job->total_emails - (int) $job->cached_count);
+            }
+
+            $metricsRecorder->recordPhase($job, 'finalize', $metricPayload);
+
             $outputDisk = $job->output_disk ?: ($job->input_disk ?: $storage->disk());
             $result = $merger->merge($job, $job->chunks, $outputDisk);
 
             if (! empty($result['missing'])) {
                 $this->markJobFailed($job, 'Chunk outputs missing during finalization.', [
                     'missing' => $result['missing'],
-                ]);
+                ], $metricsRecorder);
 
                 return;
             }
 
-            $writeBack->writeBack($job, $result);
+            $metricsRecorder->recordPhase($job, 'writeback', [
+                'progress_percent' => 90,
+            ]);
+
+            $writebackResult = $writeBack->writeBack($job, $result);
 
             $counts = $result['counts'];
             $validCount = (int) ($counts['valid'] ?? 0);
@@ -125,14 +147,26 @@ class FinalizeVerificationJob implements ShouldQueue
                 'invalid_count' => $job->invalid_count,
                 'risky_count' => $job->risky_count,
             ]);
+
+            $metricsRecorder->recordPhase($job, 'completed', [
+                'progress_percent' => 100,
+                'total_emails' => $job->total_emails,
+                'processed_emails' => $job->total_emails,
+                'writeback_written_count' => (int) ($writebackResult['written'] ?? 0),
+            ]);
         } catch (Throwable $exception) {
             $this->markJobFailed($job, 'Finalization failed.', [
                 'error' => $exception->getMessage(),
-            ]);
+            ], $metricsRecorder);
         }
     }
 
-    private function markJobFailed(VerificationJob $job, string $message, array $context = []): void
+    private function markJobFailed(
+        VerificationJob $job,
+        string $message,
+        array $context = [],
+        ?JobMetricsRecorder $metricsRecorder = null
+    ): void
     {
         $job->update([
             'status' => VerificationJobStatus::Failed,
@@ -142,6 +176,12 @@ class FinalizeVerificationJob implements ShouldQueue
         ]);
 
         $job->addLog('finalize_failed', $message, $context);
+
+        if ($metricsRecorder) {
+            $metricsRecorder->recordPhase($job, 'failed', [
+                'progress_percent' => 100,
+            ]);
+        }
     }
 
     /**

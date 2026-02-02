@@ -339,6 +339,19 @@ class EngineSettingForm
         ];
 
         $monitoringSections = [
+            Section::make('System Metrics')
+                ->description('Controls the metrics source used for admin health dashboards.')
+                ->schema([
+                    Select::make('metrics_source')
+                        ->label('Metrics source')
+                        ->options([
+                            'container' => 'Container (cgroup)',
+                            'host' => 'Host (system)',
+                        ])
+                        ->default('container')
+                        ->helperText('Container reads cgroup stats. Host reads system /proc metrics.'),
+                ])
+                ->columns(1),
             Section::make('Blacklist Monitor')
                 ->description('Controls the external blacklist monitor service.')
                 ->schema([

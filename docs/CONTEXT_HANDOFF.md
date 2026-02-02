@@ -1,6 +1,6 @@
 # Context Handoff (ValidEmailVerifierGUI)
 
-Last updated: 2026-02-01
+Last updated: 2026-02-02
 
 This document is the handoff bundle for a fresh workspace. It summarizes the current system state, key decisions, and how to resume work without losing context. Do not place secrets in this file.
 
@@ -13,6 +13,8 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - DynamoDB cache write-back (miss-only, valid/invalid) is implemented with admin settings and retries.
 - Cache write-back test mode (cache-only) can write `Cache_miss` to a separate DynamoDB test table.
 - Engine monitoring (RBL checks) is implemented with `engine-monitor-go` and admin UI.
+- Admin Ops Overview dashboard is available with system, queue, engine, and job health widgets.
+- System + queue metrics are collected via scheduled commands and stored for trend charts.
 
 ## 2) Tech stack + environment
 - Laravel 12, PHP 8.4 (Sail mandatory), MySQL, Livewire (portal), Filament (admin), Sanctum (API auth).
@@ -103,10 +105,11 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Queue worker: `./vendor/bin/sail artisan queue:work --timeout=1800`
 - Tests: `./vendor/bin/sail test`
 
-## 14) Today’s update (2026-02-01)
-- Added DynamoDB cache write-back test mode (cache-only) with `Cache_miss` result to a test table.
-- Cache-only mode now records cache-miss emails for test write-back.
-- Docs and tests updated for test mode.
+## 14) Today’s update (2026-02-02)
+- Added Admin Ops Overview dashboard (system health, queue health, engine health, job health, trends, active jobs).
+- Added system + queue metrics tables and scheduled collectors (every 60s).
+- Added per-job metrics tracking (phase, progress, cache hits/misses, write-back progress, peak CPU/memory).
+- Added progress bars + metrics to admin job list and job detail view; logs are collapsible.
 
 ## 15) Next planned upgrades (not yet implemented)
 - Cache read metrics + dashboard widgets
@@ -184,3 +187,11 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Cache-only runs now record cache-miss emails for test writes.
 - Tests cover test-mode writes.
 - Files updated: `app/Services/EmailVerificationCache/DynamoDbCacheWriteBackService.php`, `app/Jobs/ParseAndChunkJob.php`, `app/Support/EngineSettings.php`, `app/Filament/Resources/EngineSettings/Schemas/EngineSettingForm.php`, migrations + tests.
+
+### 2026-02-02 — Admin ops observability (feature/admin-ops-observability)
+- Added Ops Overview page with system/queue/engine/job health widgets and trend charts.
+- Added system + queue metrics collectors (scheduled every minute).
+- Added per-job metrics tracking and progress bars in admin jobs list/detail view.
+- Logs section collapsed by default in job detail view.
+- Fixed Ops Overview charts to use reindexed data arrays; progress bar now has fixed width in tables.
+- Files updated: new metrics models/migrations, `app/Services/Metrics/*`, `app/Services/JobMetricsRecorder.php`, `app/Filament/Pages/OpsOverview.php`, `app/Filament/Widgets/Ops*`, `app/Filament/Resources/VerificationJobs/*`, `bootstrap/app.php`, `config/engine.php`, `app/Support/EngineSettings.php`, `app/Models/*`.
