@@ -22,12 +22,12 @@ class EditCustomer extends EditRecord
         return $data;
     }
 
-    protected function getHeaderActions(): array
-    {
-        return [
-            DeleteAction::make(),
-        ];
-    }
+    // protected function getHeaderActions(): array
+    // {
+    //     return [
+    //         DeleteAction::make(),
+    //     ];
+    // }
 
     public function getMaxContentWidth(): \Filament\Support\Enums\Width|string|null
     {
