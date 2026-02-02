@@ -50,6 +50,7 @@ class CustomerForm
                                     ->password()
                                     ->revealable()
                                     ->dehydrateStateUsing(fn($state) => filled($state) ? Hash::make($state) : null)
+                                    ->dehydrated(fn($state) => filled($state))
                                     ->required(fn($livewire) => $livewire instanceof \Filament\Resources\Pages\CreateRecord)
                                     ->suffixAction(
                                         Action::make('generatePassword')

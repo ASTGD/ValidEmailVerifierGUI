@@ -3,6 +3,11 @@
 namespace App\Filament\Resources\Customers\Tables;
 
 use App\Models\User;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
@@ -34,8 +39,7 @@ class CustomersTable
                     ->sortable(),
                 TextColumn::make('verification_jobs_count')
                     ->label('Services')
-                    ->state(fn(User $record) => $record->verificationOrders()->count())
-                    ->sortable(),
+                    ->state(fn(User $record) => $record->verificationOrders()->count()),
                 TextColumn::make('created_at')
                     ->label('Created')
                     ->date()
@@ -89,6 +93,16 @@ class CustomersTable
                         'inactive' => 'Inactive',
                         'closed' => 'Closed',
                     ]),
+            ])
+            ->actions([
+                ViewAction::make(),
+                EditAction::make(),
+                DeleteAction::make(),
+            ])
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
+                ]),
             ])
             ->emptyStateHeading('No customers found')
             ->emptyStateDescription('Try adjusting your search or filters.');

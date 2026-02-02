@@ -42,8 +42,7 @@ class CustomerInfolist
                                 Section::make('Contacts')
                                     ->schema([
                                         TextEntry::make('contacts_status')
-                                            ->label('Contacts Status')
-                                            ->default('No additional contacts setup')
+                                            ->placeholder('No Contacts Status')
                                             ->hiddenLabel(),
                                     ]),
                             ]),
@@ -134,15 +133,26 @@ class CustomerInfolist
 
                                 Section::make('Files')
                                     ->schema([
-                                        TextEntry::make('files_count')->label('No files uploaded')->default('No files uploaded')->hiddenLabel(),
+                                        TextEntry::make('files_count')
+                                            ->placeholder('No files uploaded')
+                                            ->hiddenLabel(),
                                     ]),
-
-                                Section::make('Recent Emails')
+                                Section::make('Admin Notes')
                                     ->schema([
-                                        TextEntry::make('emails_count')->label('No recent emails')->default('No recent emails')->hiddenLabel(),
+                                        TextEntry::make('admin_notes')
+                                            ->placeholder('No admin notes available.')
+                                            ->hiddenLabel(),
                                     ]),
                             ]),
                     ]),
+                Section::make('Recent Emails')
+                    ->schema([
+                        TextEntry::make('emails_count')
+                            ->placeholder('No recent emails.')
+                            ->hiddenLabel()
+                            ->columnSpanFull(),
+                    ])
+                    ->columnSpanFull(),
             ]);
     }
 }
