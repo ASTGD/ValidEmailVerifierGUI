@@ -108,6 +108,8 @@ return [
     'monitor_dns_server_port' => env('ENGINE_MONITOR_DNS_SERVER_PORT') !== null
         ? (int) env('ENGINE_MONITOR_DNS_SERVER_PORT')
         : 53,
+    'metrics_source' => env('ENGINE_METRICS_SOURCE', 'container'),
+    'metrics_sample_interval_seconds' => (int) env('ENGINE_METRICS_SAMPLE_INTERVAL_SECONDS', 60),
     'provider_policies' => [],
     'policy_contract_version' => env('ENGINE_POLICY_CONTRACT_VERSION', 'v1'),
     'policy_defaults' => [

@@ -35,7 +35,13 @@ class VerificationJobResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        $query = parent::getEloquentQuery()->excludeAdminFailures();
+        $query = parent::getEloquentQuery()
+            ->excludeAdminFailures()
+            ->with(['metrics', 'engineServer', 'user'])
+            ->withCount([
+                'chunks',
+                'chunks as chunks_completed_count' => fn (Builder $chunkQuery) => $chunkQuery->where('status', 'completed'),
+            ]);
 
         if (! EngineSettings::showSingleChecksInAdmin()) {
             $query->excludeSingleCheck();
@@ -46,7 +52,13 @@ class VerificationJobResource extends Resource
 
     public static function getRecordRouteBindingEloquentQuery(): Builder
     {
-        $query = parent::getRecordRouteBindingEloquentQuery()->excludeAdminFailures();
+        $query = parent::getRecordRouteBindingEloquentQuery()
+            ->excludeAdminFailures()
+            ->with(['metrics', 'engineServer', 'user'])
+            ->withCount([
+                'chunks',
+                'chunks as chunks_completed_count' => fn (Builder $chunkQuery) => $chunkQuery->where('status', 'completed'),
+            ]);
 
         if (! EngineSettings::showSingleChecksInAdmin()) {
             $query->excludeSingleCheck();

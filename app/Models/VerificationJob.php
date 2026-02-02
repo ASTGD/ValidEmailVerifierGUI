@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\VerificationJobOrigin;
 use App\Enums\VerificationJobStatus;
 use App\Enums\VerificationMode;
+use App\Models\VerificationJobMetric;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -111,6 +112,11 @@ class VerificationJob extends Model
     public function logs(): HasMany
     {
         return $this->hasMany(VerificationJobLog::class, 'verification_job_id');
+    }
+
+    public function metrics(): HasOne
+    {
+        return $this->hasOne(VerificationJobMetric::class, 'verification_job_id');
     }
 
     public function chunks(): HasMany

@@ -7,9 +7,11 @@ use App\Enums\VerificationMode;
 use App\Models\EngineServer;
 use App\Models\VerificationJob;
 use App\Support\AdminAuditLogger;
+use App\Support\JobProgressCalculator;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Actions\ViewAction;
+use Filament\Tables\Columns\ViewColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
@@ -54,6 +56,33 @@ class VerificationJobsTable
                             default => 'gray',
                         };
                     }),
+                ViewColumn::make('progress')
+                    ->label('Progress')
+                    ->state(fn (VerificationJob $record): int => JobProgressCalculator::progressPercent($record))
+                    ->view('filament.columns.progress-bar')
+                    ->extraCellAttributes(['class' => 'w-32']),
+                TextColumn::make('phase')
+                    ->label('Phase')
+                    ->getStateUsing(fn (VerificationJob $record): string => JobProgressCalculator::phaseLabel($record))
+                    ->badge()
+                    ->color('gray'),
+                TextColumn::make('processed')
+                    ->label('Processed')
+                    ->getStateUsing(function (VerificationJob $record): string {
+                        $processed = $record->metrics?->processed_emails ?? 0;
+                        $total = $record->metrics?->total_emails ?? $record->total_emails ?? 0;
+
+                        return $total > 0 ? "{$processed} / {$total}" : (string) $processed;
+                    })
+                    ->toggleable(),
+                TextColumn::make('cache_hits')
+                    ->label('Cache Hits')
+                    ->getStateUsing(fn (VerificationJob $record): int => (int) ($record->metrics?->cache_hit_count ?? 0))
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('cache_misses')
+                    ->label('Cache Misses')
+                    ->getStateUsing(fn (VerificationJob $record): int => (int) ($record->metrics?->cache_miss_count ?? 0))
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('verification_mode')
                     ->label('Mode')
                     ->badge()
@@ -99,6 +128,7 @@ class VerificationJobsTable
                     ->label('Output Key')
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+            ->poll('10s')
             ->filters([
                 SelectFilter::make('status')
                     ->options(self::statusOptions()),
@@ -173,6 +203,10 @@ class VerificationJobsTable
                             auth()->id()
                         );
 
+                        app(\App\Services\JobMetricsRecorder::class)->recordPhase($record, 'failed', [
+                            'progress_percent' => 100,
+                        ]);
+
                         AdminAuditLogger::log('job_mark_failed', $record, [
                             'error_message' => $data['error_message'],
                         ]);
@@ -202,6 +236,10 @@ class VerificationJobsTable
                             ],
                             auth()->id()
                         );
+
+                        app(\App\Services\JobMetricsRecorder::class)->recordPhase($record, 'failed', [
+                            'progress_percent' => 100,
+                        ]);
 
                         AdminAuditLogger::log('job_cancelled', $record, [
                             'from' => $fromStatus->value,

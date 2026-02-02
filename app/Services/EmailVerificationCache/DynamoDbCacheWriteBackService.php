@@ -4,6 +4,7 @@ namespace App\Services\EmailVerificationCache;
 
 use App\Contracts\CacheWriteBackService;
 use App\Models\VerificationJob;
+use App\Services\JobMetricsRecorder;
 use App\Support\EmailHashing;
 use App\Support\EngineSettings;
 use Aws\DynamoDb\DynamoDbClient;
@@ -21,10 +22,12 @@ class DynamoDbCacheWriteBackService implements CacheWriteBackService
     private string $datetimeAttribute;
     private float $lastWriteAt = 0.0;
     private bool $stopWrites = false;
+    private JobMetricsRecorder $metricsRecorder;
 
-    public function __construct()
+    public function __construct(JobMetricsRecorder $metricsRecorder)
     {
         $config = (array) config('engine.cache_dynamodb', []);
+        $this->metricsRecorder = $metricsRecorder;
 
         $this->table = (string) ($config['table'] ?? '');
         $this->keyAttribute = trim((string) ($config['key_attribute'] ?? 'email'));
@@ -83,6 +86,9 @@ class DynamoDbCacheWriteBackService implements CacheWriteBackService
             return ['status' => 'no_cache_miss', 'attempted' => 0, 'written' => 0];
         }
 
+        $missTotal = count($misses);
+        $this->updateWritebackProgress($job, 0, $missTotal);
+
         $statuses = EngineSettings::cacheWritebackStatuses();
 
         if ($statuses === []) {
@@ -128,6 +134,7 @@ class DynamoDbCacheWriteBackService implements CacheWriteBackService
                     if (count($batch) >= $batchSize) {
                         $written += $this->flushBatch($batch);
                         $batch = [];
+                        $this->updateWritebackProgress($job, $written, $missTotal);
 
                         if ($this->stopWrites) {
                             break 2;
@@ -142,6 +149,8 @@ class DynamoDbCacheWriteBackService implements CacheWriteBackService
         if (! $this->stopWrites && $batch !== []) {
             $written += $this->flushBatch($batch);
         }
+
+        $this->updateWritebackProgress($job, $written, $missTotal);
 
         return [
             'status' => $this->stopWrites ? 'skipped' : 'completed',
@@ -185,6 +194,9 @@ class DynamoDbCacheWriteBackService implements CacheWriteBackService
             return ['status' => 'no_cache_miss', 'attempted' => 0, 'written' => 0];
         }
 
+        $missTotal = count($misses);
+        $this->updateWritebackProgress($job, 0, $missTotal);
+
         $batchSize = EngineSettings::cacheWritebackBatchSize();
         $timestamp = Carbon::now()->toISOString();
         $resultValue = EngineSettings::cacheWritebackTestResult();
@@ -199,6 +211,7 @@ class DynamoDbCacheWriteBackService implements CacheWriteBackService
             if (count($batch) >= $batchSize) {
                 $written += $this->flushBatch($batch);
                 $batch = [];
+                $this->updateWritebackProgress($job, $written, $missTotal);
 
                 if ($this->stopWrites) {
                     break;
@@ -209,6 +222,8 @@ class DynamoDbCacheWriteBackService implements CacheWriteBackService
         if (! $this->stopWrites && $batch !== []) {
             $written += $this->flushBatch($batch);
         }
+
+        $this->updateWritebackProgress($job, $written, $missTotal);
 
         return [
             'status' => $this->stopWrites ? 'skipped' : 'completed',
@@ -314,6 +329,22 @@ class DynamoDbCacheWriteBackService implements CacheWriteBackService
         }
 
         return $written;
+    }
+
+    private function updateWritebackProgress(VerificationJob $job, int $written, int $total): void
+    {
+        if ($total <= 0) {
+            return;
+        }
+
+        $ratio = min(1, $written / $total);
+        $progress = (int) round(90 + (10 * $ratio));
+
+        $this->metricsRecorder->recordPhase($job, 'writeback', [
+            'writeback_written_count' => $written,
+            'cache_miss_count' => $total,
+            'progress_percent' => min(100, $progress),
+        ]);
     }
 
     /**

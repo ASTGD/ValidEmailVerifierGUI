@@ -53,6 +53,7 @@ class EngineSetting extends Model
         'monitor_dns_mode',
         'monitor_dns_server_ip',
         'monitor_dns_server_port',
+        'metrics_source',
     ];
 
     protected $casts = [
