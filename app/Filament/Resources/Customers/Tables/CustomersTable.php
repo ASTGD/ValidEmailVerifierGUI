@@ -8,9 +8,14 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Actions\Action;
+use Filament\Schemas\Components\Group;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\Filter;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -20,6 +25,7 @@ class CustomersTable
     {
         return $table
             ->defaultSort('created_at', 'desc')
+            ->searchable(false)
             ->columns([
                 TextColumn::make('id')
                     ->label('ID')
@@ -56,44 +62,78 @@ class CustomersTable
                     }),
             ])
             ->filters([
-                Filter::make('client_attributes')
+                Filter::make('advanced')
+                    ->label('Search/Filter')
+                    ->columnSpanFull()
                     ->form([
-                        \Filament\Forms\Components\TextInput::make('client_name_filter')->label('Client/Company Name'),
-                        \Filament\Forms\Components\TextInput::make('email_filter')->label('Email Address'),
-                        \Filament\Forms\Components\TextInput::make('phone_filter')->label('Phone Number'),
+                        Group::make([
+                            Group::make([
+                                TextInput::make('client_id')
+                                    ->label('Client ID')
+                                    ->numeric(),
+                                TextInput::make('client_name')
+                                    ->label('Client/Company Name')
+                                    ->placeholder('Enter name or company'),
+                                TextInput::make('email')
+                                    ->label('Email Address')
+                                    ->placeholder('Enter email'),
+                            ])->columnSpan(1),
+                            Group::make([
+                                TextInput::make('phone')
+                                    ->label('Phone Number')
+                                    ->placeholder('Enter phone number'),
+                                Select::make('client_group')
+                                    ->label('Client Group')
+                                    ->placeholder('Any')
+                                    ->options([
+                                        'none' => 'None',
+                                        'vip' => 'VIP',
+                                        'reseller' => 'Reseller',
+                                    ]),
+                                Select::make('status')
+                                    ->label('Status')
+                                    ->placeholder('Any')
+                                    ->options([
+                                        'active' => 'Active',
+                                        'inactive' => 'Inactive',
+                                        'closed' => 'Closed',
+                                    ]),
+                            ])->columnSpan(1),
+                            // ACTIVE CLIENT TOGGLE - BEFORE SEARCH BUTTON (as requested)
+                            Group::make([
+                                Toggle::make('only_active')
+                                    ->label('Only Active Clients')
+                                    ->default(false)
+                                    ->inline(false),
+                            ])->columnSpanFull(),
+                        ])
+                            ->gridContainer()
+                            ->columns(['default' => 1, 'lg' => 2])
+                            ->extraAttributes([
+                                'style' => 'max-width: 64rem; margin: 0 auto; gap: 2.5rem;',
+                            ]),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         return $query
-                            ->when(
-                                $data['client_name_filter'],
-                                fn(Builder $query, $date) => $query->where(fn($q) => $q->where('first_name', 'like', "%{$date}%")
-                                    ->orWhere('last_name', 'like', "%{$date}%")
-                                    ->orWhere('company_name', 'like', "%{$date}%"))
-                            )
-                            ->when(
-                                $data['email_filter'],
-                                fn(Builder $query, $date) => $query->where('email', 'like', "%{$date}%")
-                            )
-                            ->when(
-                                $data['phone_filter'],
-                                fn(Builder $query, $date) => $query->where('phone', 'like', "%{$date}%")
-                            );
+                            ->when($data['client_id'], fn(Builder $q, $val) => $q->where('id', $val))
+                            ->when($data['client_name'], fn(Builder $q, $val) => $q->where(
+                                fn($sq) =>
+                                $sq->where('first_name', 'like', "%{$val}%")
+                                    ->orWhere('last_name', 'like', "%{$val}%")
+                                    ->orWhere('company_name', 'like', "%{$val}%")
+                                    ->orWhere('name', 'like', "%{$val}%")
+                            ))
+                            ->when($data['email'], fn(Builder $q, $val) => $q->where('email', 'like', "%{$val}%"))
+                            ->when($data['phone'], fn(Builder $q, $val) => $q->where('phone', 'like', "%{$val}%"))
+                            ->when($data['client_group'], fn(Builder $q, $val) => $q->where('client_group', $val))
+                            ->when($data['status'], fn(Builder $q, $val) => $q->where('status', $val))
+                            ->when($data['only_active'], fn(Builder $q) => $q->where('status', 'active'));
                     }),
-                SelectFilter::make('client_group')
-                    ->label('Client Group')
-                    ->options([
-                        'none' => 'None',
-                        'vip' => 'VIP',
-                        'reseller' => 'Reseller',
-                    ]),
-                SelectFilter::make('status')
-                    ->label('Status')
-                    ->options([
-                        'active' => 'Active',
-                        'inactive' => 'Inactive',
-                        'closed' => 'Closed',
-                    ]),
             ])
+            ->filtersLayout(FiltersLayout::AboveContentCollapsible)
+            ->filtersTriggerAction(fn(Action $action): Action => $action->label(__('Search/Filter'))->button())
+            ->filtersApplyAction(fn(Action $action): Action => $action->label(__('Search'))->color('warning'))
+            ->filtersFormColumns(1)
             ->actions([
                 ViewAction::make(),
                 EditAction::make(),
