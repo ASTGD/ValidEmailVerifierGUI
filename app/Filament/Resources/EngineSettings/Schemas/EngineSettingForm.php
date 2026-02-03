@@ -408,6 +408,7 @@ class EngineSettingForm
                                 $component->state(config('queue.default', 'database'));
                             }
                         })
+                        ->live()
                         ->helperText('Overrides QUEUE_CONNECTION for Laravel queues.'),
                     Select::make('cache_store')
                         ->label('App cache store')
@@ -441,6 +442,9 @@ class EngineSettingForm
                     Placeholder::make('runtime_cache')
                         ->label('Runtime cache store')
                         ->content(fn (): string => (string) config('cache.default')),
+                    Placeholder::make('queue_note')
+                        ->label('Note')
+                        ->content('If Redis is offline, the app will fall back to the existing queue/cache config to avoid errors.'),
                 ])
                 ->columns(2),
         ];

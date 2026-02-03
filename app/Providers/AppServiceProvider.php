@@ -17,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Cashier\Cashier;
 
@@ -136,9 +137,36 @@ class AppServiceProvider extends ServiceProvider
             return;
         }
 
+        $redisAvailable = $this->redisAvailable();
+
+        if ($queueConnection === 'redis' && ! $redisAvailable) {
+            $queueConnection = config('queue.default', 'database');
+            if ($queueConnection === 'redis') {
+                $queueConnection = 'database';
+            }
+        }
+
+        if ($cacheStore === 'redis' && ! $redisAvailable) {
+            $cacheStore = config('cache.default', 'database');
+            if ($cacheStore === 'redis') {
+                $cacheStore = 'database';
+            }
+        }
+
         config([
             'queue.default' => $queueConnection,
             'cache.default' => $cacheStore,
         ]);
+    }
+
+    private function redisAvailable(): bool
+    {
+        try {
+            Redis::connection('default')->ping();
+
+            return true;
+        } catch (\Throwable $exception) {
+            return false;
+        }
     }
 }

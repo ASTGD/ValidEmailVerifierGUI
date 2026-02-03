@@ -202,4 +202,4 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Added Redis service to Sail compose and switched queue/cache defaults to Redis in `.env.example`.
 - Installed Laravel Horizon with admin-only access gate (requires Horizon enabled in settings).
 - Added Engine Settings -> Queue Engine tab to control queue connection, cache store, and Horizon toggle.
-- Runtime config overrides apply queue/cache settings from Engine Settings.
+- Runtime config overrides apply queue/cache settings from Engine Settings, with Redis availability fallback to avoid errors.
