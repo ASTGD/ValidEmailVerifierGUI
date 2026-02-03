@@ -256,6 +256,9 @@ Admin actions must never bypass authorization checks.
 - Use Form Requests for validation.
 - Use Policies for authorization.
 - Prefer service classes for domain logic (avoid fat controllers).
+- When extending framework classes (Filament/Laravel/etc.), match base-class property/method signatures exactly (static vs non-static, types). Use existing project examples to avoid fatal errors.
+- Filament pages using `InteractsWithForms` must define `form(Schema $form): Schema` (not `Form`) to match Filament v3 signatures.
+- When using Filament Schema-based forms, use `Filament\Schemas\Components\Section` (not `Filament\Forms\Components\Section`).
 - Add tests for critical flows:
   - job creation
   - authorization for downloads
