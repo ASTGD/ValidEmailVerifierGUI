@@ -11,6 +11,7 @@ use App\Services\EmailVerificationCache\DatabaseEmailVerificationCacheStore;
 use App\Services\EmailVerificationCache\DynamoDbCacheWriteBackService;
 use App\Services\EmailVerificationCache\DynamoDbEmailVerificationCacheStore;
 use App\Services\EmailVerificationCache\NullCacheStore;
+use App\Support\EngineSettings;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
@@ -56,6 +57,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->applyRuntimeQueueSettings();
+
         Gate::policy(VerificationJob::class, VerificationJobPolicy::class);
 
         \App\Models\SupportTicket::observe(\App\Observers\SupportTicketObserver::class);
@@ -122,5 +125,20 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute($limit)->by('feedback-api|' . $key);
         });
+    }
+
+    private function applyRuntimeQueueSettings(): void
+    {
+        try {
+            $queueConnection = EngineSettings::queueConnection();
+            $cacheStore = EngineSettings::cacheStore();
+        } catch (\Throwable $exception) {
+            return;
+        }
+
+        config([
+            'queue.default' => $queueConnection,
+            'cache.default' => $cacheStore,
+        ]);
     }
 }

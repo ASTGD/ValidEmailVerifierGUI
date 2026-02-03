@@ -4,6 +4,7 @@ namespace App\Filament\Resources\EngineSettings\Schemas;
 
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
@@ -391,6 +392,59 @@ class EngineSettingForm
                 ->columns(2),
         ];
 
+        $queueSections = [
+            Section::make('Queue Driver')
+                ->description('Controls the Laravel queue driver. Restart queue workers after changes.')
+                ->schema([
+                    Select::make('queue_connection')
+                        ->label('Queue connection')
+                        ->options([
+                            'redis' => 'Redis',
+                            'database' => 'Database',
+                            'sync' => 'Sync (no queue)',
+                        ])
+                        ->afterStateHydrated(function (Select $component, $state): void {
+                            if (blank($state)) {
+                                $component->state(config('queue.default', 'database'));
+                            }
+                        })
+                        ->helperText('Overrides QUEUE_CONNECTION for Laravel queues.'),
+                    Select::make('cache_store')
+                        ->label('App cache store')
+                        ->options([
+                            'redis' => 'Redis',
+                            'database' => 'Database',
+                            'file' => 'File',
+                            'array' => 'Array (testing)',
+                        ])
+                        ->afterStateHydrated(function (Select $component, $state): void {
+                            if (blank($state)) {
+                                $component->state(config('cache.default', 'database'));
+                            }
+                        })
+                        ->helperText('Overrides CACHE_STORE for Laravel cache only (verification cache is separate).'),
+                ])
+                ->columns(2),
+            Section::make('Horizon Dashboard')
+                ->description('Horizon provides queue monitoring and requires Redis.')
+                ->schema([
+                    Toggle::make('horizon_enabled')
+                        ->label('Enable Horizon dashboard')
+                        ->helperText('Requires Redis queue and running `artisan horizon` on the server.')
+                        ->disabled(fn (Get $get): bool => $get('queue_connection') !== 'redis'),
+                    Placeholder::make('horizon_path')
+                        ->label('Horizon path')
+                        ->content(fn (): string => '/' . trim((string) config('horizon.path', 'horizon'), '/')),
+                    Placeholder::make('runtime_queue')
+                        ->label('Runtime queue driver')
+                        ->content(fn (): string => (string) config('queue.default')),
+                    Placeholder::make('runtime_cache')
+                        ->label('Runtime cache store')
+                        ->content(fn (): string => (string) config('cache.default')),
+                ])
+                ->columns(2),
+        ];
+
         return $schema
             ->components([
                 Tabs::make('Verification Settings')
@@ -410,6 +464,11 @@ class EngineSettingForm
                             ->schema([
                                 Grid::make(['default' => 1, 'lg' => 3])
                                     ->schema($monitoringSections),
+                            ]),
+                        Tab::make('Queue Engine')
+                            ->schema([
+                                Grid::make(['default' => 1, 'lg' => 3])
+                                    ->schema($queueSections),
                             ]),
                     ])
                     ->persistTabInQueryString()

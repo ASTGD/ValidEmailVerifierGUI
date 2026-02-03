@@ -1,6 +1,6 @@
 # Context Handoff (ValidEmailVerifierGUI)
 
-Last updated: 2026-02-02
+Last updated: 2026-02-03
 
 This document is the handoff bundle for a fresh workspace. It summarizes the current system state, key decisions, and how to resume work without losing context. Do not place secrets in this file.
 
@@ -15,6 +15,8 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Engine monitoring (RBL checks) is implemented with `engine-monitor-go` and admin UI.
 - Admin Ops Overview dashboard is available with system, queue, engine, and job health widgets.
 - System + queue metrics are collected via scheduled commands and stored for trend charts.
+- Developer Tools page provides capacity, queue pressure, poll load, and cost estimators.
+- Global Settings include DevTools toggles (environment-scoped).
 
 ## 2) Tech stack + environment
 - Laravel 12, PHP 8.4 (Sail mandatory), MySQL, Livewire (portal), Filament (admin), Sanctum (API auth).
@@ -195,3 +197,9 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Logs section collapsed by default in job detail view.
 - Fixed Ops Overview charts to use reindexed data arrays; progress bar now has fixed width in tables.
 - Files updated: new metrics models/migrations, `app/Services/Metrics/*`, `app/Services/JobMetricsRecorder.php`, `app/Filament/Pages/OpsOverview.php`, `app/Filament/Widgets/Ops*`, `app/Filament/Resources/VerificationJobs/*`, `bootstrap/app.php`, `config/engine.php`, `app/Support/EngineSettings.php`, `app/Models/*`.
+
+### 2026-02-03 — Redis queue + Horizon scaffolding (feature/redis-horizon-queue)
+- Added Redis service to Sail compose and switched queue/cache defaults to Redis in `.env.example`.
+- Installed Laravel Horizon with admin-only access gate (requires Horizon enabled in settings).
+- Added Engine Settings -> Queue Engine tab to control queue connection, cache store, and Horizon toggle.
+- Runtime config overrides apply queue/cache settings from Engine Settings.
