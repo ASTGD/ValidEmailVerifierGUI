@@ -279,7 +279,7 @@ Codex must:
 
 Codex must NOT:
 - Change architecture, stack, or ports without PM approval.
-- Commit secrets or modify .env (only update .env.example placeholders).
+- Commit secrets. Do not edit `.env` unless the PM explicitly asks to update local environment values.
 - Hardcode URLs, paths, or environment values.
 - Expose uploaded files publicly.
 - Perform large refactors unless PM requests.
