@@ -33,7 +33,10 @@ class VerificationJobChunk extends Model
         'assigned_worker_id',
         'claimed_at',
         'claim_expires_at',
+        'available_at',
         'claim_token',
+        'retry_attempt',
+        'retry_parent_id',
     ];
 
     protected $casts = [
@@ -44,6 +47,8 @@ class VerificationJobChunk extends Model
         'attempts' => 'integer',
         'claimed_at' => 'datetime',
         'claim_expires_at' => 'datetime',
+        'available_at' => 'datetime',
+        'retry_attempt' => 'integer',
     ];
 
     public function job(): BelongsTo

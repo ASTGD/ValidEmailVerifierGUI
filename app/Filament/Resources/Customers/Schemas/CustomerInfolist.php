@@ -147,6 +147,42 @@ class CustomerInfolist
                     ]),
                 Section::make('Recent Emails')
                     ->schema([
+                        TextEntry::make('subscription_status')
+                            ->label('Status')
+                            ->badge()
+                            ->getStateUsing(function (User $record): string {
+                                $subscription = $record->subscription('default');
+
+                                if (! $subscription) {
+                                    return 'None';
+                                }
+
+                                if ($subscription->onGracePeriod()) {
+                                    return 'Grace period';
+                                }
+
+                                return $record->subscribed('default') ? 'Active' : 'Inactive';
+                            })
+                            ->color(function (string $state): string {
+                                return match ($state) {
+                                    'Active' => 'success',
+                                    'Grace period' => 'warning',
+                                    'Inactive' => 'danger',
+                                    default => 'gray',
+                                };
+                            }),
+                        TextEntry::make('stripe_id')
+                            ->label('Stripe customer')
+                            ->placeholder('-')
+                            ->copyable(),
+                        TextEntry::make('verification_jobs_count')
+                            ->label('Total jobs')
+                            ->getStateUsing(fn (User $record): int => $record->verificationJobs()->count()),
+                        TextEntry::make('enhanced_enabled')
+                            ->label('Enhanced access')
+                            ->badge()
+                            ->formatStateUsing(fn (bool $state): string => $state ? 'Enabled' : 'Disabled')
+                            ->color(fn (string $state): string => $state === 'Enabled' ? 'success' : 'gray'),
                         TextEntry::make('emails_count')
                             ->placeholder('No recent emails.')
                             ->hiddenLabel()

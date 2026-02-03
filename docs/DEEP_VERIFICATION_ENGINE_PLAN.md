@@ -74,6 +74,19 @@ These can reduce SMTP workload, but are optional depending on your business rule
 - Timeout handling, retries, greylisting behavior
 - Final classification: `valid`, `invalid`, `risky` (and optionally "unknown" if you want)
 
+### Final Output Schema + Deliverability Score
+Laravel finalization emits customer-facing CSVs with:
+```
+email,status,sub_status,score,reason
+```
+
+Score policy:
+- Deterministic 0–100 confidence score based on status + reason.
+- Catch-all results are capped and governed by admin policy:
+  - `risky_only` (default) always stays risky.
+  - `promote_if_score_gte` can promote to valid if score meets threshold.
+- Recent SG4 outcome cache hits adjust the score (boost for valid, reduce for invalid).
+
 ---
 
 ## 4) Storage Strategy (AWS S3 Now)

@@ -6,7 +6,9 @@ use App\Filament\Widgets\AdminDashboardHighlights;
 use App\Filament\Widgets\AdminQuickLinks;
 use App\Filament\Widgets\AdminStatsOverview;
 use App\Filament\Widgets\FeedbackAnalytics;
+use App\Filament\Widgets\EngineWarmupOverview;
 use App\Filament\Widgets\FinalizationHealth;
+use App\Filament\Pages\OpsOverview;
 use Filament\Support\Assets\Css;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -46,6 +48,7 @@ class AdminPanelProvider extends PanelProvider
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([
                 Dashboard::class,
+                OpsOverview::class,
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
@@ -53,6 +56,7 @@ class AdminPanelProvider extends PanelProvider
                 AdminStatsOverview::class,
                 FeedbackAnalytics::class,
                 FinalizationHealth::class,
+                EngineWarmupOverview::class,
                 AccountWidget::class,
                 AdminQuickLinks::class,
             ])

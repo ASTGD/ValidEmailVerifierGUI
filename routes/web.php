@@ -4,6 +4,7 @@ use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\MarketingController;
 use App\Http\Controllers\Portal\UploadController;
+use App\Http\Controllers\ProvisioningBundleDownloadController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\Portal\VerificationJobDownloadController;
 use App\Livewire\Portal\Dashboard;
@@ -11,6 +12,7 @@ use App\Livewire\Portal\JobShow;
 use App\Livewire\Portal\JobsIndex;
 use App\Livewire\Portal\OrdersIndex;
 use App\Livewire\Portal\Settings;
+use App\Livewire\Portal\SingleCheck;
 use App\Livewire\Portal\Support;
 use App\Livewire\Portal\Upload;
 use Illuminate\Support\Facades\Route;
@@ -50,6 +52,7 @@ Route::middleware(['auth', 'verified'])
         Route::get('dashboard', Dashboard::class)->name('dashboard');
         Route::get('upload', Upload::class)->name('upload');
         Route::post('upload', UploadController::class)->name('upload.store');
+        Route::get('single-check', SingleCheck::class)->name('single-check');
         Route::get('jobs', JobsIndex::class)->name('jobs.index');
         Route::get('jobs/{job}', JobShow::class)
             ->whereUuid('job')
@@ -74,5 +77,9 @@ Route::middleware(['auth', 'verified'])
         Route::get('success', [BillingController::class, 'success'])->name('success');
         Route::get('cancel', [BillingController::class, 'cancel'])->name('cancel');
     });
+
+Route::get('provisioning/bundles/{bundle}/{file}', ProvisioningBundleDownloadController::class)
+    ->middleware('signed')
+    ->name('provisioning-bundles.download');
 
 require __DIR__ . '/auth.php';

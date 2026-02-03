@@ -7,6 +7,7 @@ use App\Enums\VerificationJobStatus;
 use App\Jobs\ParseAndChunkJob;
 use App\Jobs\PrepareVerificationJob;
 use App\Models\EmailVerificationOutcome;
+use App\Models\EngineSetting;
 use App\Models\User;
 use App\Models\VerificationJob;
 use App\Support\EmailHashing;
@@ -84,6 +85,10 @@ class VerificationJobPipelineTest extends TestCase
             'engine.cache_batch_size' => 3,
             'engine.max_emails_per_upload' => 0,
             'engine.dedupe_in_memory_limit' => 1000,
+        ]);
+
+        EngineSetting::query()->update([
+            'cache_batch_size' => 3,
         ]);
 
         $store = new class implements EmailVerificationCacheStore {
@@ -200,5 +205,121 @@ class VerificationJobPipelineTest extends TestCase
         $cachedContent = Storage::disk('local')->get($job->cached_valid_key);
         $this->assertStringContainsString("email,reason\n", $cachedContent);
         $this->assertStringContainsString('cached@example.com,delivered', $cachedContent);
+    }
+
+    public function test_cache_only_mode_skips_chunking_and_marks_misses(): void
+    {
+        Storage::fake('local');
+
+        config([
+            'verifier.storage_disk' => 'local',
+            'engine.cache_batch_size' => 10,
+            'engine.max_emails_per_upload' => 0,
+            'engine.dedupe_in_memory_limit' => 1000,
+            'engine.cache_only_mode_enabled' => true,
+            'engine.cache_only_miss_status' => 'risky',
+        ]);
+
+        EngineSetting::query()->update([
+            'cache_only_mode_enabled' => true,
+            'cache_only_miss_status' => 'risky',
+        ]);
+
+        $store = new class implements EmailVerificationCacheStore {
+            public function lookupMany(array $emails): array
+            {
+                return [
+                    'hit@example.com' => [
+                        'status' => 'valid',
+                        'reason_code' => 'cache_hit',
+                    ],
+                ];
+            }
+        };
+
+        $this->app->instance(EmailVerificationCacheStore::class, $store);
+
+        $user = User::factory()->create();
+        $job = VerificationJob::create([
+            'user_id' => $user->id,
+            'status' => VerificationJobStatus::Processing,
+            'original_filename' => 'input.txt',
+            'input_disk' => 'local',
+            'input_key' => 'uploads/'.$user->id.'/job/input.txt',
+        ]);
+
+        Storage::disk('local')->put($job->input_key, "hit@example.com\nmiss@example.com\n");
+
+        app()->call([new ParseAndChunkJob($job->id), 'handle']);
+        $job->refresh();
+
+        $this->assertSame(2, $job->total_emails);
+        $this->assertSame(1, $job->cached_count);
+        $this->assertSame(0, $job->unknown_count);
+        $this->assertCount(0, $job->chunks()->get());
+
+        $this->assertNotNull($job->cached_valid_key);
+        $this->assertNotNull($job->cached_risky_key);
+
+        $validContent = Storage::disk('local')->get($job->cached_valid_key);
+        $riskyContent = Storage::disk('local')->get($job->cached_risky_key);
+
+        $this->assertStringContainsString('hit@example.com,cache_hit', $validContent);
+        $this->assertStringContainsString('miss@example.com,cache_miss', $riskyContent);
+    }
+
+    public function test_cache_only_mode_records_cache_misses_for_writeback_test(): void
+    {
+        Storage::fake('local');
+
+        config([
+            'verifier.storage_disk' => 'local',
+            'engine.cache_batch_size' => 10,
+            'engine.max_emails_per_upload' => 0,
+            'engine.dedupe_in_memory_limit' => 1000,
+            'engine.cache_only_mode_enabled' => true,
+            'engine.cache_only_miss_status' => 'risky',
+        ]);
+
+        EngineSetting::query()->update([
+            'cache_only_mode_enabled' => true,
+            'cache_only_miss_status' => 'risky',
+            'cache_writeback_test_mode_enabled' => true,
+        ]);
+
+        $store = new class implements EmailVerificationCacheStore {
+            public function lookupMany(array $emails): array
+            {
+                return [
+                    'hit@example.com' => [
+                        'status' => 'valid',
+                        'reason_code' => 'cache_hit',
+                    ],
+                ];
+            }
+        };
+
+        $this->app->instance(EmailVerificationCacheStore::class, $store);
+
+        $user = User::factory()->create();
+        $job = VerificationJob::create([
+            'user_id' => $user->id,
+            'status' => VerificationJobStatus::Processing,
+            'original_filename' => 'input.txt',
+            'input_disk' => 'local',
+            'input_key' => 'uploads/'.$user->id.'/job/input.txt',
+        ]);
+
+        Storage::disk('local')->put($job->input_key, "hit@example.com\nmiss@example.com\n");
+
+        app()->call([new ParseAndChunkJob($job->id), 'handle']);
+        $job->refresh();
+
+        $this->assertNotNull($job->cache_miss_key);
+        $this->assertTrue(Storage::disk('local')->exists($job->cache_miss_key));
+
+        $content = Storage::disk('local')->get($job->cache_miss_key);
+        $this->assertStringContainsString('miss@example.com', $content);
+        $this->assertStringNotContainsString('hit@example.com', $content);
     }
 }

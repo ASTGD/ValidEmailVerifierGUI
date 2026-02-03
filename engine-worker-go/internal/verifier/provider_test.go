@@ -1,0 +1,59 @@
+package verifier
+
+import "testing"
+
+func TestDomainMatchesSuffix(t *testing.T) {
+	tests := []struct {
+		domain string
+		suffix string
+		match  bool
+	}{
+		{"outlook.com", "outlook.com", true},
+		{"mail.outlook.com", "outlook.com", true},
+		{"mail.outlook.com", "*.outlook.com", true},
+		{"outlook.com", ".outlook.com", true},
+		{"example.com", "outlook.com", false},
+	}
+
+	for _, test := range tests {
+		if domainMatchesSuffix(test.domain, test.suffix) != test.match {
+			t.Fatalf("domainMatchesSuffix(%q, %q) expected %v", test.domain, test.suffix, test.match)
+		}
+	}
+}
+
+func TestApplyProviderOverrides(t *testing.T) {
+	perDomain := 1
+	connects := 15
+	backoff := 7
+	retries := 2
+
+	config := Config{
+		PerDomainConcurrency:    3,
+		SMTPRateLimitPerMinute:  60,
+		BackoffBaseMs:           200,
+		RetryableNetworkRetries: 1,
+	}
+
+	policy := ProviderPolicy{
+		PerDomainConcurrency:    &perDomain,
+		ConnectsPerMinute:       &connects,
+		TempfailBackoffSeconds:  &backoff,
+		RetryableNetworkRetries: &retries,
+	}
+
+	updated := applyProviderOverrides(config, policy)
+
+	if updated.PerDomainConcurrency != perDomain {
+		t.Fatalf("expected per-domain concurrency %d", perDomain)
+	}
+	if updated.SMTPRateLimitPerMinute != connects {
+		t.Fatalf("expected connects per minute %d", connects)
+	}
+	if updated.BackoffBaseMs != backoff*1000 {
+		t.Fatalf("expected backoff base %d", backoff*1000)
+	}
+	if updated.RetryableNetworkRetries != retries {
+		t.Fatalf("expected retries %d", retries)
+	}
+}

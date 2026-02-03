@@ -57,6 +57,19 @@ Laravel prepares work for the deep verification engine by parsing, deduping, and
 - Payload limits: `engine.feedback_max_items_per_request`, `engine.feedback_max_payload_kb`.
 - Retention jobs prune outcomes (`engine.feedback_retention_days`) and imports (`engine.feedback_import_retention_days`).
 
+## Final Output Schema + Deliverability Score
+Laravel finalization writes customer-facing CSVs with:
+```
+email,status,sub_status,score,reason
+```
+
+Score policy:
+- Deterministic 0–100 confidence score based on status + reason.
+- Catch-all results are capped and governed by admin policy:
+  - `risky_only` (default) always stays risky.
+  - `promote_if_score_gte` can promote to valid if score meets threshold.
+- Recent SG4 outcome cache hits adjust the score (boost for valid, reduce for invalid).
+
 ## Phase 13 — Engine Policy & Fleet Controls
 - Verification policies stored per mode (standard/enhanced) with timeouts, concurrency, and throttles.
 - Global engine settings: `engine_paused` and `enhanced_mode_enabled`.

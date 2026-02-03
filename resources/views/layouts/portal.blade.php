@@ -50,6 +50,11 @@
                     wire:navigate>
                     <i data-lucide="upload-cloud" class="w-5 h-5"></i> {{ __('Verify List') }}
                 </a>
+                <a href="{{ route('portal.single-check') }}"
+                    class="flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors {{ request()->routeIs('portal.single-check') ? 'bg-[#E9F2FB] text-[#1E7CCF] border-r-4 border-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}"
+                    wire:navigate>
+                    <i data-lucide="mail-check" class="w-5 h-5"></i> {{ __('Single Check') }}
+                </a>
                 <a href="{{ route('portal.jobs.index') }}"
                     class="flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors {{ request()->routeIs('portal.jobs.*') ? 'bg-[#E9F2FB] text-[#1E7CCF] border-r-4 border-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}"
                     wire:navigate>
@@ -215,6 +220,11 @@
                 class="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('portal.upload') ? 'bg-[#E9F2FB] text-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}"
                 wire:navigate>
                 {{ __('Verify List') }}
+            </a>
+            <a href="{{ route('portal.single-check') }}"
+                class="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('portal.single-check') ? 'bg-[#E9F2FB] text-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}"
+                wire:navigate>
+                {{ __('Single Check') }}
             </a>
             <a href="{{ route('portal.jobs.index') }}"
                 class="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('portal.jobs.*') ? 'bg-[#E9F2FB] text-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}"

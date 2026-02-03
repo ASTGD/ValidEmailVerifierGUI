@@ -19,6 +19,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('app:purge-verification-jobs')->daily();
         $schedule->command('prune:email-outcomes')->daily();
         $schedule->command('prune:feedback-imports')->daily();
+        $schedule->command('prune:worker-provisioning-bundles')->hourly();
+        $schedule->command('metrics:system')->everyMinute()->withoutOverlapping();
+        $schedule->command('metrics:queue')->everyMinute()->withoutOverlapping();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

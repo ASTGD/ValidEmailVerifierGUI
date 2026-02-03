@@ -9,6 +9,7 @@ use App\Filament\Resources\VerificationJobs\Schemas\VerificationJobForm;
 use App\Filament\Resources\VerificationJobs\Schemas\VerificationJobInfolist;
 use App\Filament\Resources\VerificationJobs\Tables\VerificationJobsTable;
 use App\Models\VerificationJob;
+use App\Support\EngineSettings;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -34,12 +35,36 @@ class VerificationJobResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->excludeAdminFailures();
+        $query = parent::getEloquentQuery()
+            ->excludeAdminFailures()
+            ->with(['metrics', 'engineServer', 'user'])
+            ->withCount([
+                'chunks',
+                'chunks as chunks_completed_count' => fn (Builder $chunkQuery) => $chunkQuery->where('status', 'completed'),
+            ]);
+
+        if (! EngineSettings::showSingleChecksInAdmin()) {
+            $query->excludeSingleCheck();
+        }
+
+        return $query;
     }
 
     public static function getRecordRouteBindingEloquentQuery(): Builder
     {
-        return parent::getRecordRouteBindingEloquentQuery()->excludeAdminFailures();
+        $query = parent::getRecordRouteBindingEloquentQuery()
+            ->excludeAdminFailures()
+            ->with(['metrics', 'engineServer', 'user'])
+            ->withCount([
+                'chunks',
+                'chunks as chunks_completed_count' => fn (Builder $chunkQuery) => $chunkQuery->where('status', 'completed'),
+            ]);
+
+        if (! EngineSettings::showSingleChecksInAdmin()) {
+            $query->excludeSingleCheck();
+        }
+
+        return $query;
     }
 
     public static function infolist(Schema $schema): Schema

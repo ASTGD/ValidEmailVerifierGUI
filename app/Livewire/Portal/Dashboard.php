@@ -17,6 +17,7 @@ class Dashboard extends Component
     {
         return VerificationJob::query()
             ->where('user_id', Auth::id())
+            ->excludeSingleCheck()
             ->latest()
             ->first();
     }
@@ -33,6 +34,7 @@ class Dashboard extends Component
     {
         return VerificationJob::query()
             ->where('user_id', Auth::id())
+            ->excludeSingleCheck()
             ->latest()
             ->limit(10)
             ->get();
@@ -42,6 +44,7 @@ class Dashboard extends Component
     {
         return VerificationJob::query()
             ->where('user_id', Auth::id())
+            ->excludeSingleCheck()
             ->whereIn('status', [VerificationJobStatus::Pending, VerificationJobStatus::Processing])
             ->count();
     }
@@ -102,6 +105,7 @@ class Dashboard extends Component
 
         return VerificationJob::query()
             ->where('user_id', Auth::id())
+            ->excludeSingleCheck()
             ->where('status', VerificationJobStatus::Completed)
             ->where(function (Builder $query) use ($startOfMonth) {
                 $query->where('finished_at', '>=', $startOfMonth)

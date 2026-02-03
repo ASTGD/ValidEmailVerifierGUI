@@ -62,6 +62,10 @@ class VerifierChunkClaimNextController
             $chunk = VerificationJobChunk::query()
                 ->where('status', 'pending')
                 ->where(function ($query) use ($now) {
+                    $query->whereNull('available_at')
+                        ->orWhere('available_at', '<=', $now);
+                })
+                ->where(function ($query) use ($now) {
                     $query->whereNull('claim_expires_at')
                         ->orWhere('claim_expires_at', '<', $now);
                 })

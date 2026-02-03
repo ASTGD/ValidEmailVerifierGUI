@@ -30,6 +30,7 @@ class User extends Authenticatable implements FilamentUser
         'name',
         'email',
         'password',
+        'enhanced_enabled',
         'first_name',
         'last_name',
         'company_name',
@@ -83,6 +84,7 @@ class User extends Authenticatable implements FilamentUser
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'enhanced_enabled' => 'boolean',
         ];
     }
 

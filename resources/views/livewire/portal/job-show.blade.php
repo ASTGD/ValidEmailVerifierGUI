@@ -90,6 +90,9 @@
                         <p class="text-3xl font-black text-[#F59E0B]">{{ number_format($job->risky_count ?? 0) }}</p>
                     </div>
                 </div>
+                <p class="mt-6 text-xs text-[#64748B]">
+                    {{ __('Deliverability Confidence Score (0–100) appears in your downloaded CSV and reflects how strongly each result is supported.') }}
+                </p>
             </div>
 
             @if ($job->error_message)

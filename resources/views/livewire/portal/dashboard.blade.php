@@ -105,6 +105,11 @@
         </div>
     </div>
 
+    <!-- 2.5 SINGLE EMAIL TEST -->
+    <div class="max-w-4xl mx-auto">
+        <livewire:portal.single-check />
+    </div>
+
     <!-- 3. RECENT JOBS TABLE SECTION -->
     <div class="bg-white rounded-[2.5rem] border border-[#E2E8F0] shadow-sm overflow-hidden">
         <div class="px-8 py-6 border-b border-[#E2E8F0] flex items-center justify-between bg-white">

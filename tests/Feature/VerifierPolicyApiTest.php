@@ -48,6 +48,7 @@ class VerifierPolicyApiTest extends TestCase
                     'contract_version',
                     'engine_paused',
                     'enhanced_mode_enabled',
+                    'provider_policies',
                     'policies' => [
                         'standard' => [
                             'mode',

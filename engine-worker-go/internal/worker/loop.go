@@ -48,6 +48,7 @@ type policyState struct {
 	heloName             string
 	mailFromAddress      string
 	identityDomain       string
+	providerPolicies     []verifier.ProviderPolicy
 	standard             policyConfig
 	enhanced             policyConfig
 }
@@ -459,6 +460,7 @@ func policyStateFrom(resp *api.PolicyResponse) policyState {
 		enhancedModeEnabled:  resp.Data.EnhancedModeEnabled,
 		roleAccountsBehavior: normalizeRoleAccountsBehavior(resp.Data.RoleAccountsBehavior),
 		roleAccounts:         mapFromSlice(resp.Data.RoleAccountsList),
+		providerPolicies:     providerPoliciesFrom(resp.Data.ProviderPolicies),
 	}
 
 	if policy, ok := resp.Data.Policies["standard"]; ok {
@@ -485,6 +487,59 @@ func policyConfigFrom(policy api.Policy) policyConfig {
 		TempfailBackoffSeconds:     policy.TempfailBackoffSeconds,
 		CircuitBreakerTempfailRate: policy.CircuitBreakerTempfailRate,
 	}
+}
+
+func providerPoliciesFrom(policies []api.ProviderPolicy) []verifier.ProviderPolicy {
+	if len(policies) == 0 {
+		return nil
+	}
+
+	output := make([]verifier.ProviderPolicy, 0, len(policies))
+
+	for _, policy := range policies {
+		name := strings.TrimSpace(policy.Name)
+		if name == "" {
+			continue
+		}
+
+		domains := normalizeProviderDomains(policy.Domains)
+		if len(domains) == 0 {
+			continue
+		}
+
+		output = append(output, verifier.ProviderPolicy{
+			Name:                    name,
+			Enabled:                 policy.Enabled,
+			Domains:                 domains,
+			PerDomainConcurrency:    policy.PerDomainConcurrency,
+			ConnectsPerMinute:       policy.ConnectsPerMinute,
+			TempfailBackoffSeconds:  policy.TempfailBackoffSeconds,
+			RetryableNetworkRetries: policy.RetryableNetworkRetries,
+		})
+	}
+
+	return output
+}
+
+func normalizeProviderDomains(domains []string) []string {
+	output := make([]string, 0, len(domains))
+	seen := map[string]struct{}{}
+
+	for _, domain := range domains {
+		domain = strings.ToLower(strings.TrimSpace(domain))
+		domain = strings.TrimPrefix(domain, ".")
+		domain = strings.TrimPrefix(domain, "*.")
+		if domain == "" {
+			continue
+		}
+		if _, ok := seen[domain]; ok {
+			continue
+		}
+		seen[domain] = struct{}{}
+		output = append(output, domain)
+	}
+
+	return output
 }
 
 func (w *Worker) enginePaused() bool {
@@ -543,21 +598,23 @@ func (w *Worker) verifierForMode(mode string, policy policyConfig, hasPolicy boo
 		config = applyPolicy(config, policy)
 	}
 
-	var smtpChecker verifier.SMTPChecker
+	var smtpFactory verifier.SMTPCheckerFactory
 	if mode == "enhanced" {
-		smtpChecker = verifier.NetSMTPProber{
-			Dialer:                   nil,
-			ConnectTimeout:           time.Duration(config.SMTPConnectTimeout) * time.Millisecond,
-			ReadTimeout:              time.Duration(config.SMTPReadTimeout) * time.Millisecond,
-			EhloTimeout:              time.Duration(config.SMTPEhloTimeout) * time.Millisecond,
-			HeloName:                 config.HeloName,
-			MailFromAddress:          config.MailFromAddress,
-			RateLimiter:              verifier.NewRateLimiter(config.SMTPRateLimitPerMinute),
-			CatchAllDetectionEnabled: config.CatchAllDetectionEnabled,
+		smtpFactory = func(cfg verifier.Config) verifier.SMTPChecker {
+			return verifier.NetSMTPProber{
+				Dialer:                   nil,
+				ConnectTimeout:           time.Duration(cfg.SMTPConnectTimeout) * time.Millisecond,
+				ReadTimeout:              time.Duration(cfg.SMTPReadTimeout) * time.Millisecond,
+				EhloTimeout:              time.Duration(cfg.SMTPEhloTimeout) * time.Millisecond,
+				HeloName:                 cfg.HeloName,
+				MailFromAddress:          cfg.MailFromAddress,
+				RateLimiter:              verifier.NewRateLimiter(cfg.SMTPRateLimitPerMinute),
+				CatchAllDetectionEnabled: cfg.CatchAllDetectionEnabled,
+			}
 		}
 	}
 
-	return verifier.NewPipelineVerifier(config, verifier.NetMXResolver{}, smtpChecker)
+	return verifier.NewProviderAwareVerifier(config, verifier.NetMXResolver{}, smtpFactory, state.providerPolicies)
 }
 
 func applyGlobalOverrides(config verifier.Config, state policyState) verifier.Config {

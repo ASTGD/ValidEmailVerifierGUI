@@ -7,7 +7,7 @@ use App\Enums\VerificationMode;
 use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
-use App\Support\EngineSettings;
+use App\Support\EnhancedModeGate;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
@@ -47,15 +47,14 @@ class Upload extends Component
     public function save(JobStorage $storage)
     {
         $this->validate();
-        $enhancedEnabled = EngineSettings::enhancedModeEnabled();
+        $user = Auth::user();
+        $enhancedGate = EnhancedModeGate::evaluate($user);
 
-        if (! $enhancedEnabled && $this->verification_mode === VerificationMode::Enhanced->value) {
-            $this->addError('verification_mode', __('Enhanced mode is coming soon.'));
+        if (! $enhancedGate['allowed'] && $this->verification_mode === VerificationMode::Enhanced->value) {
+            $this->addError('verification_mode', EnhancedModeGate::message($user));
 
             return;
         }
-
-        $user = Auth::user();
 
         $rateKey = 'portal-upload|'.$user->id;
         $maxAttempts = (int) config('verifier.portal_upload_max_attempts', 10);
@@ -123,5 +122,10 @@ class Upload extends Component
     public function render()
     {
         return view('livewire.portal.upload');
+    }
+
+    public function getEnhancedGateProperty(): array
+    {
+        return EnhancedModeGate::evaluate(Auth::user());
     }
 }

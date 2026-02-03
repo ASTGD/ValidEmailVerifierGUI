@@ -8,6 +8,8 @@ use App\Models\VerificationJob;
 use App\Models\VerificationJobChunk;
 use App\Services\EmailDedupeStore;
 use App\Services\JobStorage;
+use App\Services\JobMetricsRecorder;
+use App\Support\EngineSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -43,10 +45,18 @@ class ParseAndChunkJob implements ShouldQueue
     ];
     private array $cachedStreams = [];
     private array $cachedKeys = [];
+    private $cacheMissStream = null;
+    private ?string $cacheMissKey = null;
 
     private ?VerificationJob $verificationJob = null;
     private ?EmailDedupeStore $deduper = null;
     private array $batch = [];
+    private bool $cacheOnlyMode = false;
+    private string $cacheOnlyMissStatus = 'risky';
+    private string $cacheFailureMode = 'fail_job';
+    private bool $skipCache = false;
+    private bool $cacheWritebackTestEnabled = false;
+    private ?JobMetricsRecorder $metricsRecorder = null;
 
     private $chunkStream = null;
     private int $chunkNo = 1;
@@ -56,7 +66,7 @@ class ParseAndChunkJob implements ShouldQueue
     {
     }
 
-    public function handle(JobStorage $storage, EmailVerificationCacheStore $cacheStore): void
+    public function handle(JobStorage $storage, EmailVerificationCacheStore $cacheStore, JobMetricsRecorder $metricsRecorder): void
     {
         $this->verificationJob = VerificationJob::query()->find($this->jobId);
 
@@ -65,11 +75,14 @@ class ParseAndChunkJob implements ShouldQueue
         }
 
         $this->configure();
+        $this->metricsRecorder = $metricsRecorder;
         $this->deduper = new EmailDedupeStore($this->dedupeMemoryLimit);
 
         // Control-plane only: avoid MX/DNS/SMTP checks here; engine workers handle those.
         try {
+            $this->metricsRecorder?->recordPhase($this->verificationJob, 'prepare');
             $this->verificationJob->addLog('parse_started', 'Parsing input file for verification pipeline.');
+            $this->metricsRecorder?->recordPhase($this->verificationJob, 'parse_cache');
 
             $disk = $this->verificationJob->input_disk ?: $storage->disk();
             $key = $this->verificationJob->input_key;
@@ -94,6 +107,7 @@ class ParseAndChunkJob implements ShouldQueue
             $this->flushBatch($cacheStore, $storage, $disk);
             $this->finalizeChunk($storage, $disk);
             $this->finalizeCachedOutputs($storage, $disk);
+            $this->finalizeCacheMissList($storage, $disk);
 
             $this->verificationJob->update([
                 'total_emails' => $this->totalUnique,
@@ -103,6 +117,7 @@ class ParseAndChunkJob implements ShouldQueue
                 'cached_valid_key' => $this->cachedKeys['valid'] ?? null,
                 'cached_invalid_key' => $this->cachedKeys['invalid'] ?? null,
                 'cached_risky_key' => $this->cachedKeys['risky'] ?? null,
+                'cache_miss_key' => $this->cacheMissKey,
             ]);
 
             $this->verificationJob->addLog('parse_completed', 'Input parsing complete.', [
@@ -112,6 +127,20 @@ class ParseAndChunkJob implements ShouldQueue
                 'chunks_created' => $this->chunksCreated,
                 'cached_counts' => $this->cachedCounts,
             ]);
+
+            $nextPhase = $this->chunksCreated > 0 ? 'verify_chunks' : 'finalize';
+            $this->metricsRecorder?->recordPhase($this->verificationJob, $nextPhase, [
+                'processed_emails' => $this->totalUnique,
+                'total_emails' => $this->totalUnique,
+                'cache_hit_count' => $this->cachedCount,
+                'cache_miss_count' => max(0, $this->totalUnique - $this->cachedCount),
+                'progress_percent' => 50,
+            ]);
+
+            if ($this->cacheOnlyMode && $this->chunksCreated === 0) {
+                $this->verificationJob->addLog('finalize_queued', 'Finalization queued for cache-only run.');
+                FinalizeVerificationJob::dispatch($this->verificationJob->id);
+            }
         } catch (Throwable $exception) {
             $this->failJob('Failed to prepare verification job.', [
                 'error' => $exception->getMessage(),
@@ -127,9 +156,13 @@ class ParseAndChunkJob implements ShouldQueue
     {
         $this->chunkSize = max(1, (int) $this->engineConfig('chunk_size_default', 5000));
         $this->maxEmails = max(0, (int) $this->engineConfig('max_emails_per_upload', 0));
-        $this->cacheBatchSize = max(1, (int) $this->engineConfig('cache_batch_size', 100));
+        $this->cacheBatchSize = EngineSettings::cacheBatchSize();
         $this->dedupeMemoryLimit = max(0, (int) $this->engineConfig('dedupe_in_memory_limit', 100000));
         $this->xlsxRowBatchSize = max(100, (int) $this->engineConfig('xlsx_row_batch_size', 1000));
+        $this->cacheOnlyMode = EngineSettings::cacheOnlyEnabled();
+        $this->cacheOnlyMissStatus = EngineSettings::cacheOnlyMissStatus();
+        $this->cacheFailureMode = EngineSettings::cacheFailureMode();
+        $this->cacheWritebackTestEnabled = EngineSettings::cacheWritebackTestEnabled();
     }
 
     private function engineConfig(string $key, mixed $fallback = null): mixed
@@ -292,7 +325,31 @@ class ParseAndChunkJob implements ShouldQueue
             'batch_size' => $batchSize,
         ]);
 
-        $hits = $cacheStore->lookupMany($this->batch);
+        if ($this->skipCache) {
+            $hits = [];
+        } else {
+            try {
+                $hits = $cacheStore->lookupMany($this->batch);
+            } catch (Throwable $exception) {
+                $this->verificationJob?->addLog('cache_lookup_failed', 'Cache lookup failed.', [
+                    'batch_size' => $batchSize,
+                    'error' => $exception->getMessage(),
+                ]);
+
+                if ($this->cacheFailureMode === 'treat_miss') {
+                    $hits = [];
+                } elseif ($this->cacheFailureMode === 'skip_cache') {
+                    $this->skipCache = true;
+                    $this->cacheOnlyMode = false;
+                    $hits = [];
+                    $this->verificationJob?->addLog('cache_lookup_skipped', 'Cache disabled after failure; continuing without cache.', [
+                        'batch_size' => $batchSize,
+                    ]);
+                } else {
+                    throw $exception;
+                }
+            }
+        }
         $hitCount = count($hits);
 
         $this->verificationJob?->addLog('cache_hits_found', 'Cache hits found.', [
@@ -307,7 +364,12 @@ class ParseAndChunkJob implements ShouldQueue
                 continue;
             }
 
-            $this->writeToChunk($email, $storage, $disk);
+            if ($this->cacheOnlyMode) {
+                $this->handleCacheMiss($email, $storage, $disk);
+            } else {
+                $this->recordCacheMiss($email, $storage, $disk);
+                $this->writeToChunk($email, $storage, $disk);
+            }
         }
 
         $this->batch = [];
@@ -316,6 +378,8 @@ class ParseAndChunkJob implements ShouldQueue
             'batch_size' => $batchSize,
             'hit_count' => $hitCount,
         ]);
+
+        $this->recordParseMetrics();
     }
 
     private function writeToChunk(string $email, JobStorage $storage, string $disk): void
@@ -381,6 +445,22 @@ class ParseAndChunkJob implements ShouldQueue
         $this->cachedCounts[$status]++;
     }
 
+    private function handleCacheMiss(string $email, JobStorage $storage, string $disk): void
+    {
+        if ($this->cacheWritebackTestEnabled) {
+            $this->recordCacheMiss($email, $storage, $disk);
+        }
+
+        $status = in_array($this->cacheOnlyMissStatus, ['valid', 'invalid', 'risky'], true)
+            ? $this->cacheOnlyMissStatus
+            : 'risky';
+
+        $line = $email.',cache_miss';
+
+        $this->writeCached($status, $line, $storage, $disk);
+        $this->cachedCounts[$status]++;
+    }
+
     private function writeCached(string $status, string $line, JobStorage $storage, string $disk): void
     {
         if (! isset($this->cachedStreams[$status])) {
@@ -406,6 +486,27 @@ class ParseAndChunkJob implements ShouldQueue
             Storage::disk($disk)->put($key, $stream);
             fclose($stream);
         }
+    }
+
+    private function recordCacheMiss(string $email, JobStorage $storage, string $disk): void
+    {
+        if (! $this->cacheMissStream) {
+            $this->cacheMissStream = tmpfile();
+            $this->cacheMissKey = $storage->cacheMissKey($this->verificationJob);
+        }
+
+        fwrite($this->cacheMissStream, $email.PHP_EOL);
+    }
+
+    private function finalizeCacheMissList(JobStorage $storage, string $disk): void
+    {
+        if (! $this->cacheMissStream || ! is_resource($this->cacheMissStream) || ! $this->cacheMissKey) {
+            return;
+        }
+
+        rewind($this->cacheMissStream);
+        Storage::disk($disk)->put($this->cacheMissKey, $this->cacheMissStream);
+        fclose($this->cacheMissStream);
     }
 
     private function normalizeEmail(string $email): ?string
@@ -484,5 +585,31 @@ class ParseAndChunkJob implements ShouldQueue
         ]);
 
         $this->verificationJob->addLog('prepare_failed', $message, $context);
+
+        $this->metricsRecorder?->recordPhase($this->verificationJob, 'failed', [
+            'progress_percent' => 100,
+        ]);
+    }
+
+    private function recordParseMetrics(): void
+    {
+        if (! $this->verificationJob || ! $this->metricsRecorder) {
+            return;
+        }
+
+        $this->metricsRecorder->recordPhase($this->verificationJob, 'parse_cache', [
+            'processed_emails' => $this->totalUnique,
+            'cache_hit_count' => $this->cachedCount,
+            'cache_miss_count' => max(0, $this->totalUnique - $this->cachedCount),
+            'progress_percent' => $this->estimateParseProgress(),
+        ]);
+    }
+
+    private function estimateParseProgress(): int
+    {
+        $estimate = max(1, (int) $this->engineConfig('max_emails_per_upload', 100000));
+        $ratio = min(1, $this->totalUnique / $estimate);
+
+        return (int) round(10 + (40 * $ratio));
     }
 }

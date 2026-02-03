@@ -19,6 +19,7 @@ class VerifierPolicyController
                 'enhanced_mode_enabled' => EngineSettings::enhancedModeEnabled(),
                 'role_accounts_behavior' => EngineSettings::roleAccountsBehavior(),
                 'role_accounts_list' => EngineSettings::roleAccountsList(),
+                'provider_policies' => EngineSettings::providerPolicies(),
                 'policies' => [
                     'standard' => $policies['standard'] ?? [],
                     'enhanced' => $policies['enhanced'] ?? [],

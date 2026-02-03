@@ -25,6 +25,12 @@ class EngineSettingsTable
                 TextColumn::make('role_accounts_list')
                     ->label('Role list')
                     ->limit(40),
+                TextColumn::make('catch_all_policy')
+                    ->label('Catch-all policy')
+                    ->badge(),
+                TextColumn::make('catch_all_promote_threshold')
+                    ->label('Catch-all threshold')
+                    ->formatStateUsing(fn ($state) => $state === null ? '—' : $state),
                 TextColumn::make('updated_at')
                     ->label('Updated')
                     ->since(),

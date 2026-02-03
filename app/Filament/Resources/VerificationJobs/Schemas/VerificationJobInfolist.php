@@ -7,8 +7,10 @@ use App\Enums\VerificationMode;
 use App\Filament\Resources\VerificationJobChunks\VerificationJobChunkResource;
 use App\Models\VerificationJob;
 use App\Models\VerificationJobChunk;
+use App\Support\JobProgressCalculator;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ViewEntry;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 
@@ -151,6 +153,46 @@ class VerificationJobInfolist
                         TextEntry::make('finished_at')
                             ->label('Finished')
                             ->dateTime()
+                            ->placeholder('-'),
+                    ])
+                    ->columns(3),
+                Section::make('Progress & Metrics')
+                    ->schema([
+                        ViewEntry::make('progress')
+                            ->label('Progress')
+                            ->state(fn (VerificationJob $record): int => JobProgressCalculator::progressPercent($record))
+                            ->view('filament.infolists.progress-bar')
+                            ->columnSpanFull(),
+                        TextEntry::make('metrics.phase')
+                            ->label('Phase')
+                            ->formatStateUsing(fn ($state, VerificationJob $record): string => JobProgressCalculator::phaseLabel($record))
+                            ->badge()
+                            ->color('gray'),
+                        TextEntry::make('metrics.processed_emails')
+                            ->label('Processed')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.total_emails')
+                            ->label('Total')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.cache_hit_count')
+                            ->label('Cache hits')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.cache_miss_count')
+                            ->label('Cache misses')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.writeback_written_count')
+                            ->label('Write-back written')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.peak_cpu_percent')
+                            ->label('Peak CPU %')
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.peak_memory_mb')
+                            ->label('Peak memory (MB)')
                             ->placeholder('-'),
                     ])
                     ->columns(3),
@@ -307,7 +349,9 @@ class VerificationJobInfolist
                             ->columns(['default' => 1, 'md' => 3])
                             ->placeholder('No logs recorded yet.'),
                     ])
-                    ->columnSpanFull(),
+                    ->columnSpanFull()
+                    ->collapsible()
+                    ->collapsed(),
                 Section::make('Error')
                     ->schema([
                         TextEntry::make('error_message')
