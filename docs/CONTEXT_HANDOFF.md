@@ -203,4 +203,4 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Installed Laravel Horizon with admin-only access gate (requires Horizon enabled in settings).
 - Added Engine Settings -> Queue Engine tab to control queue connection, cache store, and Horizon toggle.
 - Runtime config overrides apply queue/cache settings from Engine Settings, with Redis availability fallback to avoid errors.
-- Added embedded Horizon page in Filament as **Queue Engine** (Operations menu).
+- Added Operations menu link **Queue Engine** that opens Horizon in a new tab.
