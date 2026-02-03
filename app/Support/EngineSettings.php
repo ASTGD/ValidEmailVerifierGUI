@@ -411,6 +411,29 @@ class EngineSettings
         return in_array($source, ['container', 'host'], true) ? $source : 'container';
     }
 
+    public static function queueConnection(): string
+    {
+        $default = (string) config('queue.default', 'database');
+        $value = self::stringValue('queue_connection', '');
+        $value = $value === '' ? $default : strtolower(trim($value));
+
+        return in_array($value, ['redis', 'database', 'sync'], true) ? $value : $default;
+    }
+
+    public static function cacheStore(): string
+    {
+        $default = (string) config('cache.default', 'database');
+        $value = self::stringValue('cache_store', '');
+        $value = $value === '' ? $default : strtolower(trim($value));
+
+        return in_array($value, ['redis', 'database', 'file', 'array'], true) ? $value : $default;
+    }
+
+    public static function horizonEnabled(): bool
+    {
+        return self::boolValue('horizon_enabled', false);
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */

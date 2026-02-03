@@ -54,6 +54,9 @@ class EngineSetting extends Model
         'monitor_dns_server_ip',
         'monitor_dns_server_port',
         'metrics_source',
+        'queue_connection',
+        'cache_store',
+        'horizon_enabled',
     ];
 
     protected $casts = [
@@ -90,5 +93,6 @@ class EngineSetting extends Model
         'monitor_enabled' => 'boolean',
         'monitor_interval_minutes' => 'integer',
         'monitor_dns_server_port' => 'integer',
+        'horizon_enabled' => 'boolean',
     ];
 }

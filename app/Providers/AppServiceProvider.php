@@ -11,11 +11,13 @@ use App\Services\EmailVerificationCache\DatabaseEmailVerificationCacheStore;
 use App\Services\EmailVerificationCache\DynamoDbCacheWriteBackService;
 use App\Services\EmailVerificationCache\DynamoDbEmailVerificationCacheStore;
 use App\Services\EmailVerificationCache\NullCacheStore;
+use App\Support\EngineSettings;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Cashier\Cashier;
 
@@ -56,6 +58,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->applyRuntimeQueueSettings();
+
         Gate::policy(VerificationJob::class, VerificationJobPolicy::class);
 
         \App\Models\SupportTicket::observe(\App\Observers\SupportTicketObserver::class);
@@ -122,5 +126,47 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute($limit)->by('feedback-api|' . $key);
         });
+    }
+
+    private function applyRuntimeQueueSettings(): void
+    {
+        try {
+            $queueConnection = EngineSettings::queueConnection();
+            $cacheStore = EngineSettings::cacheStore();
+        } catch (\Throwable $exception) {
+            return;
+        }
+
+        $redisAvailable = $this->redisAvailable();
+
+        if ($queueConnection === 'redis' && ! $redisAvailable) {
+            $queueConnection = config('queue.default', 'database');
+            if ($queueConnection === 'redis') {
+                $queueConnection = 'database';
+            }
+        }
+
+        if ($cacheStore === 'redis' && ! $redisAvailable) {
+            $cacheStore = config('cache.default', 'database');
+            if ($cacheStore === 'redis') {
+                $cacheStore = 'database';
+            }
+        }
+
+        config([
+            'queue.default' => $queueConnection,
+            'cache.default' => $cacheStore,
+        ]);
+    }
+
+    private function redisAvailable(): bool
+    {
+        try {
+            Redis::connection('default')->ping();
+
+            return true;
+        } catch (\Throwable $exception) {
+            return false;
+        }
     }
 }

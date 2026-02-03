@@ -9,6 +9,8 @@ use App\Filament\Widgets\FeedbackAnalytics;
 use App\Filament\Widgets\EngineWarmupOverview;
 use App\Filament\Widgets\FinalizationHealth;
 use App\Filament\Pages\OpsOverview;
+use App\Support\EngineSettings;
+use App\Support\Roles;
 use Filament\Support\Assets\Css;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -18,6 +20,8 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\Support\Icons\Heroicon;
+use Filament\Navigation\NavigationItem;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -50,6 +54,27 @@ class AdminPanelProvider extends PanelProvider
             ->pages([
                 Dashboard::class,
                 OpsOverview::class,
+            ])
+            ->navigationItems([
+                NavigationItem::make('Queue Engine')
+                    ->group('Operations')
+                    ->icon(Heroicon::OutlinedQueueList)
+                    ->sort(10)
+                    ->url(fn (): string => url('/' . trim((string) config('horizon.path', 'horizon'), '/')))
+                    ->openUrlInNewTab()
+                    ->visible(function (): bool {
+                        $user = auth()->user();
+
+                        if (! $user || ! method_exists($user, 'hasRole') || ! $user->hasRole(Roles::ADMIN)) {
+                            return false;
+                        }
+
+                        try {
+                            return EngineSettings::horizonEnabled();
+                        } catch (\Throwable $exception) {
+                            return false;
+                        }
+                    }),
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
