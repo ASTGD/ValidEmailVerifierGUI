@@ -47,6 +47,7 @@ class CustomerForm
                                     ->unique(ignoreRecord: true),
                                 TextInput::make('password')
                                     ->label('Password')
+                                    ->placeholder('(Leave blank if you dont want to change it in editing time)')
                                     ->password()
                                     ->revealable()
                                     ->dehydrateStateUsing(fn($state) => filled($state) ? Hash::make($state) : null)
