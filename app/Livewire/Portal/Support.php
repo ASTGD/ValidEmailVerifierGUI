@@ -83,6 +83,8 @@ class Support extends Component
         $this->reset(['subject', 'message', 'attachment']);
         session()->flash('status', 'Ticket created successfully.');
 
+        \App\Support\AdminAuditLogger::log('ticket_opened', $ticket);
+
         return redirect()->route('portal.support.show', $ticket);
     }
 }

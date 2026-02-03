@@ -17,4 +17,9 @@ class ListCustomers extends ListRecords
     {
         return [];
     }
+
+    public function getMaxContentWidth(): \Filament\Support\Enums\Width|string|null
+    {
+        return 'full';
+    }
 }

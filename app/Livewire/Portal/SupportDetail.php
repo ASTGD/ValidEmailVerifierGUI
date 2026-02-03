@@ -43,8 +43,9 @@ class SupportDetail extends Component
             'is_admin' => false,
         ]);
 
-        // Update status to Customer-Reply so Admin sees the customer replied
         $this->ticket->update(['status' => SupportTicketStatus::CustomerReply]);
+
+        \App\Support\AdminAuditLogger::log('ticket_reply_sent', $this->ticket);
 
         $this->reset(['message', 'attachment']);
         $this->ticket->refresh();
@@ -64,10 +65,11 @@ class SupportDetail extends Component
             abort(403);
         }
 
-        // 2. Update status using your Enum
         $this->ticket->update([
             'status' => \App\Enums\SupportTicketStatus::Closed
         ]);
+
+        \App\Support\AdminAuditLogger::log('ticket_closed', $this->ticket);
 
         // 3. Optional: Add a log or notification
         session()->flash('status', 'Ticket has been marked as Closed.');

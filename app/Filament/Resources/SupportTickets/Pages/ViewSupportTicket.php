@@ -61,6 +61,8 @@ class ViewSupportTicket extends ViewRecord
                     ]);
 
                     $this->record->update(['status' => $data['status']]);
+
+                    \App\Support\AdminAuditLogger::log('ticket_reply_sent', $this->record);
                 }),
 
             // MARK AS RESOLVED
@@ -69,7 +71,10 @@ class ViewSupportTicket extends ViewRecord
                 ->icon('heroicon-m-check-badge')
                 ->color('success')
                 ->requiresConfirmation()
-                ->action(fn() => $this->record->update(['status' => SupportTicketStatus::Resolved]))
+                ->action(function () {
+                    $this->record->update(['status' => SupportTicketStatus::Resolved]);
+                    \App\Support\AdminAuditLogger::log('ticket_resolved', $this->record);
+                })
                 ->visible(fn() => $this->record->status !== SupportTicketStatus::Resolved),
 
             // CLOSE TICKET
@@ -78,7 +83,10 @@ class ViewSupportTicket extends ViewRecord
                 ->icon('heroicon-m-x-circle')
                 ->color('danger')
                 ->requiresConfirmation()
-                ->action(fn() => $this->record->update(['status' => SupportTicketStatus::Closed]))
+                ->action(function () {
+                    $this->record->update(['status' => SupportTicketStatus::Closed]);
+                    \App\Support\AdminAuditLogger::log('ticket_closed', $this->record);
+                })
                 ->visible(fn() => $this->record->status !== SupportTicketStatus::Closed),
 
         ];

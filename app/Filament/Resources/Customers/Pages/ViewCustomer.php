@@ -13,6 +13,21 @@ class ViewCustomer extends ViewRecord
 {
     protected static string $resource = CustomerResource::class;
 
+    public function hasCombinedRelationManagerTabsWithContent(): bool
+    {
+        return true;
+    }
+
+    public function getContentTabLabel(): ?string
+    {
+        return 'Summary';
+    }
+
+    public function getContentTabIcon(): ?string
+    {
+        return 'heroicon-m-user-circle';
+    }
+
     /**
      * @return array<class-string<Action>>
      */
@@ -48,5 +63,10 @@ class ViewCustomer extends ViewRecord
                         ->send();
                 }),
         ];
+    }
+
+    public function getMaxContentWidth(): \Filament\Support\Enums\Width|string|null
+    {
+        return 'full';
     }
 }
