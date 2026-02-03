@@ -34,6 +34,7 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
+            ->maxContentWidth(\Filament\Support\Enums\Width::Full)
             ->sidebarCollapsibleOnDesktop()
             ->login()
             ->brandName(config('verifier.brand_name') ?: config('app.name'))
