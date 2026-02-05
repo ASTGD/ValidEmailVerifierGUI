@@ -224,3 +224,8 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 ### 2026-02-05 — Go worker control plane + dashboard specs
 - Added control plane API spec and Go dashboard UI plan for a Horizon-style Go worker control center.
 - Files updated: `docs/GO_WORKER_CONTROL_PLANE_SPEC.md`, `docs/GO_WORKER_DASHBOARD_UI.md`.
+
+### 2026-02-05 — Go control plane (Phase 1)
+- Added Go control plane service skeleton (API endpoints + Redis storage) under `services/go-control-plane`.
+- Includes heartbeat handling, desired state commands, pool scaling, and auth middleware.
+- Files updated: `services/go-control-plane/*`, `docs/GO_WORKER_CONTROL_PLANE_SPEC.md`.
