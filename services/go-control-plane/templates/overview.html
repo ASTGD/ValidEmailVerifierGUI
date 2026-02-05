@@ -1,0 +1,94 @@
+{{ define "overview" }}
+<section class="grid gap-6 lg:grid-cols-3">
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Active Workers</p>
+        <p class="mt-3 text-3xl font-semibold">{{ .WorkerCount }}</p>
+        <p class="mt-2 text-sm text-slate-400">Workers with fresh heartbeat.</p>
+    </div>
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Pools Known</p>
+        <p class="mt-3 text-3xl font-semibold">{{ .PoolCount }}</p>
+        <p class="mt-2 text-sm text-slate-400">Pools registered by workers.</p>
+    </div>
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Desired Capacity</p>
+        <p class="mt-3 text-3xl font-semibold">{{ .DesiredTotal }}</p>
+        <p class="mt-2 text-sm text-slate-400">Sum of pool desired workers.</p>
+    </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Pool Capacity Snapshot</h2>
+            <p class="text-sm text-slate-400">Online workers vs desired capacity.</p>
+        </div>
+        <span class="text-xs text-slate-400">Updated on refresh</span>
+    </div>
+    <div class="mt-6">
+        <canvas id="poolChart" height="120"></canvas>
+    </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <h2 class="text-lg font-semibold">Pool Summary</h2>
+    <div class="mt-4 grid gap-4 md:grid-cols-2">
+        {{ range .Pools }}
+            <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-semibold">{{ .Pool }}</p>
+                        <p class="text-xs text-slate-400">Online {{ .Online }} / Desired {{ .Desired }}</p>
+                    </div>
+                    <span class="rounded-full bg-slate-800 px-3 py-1 text-xs">{{ if gt .Desired 0 }}{{ .Online }} / {{ .Desired }}{{ else }}{{ .Online }} active{{ end }}</span>
+                </div>
+            </div>
+        {{ else }}
+            <p class="text-sm text-slate-400">No pools yet. Workers will register pools automatically.</p>
+        {{ end }}
+    </div>
+</section>
+
+<script src="/assets/chart.min.js" defer></script>
+<script defer>
+    window.addEventListener('DOMContentLoaded', () => {
+        const ctx = document.getElementById('poolChart');
+        if (!ctx) return;
+
+        const labels = {{ toJSON .ChartLabels }};
+        const online = {{ toJSON .ChartOnline }};
+        const desired = {{ toJSON .ChartDesired }};
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Online',
+                        data: online,
+                        backgroundColor: '#f59e0b',
+                        borderRadius: 6,
+                    },
+                    {
+                        label: 'Desired',
+                        data: desired,
+                        backgroundColor: '#1f2937',
+                        borderRadius: 6,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { labels: { color: '#e2e8f0' } },
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } },
+                },
+            },
+        });
+    });
+</script>
+{{ end }}

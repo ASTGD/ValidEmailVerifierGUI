@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "devDependencies": {
+    "chart.js": "^4.4.1",
+    "tailwindcss": "^3.4.1"
+  },
+  "scripts": {
+    "build": "tailwindcss -i ./input.css -o ../assets/app.css --minify && cp ./node_modules/chart.js/dist/chart.umd.min.js ../assets/chart.min.js"
+  }
+}

@@ -229,3 +229,8 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Added Go control plane service skeleton (API endpoints + Redis storage) under `services/go-control-plane`.
 - Includes heartbeat handling, desired state commands, pool scaling, and auth middleware.
 - Files updated: `services/go-control-plane/*`, `docs/GO_WORKER_CONTROL_PLANE_SPEC.md`.
+
+### 2026-02-05 — Go control plane UI (Phase 2)
+- Added Go-native dashboard UI (overview, workers, pools) with Tailwind + Chart.js assets.
+- Added UI handlers, templates, and asset build pipeline under `services/go-control-plane`.
+- Files updated: `services/go-control-plane/templates/*`, `services/go-control-plane/ui/*`, `services/go-control-plane/assets/*`, `services/go-control-plane/ui_handlers.go`, `services/go-control-plane/views.go`, `services/go-control-plane/server.go`, `services/go-control-plane/http_helpers.go`.

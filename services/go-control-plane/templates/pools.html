@@ -1,0 +1,29 @@
+{{ define "pools" }}
+<section class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Pools</h2>
+            <p class="text-sm text-slate-400">Scale desired worker counts by pool.</p>
+        </div>
+        <span class="text-xs text-slate-400">{{ .PoolCount }} pools</span>
+    </div>
+
+    <div class="mt-6 space-y-4">
+        {{ range .Pools }}
+            <form method="POST" action="/ui/pools/{{ .Pool }}/scale" class="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                <div class="min-w-[160px]">
+                    <p class="text-sm font-semibold">{{ .Pool }}</p>
+                    <p class="text-xs text-slate-400">Online {{ .Online }}</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-xs text-slate-400" for="desired-{{ .Pool }}">Desired</label>
+                    <input id="desired-{{ .Pool }}" name="desired" type="number" min="0" value="{{ .Desired }}" class="w-24 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </div>
+                <button class="rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-400" type="submit">Update</button>
+            </form>
+        {{ else }}
+            <p class="text-sm text-slate-400">No pools registered yet. They appear after workers send heartbeats.</p>
+        {{ end }}
+    </div>
+</section>
+{{ end }}
