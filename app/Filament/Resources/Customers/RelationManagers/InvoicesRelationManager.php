@@ -12,7 +12,7 @@ use Filament\Tables\Table;
 
 class InvoicesRelationManager extends RelationManager
 {
-    protected static string $relationship = 'verificationOrders';
+    protected static string $relationship = 'invoices';
 
     protected static ?string $title = 'Invoices';
 
@@ -20,64 +20,56 @@ class InvoicesRelationManager extends RelationManager
 
     public static function getBadge(\Illuminate\Database\Eloquent\Model $ownerRecord, string $pageClass): ?string
     {
-        return $ownerRecord->verificationOrders()->count();
+        return $ownerRecord->invoices()->count();
     }
 
     public function table(Table $table): Table
     {
         return $table
-            ->recordTitleAttribute('order_number')
-            ->defaultSort('created_at', 'desc')
+            ->recordTitleAttribute('invoice_number')
+            ->defaultSort('date', 'desc')
             ->columns([
-                TextColumn::make('order_number')
+                TextColumn::make('invoice_number')
                     ->label('Invoice Number')
                     ->sortable()
                     ->searchable()
                     ->weight('bold')
-                    ->color('warning')
-                    ->url(fn(VerificationOrder $record): string => VerificationOrderResource::getUrl('view', ['record' => $record])),
-                TextColumn::make('created_at')
+                    ->color('warning'),
+                TextColumn::make('date')
                     ->label('Invoice Date')
                     ->sortable()
                     ->dateTime(),
-                TextColumn::make('created_at')
+                TextColumn::make('due_date')
                     ->label('Due Date')
                     ->dateTime()
-                    ->sortable()
-                    ->color('gray'), // Placeholder as we don't have due_date in model
-                TextColumn::make('refunded_at')
+                    ->sortable(),
+                TextColumn::make('paid_at')
                     ->label('Date Paid')
                     ->dateTime()
                     ->sortable()
                     ->placeholder('-'),
-                TextColumn::make('amount_cents')
+                TextColumn::make('total')
                     ->label('Total')
-                    ->formatStateUsing(function ($state, VerificationOrder $record): string {
+                    ->formatStateUsing(function ($state, \App\Models\Invoice $record): string {
                         $currency = strtoupper((string) ($record->currency ?: 'usd'));
-                        $amount = $state !== null ? ((int) $state) / 100 : 0;
+                        $amount = ((int) $state) / 100;
                         return sprintf('%s %.2f', $currency, $amount);
                     }),
-                TextColumn::make('payment_method')
-                    ->label('Payment Method')
-                    ->state(fn(VerificationOrder $record): string => $record->paymentMethodLabel()),
-                TextColumn::make('payment_status')
+                TextColumn::make('status')
                     ->label('Status')
                     ->badge()
-                    ->state(fn(VerificationOrder $record): string => $record->paymentStatusLabel())
-                    ->color(function (VerificationOrder $record): string {
-                        return match ($record->paymentStatusKey()) {
-                            'paid' => 'success',
-                            'failed' => 'danger',
-                            'refunded' => 'warning',
-                            default => 'gray',
-                        };
+                    ->color(fn(string $state): string => match ($state) {
+                        'Paid' => 'success',
+                        'Unpaid' => 'warning',
+                        'Cancelled' => 'danger',
+                        'Refunded' => 'gray',
+                        default => 'gray',
                     }),
             ])
             ->filters([])
             ->headerActions([])
             ->actions([
-                ViewAction::make()
-                    ->url(fn($record) => VerificationOrderResource::getUrl('view', ['record' => $record])),
+                ViewAction::make(),
             ])
             ->bulkActions([]);
     }

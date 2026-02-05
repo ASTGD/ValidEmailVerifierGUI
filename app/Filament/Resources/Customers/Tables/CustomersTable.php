@@ -17,6 +17,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
+use Filament\Tables;
 use Illuminate\Database\Eloquent\Builder;
 
 class CustomersTable
@@ -135,6 +136,40 @@ class CustomersTable
             ->filtersApplyAction(fn(Action $action): Action => $action->label(__('Search'))->color('warning'))
             ->filtersFormColumns(1)
             ->actions([
+                Action::make('add_credit')
+                    ->label('Add Credit')
+                    ->icon('heroicon-o-plus-circle')
+                    ->color('success')
+                    ->form([
+                        TextInput::make('amount')
+                            ->label('Amount')
+                            ->numeric()
+                            ->required()
+                            ->prefix('$'),
+                        TextInput::make('notes')
+                            ->label('Notes')
+                            ->placeholder('e.g. Manual credit addition'),
+                    ])
+                    ->action(function (User $record, array $data, \App\Services\BillingService $billing) {
+                        $amountCents = (int) ($data['amount'] * 100);
+
+                        $invoice = $billing->createInvoice($record, [
+                            [
+                                'description' => 'Credit Addition: ' . ($data['notes'] ?: 'Manual'),
+                                'amount' => $amountCents,
+                                'type' => 'Credit',
+                            ]
+                        ], [
+                            'status' => 'Paid',
+                            'date' => now(),
+                            'paid_at' => now(),
+                            'notes' => $data['notes'],
+                        ]);
+
+                        $billing->recordPayment($invoice, $amountCents, 'Manual', 'Admin Adjustment');
+
+                        \Filament\Support\Facades\FilamentView::notify('success', 'Credit added successfully.');
+                    }),
                 ViewAction::make(),
                 EditAction::make(),
                 DeleteAction::make(),

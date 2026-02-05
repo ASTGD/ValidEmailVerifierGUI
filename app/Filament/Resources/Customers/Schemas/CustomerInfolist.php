@@ -56,39 +56,42 @@ class CustomerInfolist
                                         TextEntry::make('paid_invoices')
                                             ->label('Paid')
                                             ->state(function (User $record) {
-                                                $orders = $record->verificationOrders->filter(fn($o) => $o->checkoutIntent?->status === CheckoutIntentStatus::Completed && !$o->refunded_at);
-                                                return $orders->count() . ' (' . number_format($orders->sum('amount_cents') / 100, 2) . ' ' . strtoupper($record->currency ?: 'USD') . ')';
+                                                $invoices = $record->invoices()->where('status', 'Paid')->get();
+                                                return $invoices->count() . ' (' . number_format($invoices->sum('total') / 100, 2) . ' ' . strtoupper($record->currency ?: 'USD') . ')';
                                             }),
                                         TextEntry::make('unpaid_invoices')
                                             ->label('Unpaid')
                                             ->state(function (User $record) {
-                                                $orders = $record->verificationOrders->filter(fn($o) => $o->checkoutIntent?->status === CheckoutIntentStatus::Pending);
-                                                return $orders->count() . ' (' . number_format($orders->sum('amount_cents') / 100, 2) . ' ' . strtoupper($record->currency ?: 'USD') . ')';
+                                                $invoices = $record->invoices()->where('status', 'Unpaid')->get();
+                                                return $invoices->count() . ' (' . number_format($invoices->sum('total') / 100, 2) . ' ' . strtoupper($record->currency ?: 'USD') . ')';
                                             }),
                                         TextEntry::make('cancelled_invoices')
                                             ->label('Cancelled')
                                             ->state(function (User $record) {
-                                                $orders = $record->verificationOrders->where('status', VerificationOrderStatus::Cancelled);
-                                                return $orders->count() . ' (' . number_format($orders->sum('amount_cents') / 100, 2) . ' ' . strtoupper($record->currency ?: 'USD') . ')';
+                                                $invoices = $record->invoices()->where('status', 'Cancelled')->get();
+                                                return $invoices->count() . ' (' . number_format($invoices->sum('total') / 100, 2) . ' ' . strtoupper($record->currency ?: 'USD') . ')';
                                             }),
                                         TextEntry::make('refunded_invoices')
                                             ->label('Refunded')
                                             ->state(function (User $record) {
-                                                $orders = $record->verificationOrders->whereNotNull('refunded_at');
-                                                return $orders->count() . ' (' . number_format($orders->sum('amount_cents') / 100, 2) . ' ' . strtoupper($record->currency ?: 'USD') . ')';
+                                                $invoices = $record->invoices()->where('status', 'Refunded')->get();
+                                                return $invoices->count() . ' (' . number_format($invoices->sum('total') / 100, 2) . ' ' . strtoupper($record->currency ?: 'USD') . ')';
                                             }),
                                         TextEntry::make('collections_invoices')
                                             ->label('Collections')
-                                            ->state(fn(User $record) => '0 (0.00 ' . strtoupper($record->currency ?: 'USD') . ')'),
+                                            ->state(function (User $record) {
+                                                $invoices = $record->invoices()->where('status', 'Collections')->get();
+                                                return $invoices->count() . ' (' . number_format($invoices->sum('total') / 100, 2) . ' ' . strtoupper($record->currency ?: 'USD') . ')';
+                                            }),
                                         TextEntry::make('income')
                                             ->label('Income')
                                             ->state(function (User $record) {
-                                                $sum = $record->verificationOrders->filter(fn($o) => $o->checkoutIntent?->status === CheckoutIntentStatus::Completed && !$o->refunded_at)->sum('amount_cents');
+                                                $sum = $record->transactions()->sum('amount');
                                                 return number_format($sum / 100, 2) . ' ' . strtoupper($record->currency ?: 'USD');
                                             }),
-                                        TextEntry::make('credit_balance')
+                                        TextEntry::make('balance')
                                             ->label('Credit Balance')
-                                            ->state(fn(User $record) => '0.00 ' . strtoupper($record->currency ?: 'USD')),
+                                            ->state(fn(User $record) => number_format($record->balance / 100, 2) . ' ' . strtoupper($record->currency ?: 'USD')),
                                     ])->columns(2),
 
                                 Section::make('Other Information')

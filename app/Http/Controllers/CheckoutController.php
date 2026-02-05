@@ -17,7 +17,7 @@ class CheckoutController
         $maxKb = $maxMb * 1024;
 
         $validated = $request->validate([
-            'file' => ['required', 'file', 'mimes:csv,txt,xls,xlsx', 'max:'.$maxKb],
+            'file' => ['required', 'file', 'mimes:csv,txt,xls,xlsx', 'max:' . $maxKb],
         ]);
 
         $file = $validated['file'];
@@ -27,7 +27,7 @@ class CheckoutController
         return redirect()->route('checkout.show', $intent);
     }
 
-    public function show(Request $request, CheckoutIntent $intent): View|RedirectResponse
+    public function show(Request $request, CheckoutIntent $intent, CheckoutIntentService $service): View|RedirectResponse
     {
         if ($intent->status === CheckoutIntentStatus::Completed && $request->user()) {
             return redirect()
@@ -48,16 +48,19 @@ class CheckoutController
             abort(403);
         }
 
-        if ($user && ! $intent->user_id) {
+        if ($user && !$intent->user_id) {
             $intent->user_id = $user->id;
             $intent->save();
         }
 
         $intent->load('pricingPlan');
 
+        $totals = $user ? $service->calculateTotals($intent, $user, true) : null;
+
         return view('checkout', [
             'intent' => $intent,
             'formattedTotal' => number_format($intent->amount_cents / 100, 2),
+            'totals' => $totals,
             'canFakePay' => (bool) config('verifier.allow_fake_payments') && app()->environment(['local', 'testing']),
         ]);
     }
@@ -78,11 +81,11 @@ class CheckoutController
 
     public function pay(Request $request, CheckoutIntent $intent, CheckoutIntentService $service)
     {
-        if (! $request->user()) {
+        if (!$request->user()) {
             return redirect()->route('checkout.show', $intent);
         }
 
-        if (! config('cashier.secret') || ! config('cashier.key')) {
+        if (!config('cashier.secret') || !config('cashier.key')) {
             return redirect()
                 ->route('checkout.show', $intent)
                 ->with('status', __('Payment gateway is not configured yet.'));
@@ -94,12 +97,12 @@ class CheckoutController
                 ->with('status', __('Pricing is not configured yet.'));
         }
 
-        return $service->startPayment($intent, $request->user());
+        return $service->processPayment($intent, $request->user(), $request->boolean('use_credit'));
     }
 
     public function fakePay(Request $request, CheckoutIntent $intent, CheckoutIntentService $service): RedirectResponse
     {
-        if (! config('verifier.allow_fake_payments') || ! app()->environment(['local', 'testing'])) {
+        if (!config('verifier.allow_fake_payments') || !app()->environment(['local', 'testing'])) {
             abort(403);
         }
 

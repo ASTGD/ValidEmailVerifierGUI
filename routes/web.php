@@ -8,6 +8,7 @@ use App\Http\Controllers\ProvisioningBundleDownloadController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\Portal\VerificationJobDownloadController;
 use App\Livewire\Portal\Dashboard;
+use App\Livewire\Portal\InvoicesIndex;
 use App\Livewire\Portal\JobShow;
 use App\Livewire\Portal\JobsIndex;
 use App\Livewire\Portal\OrdersIndex;
@@ -61,6 +62,7 @@ Route::middleware(['auth', 'verified'])
             ->whereUuid('job')
             ->name('jobs.download');
         Route::get('orders', OrdersIndex::class)->name('orders.index');
+        Route::get('invoices', InvoicesIndex::class)->name('invoices.index');
         Route::get('settings', Settings::class)->name('settings');
         Route::get('support', Support::class)->name('support');
         // Add this line inside the portal route group

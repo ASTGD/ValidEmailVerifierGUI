@@ -44,7 +44,8 @@
                 </a>
                 <!-- VERIFICATION SECTION -->
                 <div class="px-4 mt-8 mb-2 text-[10px] font-black text-[#94A3B8] uppercase tracking-[0.15em]">
-                    {{ __('Verification') }}</div>
+                    {{ __('Verification') }}
+                </div>
                 <a href="{{ route('portal.upload') }}"
                     class="flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors {{ request()->routeIs('portal.upload') ? 'bg-[#E9F2FB] text-[#1E7CCF] border-r-4 border-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}"
                     wire:navigate>
@@ -62,11 +63,17 @@
                 </a>
                 <!-- STATS SECTION -->
                 <div class="px-4 mt-8 mb-2 text-[10px] font-black text-[#94A3B8] uppercase tracking-[0.15em]">
-                    {{ __('Stats') }}</div>
+                    {{ __('Stats') }}
+                </div>
                 <a href="{{ route('portal.orders.index') }}"
                     class="flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors {{ request()->routeIs('portal.orders.*') ? 'bg-[#E9F2FB] text-[#1E7CCF] border-r-4 border-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}"
                     wire:navigate>
                     <i data-lucide="receipt" class="w-5 h-5"></i> {{ __('My Orders') }}
+                </a>
+                <a href="{{ route('portal.invoices.index') }}"
+                    class="flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors {{ request()->routeIs('portal.invoices.*') ? 'bg-[#E9F2FB] text-[#1E7CCF] border-r-4 border-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}"
+                    wire:navigate>
+                    <i data-lucide="file-text" class="w-5 h-5"></i> {{ __('Invoices') }}
                 </a>
                 <a href="{{ route('billing.index') }}"
                     class="flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors {{ request()->routeIs('billing.*') ? 'bg-[#E9F2FB] text-[#1E7CCF] border-r-4 border-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}"
@@ -75,7 +82,8 @@
                 </a>
                 <!-- SYSTEM SECTION -->
                 <div class="px-4 mt-8 mb-2 text-[10px] font-black text-[#94A3B8] uppercase tracking-[0.15em]">
-                    {{ __('System') }}</div>
+                    {{ __('System') }}
+                </div>
                 <a href="{{ route('portal.settings') }}"
                     class="flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors {{ request()->routeIs('portal.settings') ? 'bg-[#E9F2FB] text-[#1E7CCF] border-r-4 border-[#1E7CCF]' : 'text-[#334155] hover:bg-[#F8FAFC]' }}"
                     wire:navigate>
@@ -143,9 +151,11 @@
                                 class="flex items-center gap-3 focus:outline-none">
                                 <div class="text-right hidden sm:block">
                                     <p class="text-sm font-bold text-[#0F172A]">
-                                        {{ auth()->user()->name ?: auth()->user()->email }}</p>
+                                        {{ auth()->user()->name ?: auth()->user()->email }}
+                                    </p>
                                     <p class="text-[10px] font-bold text-[#94A3B8] uppercase tracking-tighter">
-                                        {{ __('Verified Member') }}</p>
+                                        {{ __('Verified Member') }}
+                                    </p>
                                 </div>
                                 <div
                                     class="w-10 h-10 bg-[#E9F2FB] rounded-xl flex items-center justify-center text-[#1E7CCF] font-bold border border-[#1E7CCF]/10">
@@ -195,8 +205,8 @@
         </div>
     </div>
 
-    <div x-show="mobileNavOpen" x-cloak class="fixed inset-0 z-40 bg-black/40 md:hidden"
-        @click="mobileNavOpen = false"></div>
+    <div x-show="mobileNavOpen" x-cloak class="fixed inset-0 z-40 bg-black/40 md:hidden" @click="mobileNavOpen = false">
+    </div>
     <div x-show="mobileNavOpen" x-cloak
         class="fixed inset-y-0 left-0 z-50 w-72 bg-white text-[#0F172A] shadow-xl md:hidden"
         x-transition:enter="transition ease-out duration-200" x-transition:enter-start="-translate-x-full"
