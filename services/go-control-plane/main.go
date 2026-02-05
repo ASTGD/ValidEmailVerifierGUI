@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -24,7 +26,24 @@ func main() {
 	}
 
 	store := NewStore(rdb, cfg.HeartbeatTTL)
-	server := NewServer(store, cfg)
+	var snapshotStore *SnapshotStore
+	if cfg.MySQLDSN != "" {
+		db, err := sql.Open("mysql", cfg.MySQLDSN)
+		if err != nil {
+			log.Fatalf("mysql connection failed: %v", err)
+		}
+		if err := db.Ping(); err != nil {
+			log.Fatalf("mysql ping failed: %v", err)
+		}
+		snapshotStore = NewSnapshotStore(db)
+	}
+
+	server := NewServer(store, snapshotStore, cfg)
+
+	if snapshotStore != nil {
+		snapshotService := NewSnapshotService(store, snapshotStore, cfg.SnapshotInterval)
+		snapshotService.Start()
+	}
 
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("server error: %v", err)

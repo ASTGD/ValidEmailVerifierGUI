@@ -12,6 +12,8 @@ type Config struct {
 	RedisAddr          string
 	RedisPassword      string
 	RedisDB            int
+	MySQLDSN           string
+	SnapshotInterval   time.Duration
 	ControlPlaneToken  string
 	HeartbeatTTL       time.Duration
 	ShutdownTimeoutSec int
@@ -24,6 +26,7 @@ func LoadConfig() (Config, error) {
 	cfg.RedisAddr = os.Getenv("REDIS_ADDR")
 	cfg.RedisPassword = os.Getenv("REDIS_PASSWORD")
 	cfg.ControlPlaneToken = os.Getenv("CONTROL_PLANE_TOKEN")
+	cfg.MySQLDSN = os.Getenv("MYSQL_DSN")
 
 	if cfg.Port == "" {
 		return cfg, fmt.Errorf("PORT is required")
@@ -44,6 +47,18 @@ func LoadConfig() (Config, error) {
 		redisDB = parsed
 	}
 	cfg.RedisDB = redisDB
+
+	snapshotInterval := 60
+	if value := os.Getenv("SNAPSHOT_INTERVAL_SECONDS"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return cfg, fmt.Errorf("SNAPSHOT_INTERVAL_SECONDS must be an integer")
+		}
+		if parsed > 0 {
+			snapshotInterval = parsed
+		}
+	}
+	cfg.SnapshotInterval = time.Duration(snapshotInterval) * time.Second
 
 	heartbeatTTL := 60
 	if value := os.Getenv("HEARTBEAT_TTL_SECONDS"); value != "" {

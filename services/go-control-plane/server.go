@@ -13,18 +13,19 @@ import (
 )
 
 type Server struct {
-	store *Store
-	cfg   Config
-	views *ViewRenderer
+	store     *Store
+	cfg       Config
+	views     *ViewRenderer
+	snapshots *SnapshotStore
 }
 
-func NewServer(store *Store, cfg Config) *Server {
+func NewServer(store *Store, snapshots *SnapshotStore, cfg Config) *Server {
 	renderer, err := NewViewRenderer()
 	if err != nil {
 		panic(err)
 	}
 
-	return &Server{store: store, cfg: cfg, views: renderer}
+	return &Server{store: store, snapshots: snapshots, cfg: cfg, views: renderer}
 }
 
 func (s *Server) Router() http.Handler {
