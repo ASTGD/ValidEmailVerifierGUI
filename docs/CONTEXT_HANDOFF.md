@@ -209,3 +209,18 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Added Ops Overview widgets: Queue quick links, queue status, and Redis fallback alert banner.
 - Added Queue Engine worker tuning fields and command helpers (Horizon + queue:work).
 - Added DB columns for queue worker settings on engine_settings.
+
+### 2026-02-05 — Verifier Engine dashboard (feature/verifier-engine-control-center)
+- Removed Queue Engine quick links from Ops Overview.
+- Added Verifier Engine dashboard page with engine health, warmup stats, activity table, and quick links to Engine Servers.
+- Renamed Verifier Engine dashboard to "Verifier Engine Room" and paired it with "Queue Engine Room".
+- Engine Servers navigation hidden from sidebar (still accessible from Verifier Engine Room).
+- Files updated: `app/Filament/Pages/OpsOverview.php`, `app/Filament/Pages/VerifierEngine.php`, `app/Filament/Widgets/OpsVerifierEngineLinks.php`, `resources/views/filament/widgets/ops-verifier-engine-links.blade.php`, `app/Filament/Resources/EngineServers/EngineServerResource.php`, `app/Providers/Filament/AdminPanelProvider.php`.
+
+### 2026-02-05 — Hosting plan (EC2 + CyberPanel)
+- Documented single-host deployment plan for Laravel + Horizon + Redis + Go workers under CyberPanel.
+- Files updated: `docs/HOSTING_PLAN.md`.
+
+### 2026-02-05 — Go worker control plane + dashboard specs
+- Added control plane API spec and Go dashboard UI plan for a Horizon-style Go worker control center.
+- Files updated: `docs/GO_WORKER_CONTROL_PLANE_SPEC.md`, `docs/GO_WORKER_DASHBOARD_UI.md`.

@@ -56,7 +56,7 @@ class AdminPanelProvider extends PanelProvider
                 OpsOverview::class,
             ])
             ->navigationItems([
-                NavigationItem::make('Queue Engine')
+                NavigationItem::make('Queue Engine Room')
                     ->group('Operations')
                     ->icon(Heroicon::OutlinedQueueList)
                     ->sort(10)

@@ -19,11 +19,13 @@ class EngineServerResource extends Resource
 {
     protected static ?string $model = EngineServer::class;
 
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedServer;
 
     protected static ?string $navigationLabel = 'Engine Servers';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Operations';
+    protected static string|UnitEnum|null $navigationGroup = 'Verifier Engine';
 
     protected static ?int $navigationSort = 1;
 
