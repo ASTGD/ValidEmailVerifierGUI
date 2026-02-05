@@ -6,8 +6,11 @@ use App\Filament\Widgets\OpsActiveJobsTable;
 use App\Filament\Widgets\OpsEngineActivityTable;
 use App\Filament\Widgets\OpsEngineHealthOverview;
 use App\Filament\Widgets\OpsJobHealthOverview;
+use App\Filament\Widgets\OpsQueueFallbackAlert;
 use App\Filament\Widgets\OpsQueueDepthChart;
 use App\Filament\Widgets\OpsQueueHealthOverview;
+use App\Filament\Widgets\OpsQueueQuickLinks;
+use App\Filament\Widgets\OpsQueueStatusOverview;
 use App\Filament\Widgets\OpsSystemHealthOverview;
 use App\Filament\Widgets\OpsSystemTrendChart;
 use Filament\Pages\Dashboard;
@@ -32,7 +35,10 @@ class OpsOverview extends Dashboard
     public function getWidgets(): array
     {
         return [
+            OpsQueueFallbackAlert::class,
+            OpsQueueQuickLinks::class,
             OpsSystemHealthOverview::class,
+            OpsQueueStatusOverview::class,
             OpsQueueHealthOverview::class,
             OpsEngineHealthOverview::class,
             OpsJobHealthOverview::class,
