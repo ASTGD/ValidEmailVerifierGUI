@@ -1,0 +1,63 @@
+{{ define "workers" }}
+<section class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Workers</h2>
+            <p class="text-sm text-slate-400">Manage worker state with safe actions.</p>
+        </div>
+        <span class="text-xs text-slate-400">{{ .WorkerCount }} active</span>
+    </div>
+
+    <div class="mt-6 overflow-x-auto">
+        <table class="w-full text-left text-sm">
+            <thead class="text-xs uppercase text-slate-500">
+                <tr>
+                    <th class="py-2">Worker</th>
+                    <th class="py-2">Host</th>
+                    <th class="py-2">Pool</th>
+                    <th class="py-2">Status</th>
+                    <th class="py-2">Desired</th>
+                    <th class="py-2">Last Heartbeat</th>
+                    <th class="py-2">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+                {{ range .Workers }}
+                <tr>
+                    <td class="py-3 font-medium">{{ .WorkerID }}</td>
+                    <td class="py-3 text-slate-300">{{ .Host }}</td>
+                    <td class="py-3 text-slate-300">{{ if .Pool }}{{ .Pool }}{{ else }}-{{ end }}</td>
+                    <td class="py-3">
+                        <span class="rounded-full bg-slate-800 px-3 py-1 text-xs">{{ .Status }}</span>
+                    </td>
+                    <td class="py-3">
+                        <span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300">{{ .DesiredState }}</span>
+                    </td>
+                    <td class="py-3 text-slate-400">{{ .LastHeartbeat }}</td>
+                    <td class="py-3">
+                        <div class="flex flex-wrap gap-2">
+                            <form method="POST" action="/ui/workers/{{ .WorkerID }}/pause">
+                                <button class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700" type="submit">Pause</button>
+                            </form>
+                            <form method="POST" action="/ui/workers/{{ .WorkerID }}/resume">
+                                <button class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700" type="submit">Resume</button>
+                            </form>
+                            <form method="POST" action="/ui/workers/{{ .WorkerID }}/drain">
+                                <button class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300 hover:bg-amber-500/30" type="submit">Drain</button>
+                            </form>
+                            <form method="POST" action="/ui/workers/{{ .WorkerID }}/stop">
+                                <button class="rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300 hover:bg-red-500/30" type="submit">Stop</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {{ else }}
+                <tr>
+                    <td class="py-6 text-center text-slate-400" colspan="7">No active workers yet.</td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    </div>
+</section>
+{{ end }}

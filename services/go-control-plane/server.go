@@ -15,28 +15,49 @@ import (
 type Server struct {
 	store *Store
 	cfg   Config
+	views *ViewRenderer
 }
 
 func NewServer(store *Store, cfg Config) *Server {
-	return &Server{store: store, cfg: cfg}
+	renderer, err := NewViewRenderer()
+	if err != nil {
+		panic(err)
+	}
+
+	return &Server{store: store, cfg: cfg, views: renderer}
 }
 
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
-	r.Use(s.authMiddleware)
-
-	r.Post("/api/workers/heartbeat", s.handleHeartbeat)
-	r.Get("/api/workers", s.handleWorkers)
-	r.Post("/api/workers/{workerID}/pause", s.handleSetDesired("paused"))
-	r.Post("/api/workers/{workerID}/resume", s.handleSetDesired("running"))
-	r.Post("/api/workers/{workerID}/drain", s.handleSetDesired("draining"))
-	r.Post("/api/workers/{workerID}/stop", s.handleSetDesired("stopped"))
-
-	r.Get("/api/pools", s.handlePools)
-	r.Post("/api/pools/{pool}/scale", s.handleScalePool)
 
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
+	})
+
+	r.Group(func(router chi.Router) {
+		router.Use(s.authMiddleware)
+
+		router.Post("/api/workers/heartbeat", s.handleHeartbeat)
+		router.Get("/api/workers", s.handleWorkers)
+		router.Post("/api/workers/{workerID}/pause", s.handleSetDesired("paused"))
+		router.Post("/api/workers/{workerID}/resume", s.handleSetDesired("running"))
+		router.Post("/api/workers/{workerID}/drain", s.handleSetDesired("draining"))
+		router.Post("/api/workers/{workerID}/stop", s.handleSetDesired("stopped"))
+
+		router.Get("/api/pools", s.handlePools)
+		router.Post("/api/pools/{pool}/scale", s.handleScalePool)
+
+		router.Get("/ui", s.handleUIRedirect)
+		router.Get("/ui/overview", s.handleUIOverview)
+		router.Get("/ui/workers", s.handleUIWorkers)
+		router.Get("/ui/pools", s.handleUIPools)
+		router.Post("/ui/workers/{workerID}/pause", s.handleUISetDesired("paused"))
+		router.Post("/ui/workers/{workerID}/resume", s.handleUISetDesired("running"))
+		router.Post("/ui/workers/{workerID}/drain", s.handleUISetDesired("draining"))
+		router.Post("/ui/workers/{workerID}/stop", s.handleUISetDesired("stopped"))
+		router.Post("/ui/pools/{pool}/scale", s.handleUIScalePool)
+
+		router.Handle("/assets/*", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
 	})
 
 	return r
