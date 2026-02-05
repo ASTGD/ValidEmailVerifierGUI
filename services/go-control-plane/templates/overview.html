@@ -30,6 +30,21 @@
     </div>
 </section>
 
+{{ if .HasHistory }}
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Worker History</h2>
+            <p class="text-sm text-slate-400">Snapshots from the last capture window.</p>
+        </div>
+        <span class="text-xs text-slate-400">Stored snapshots</span>
+    </div>
+    <div class="mt-6">
+        <canvas id="historyChart" height="120"></canvas>
+    </div>
+</section>
+{{ end }}
+
 <section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
     <h2 class="text-lg font-semibold">Pool Summary</h2>
     <div class="mt-4 grid gap-4 md:grid-cols-2">
@@ -90,5 +105,49 @@
             },
         });
     });
+
+    {{ if .HasHistory }}
+    window.addEventListener('DOMContentLoaded', () => {
+        const historyCanvas = document.getElementById('historyChart');
+        if (!historyCanvas) return;
+
+        const historyLabels = {{ toJSON .HistoryLabels }};
+        const historyWorkers = {{ toJSON .HistoryWorkers }};
+        const historyDesired = {{ toJSON .HistoryDesired }};
+
+        new Chart(historyCanvas, {
+            type: 'line',
+            data: {
+                labels: historyLabels,
+                datasets: [
+                    {
+                        label: 'Workers',
+                        data: historyWorkers,
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                        tension: 0.3,
+                    },
+                    {
+                        label: 'Desired',
+                        data: historyDesired,
+                        borderColor: '#94a3b8',
+                        backgroundColor: 'rgba(148, 163, 184, 0.2)',
+                        tension: 0.3,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { labels: { color: '#e2e8f0' } },
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } },
+                },
+            },
+        });
+    });
+    {{ end }}
 </script>
 {{ end }}

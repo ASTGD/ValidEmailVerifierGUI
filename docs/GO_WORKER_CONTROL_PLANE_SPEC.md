@@ -23,6 +23,10 @@ Redis connection is configured by env:
 - `REDIS_PASSWORD`
 - `REDIS_DB`
 
+Optional MySQL snapshots:
+- `MYSQL_DSN` (e.g., `user:pass@tcp(127.0.0.1:3306)/db?parseTime=true&charset=utf8mb4&loc=UTC`)
+- `SNAPSHOT_INTERVAL_SECONDS` (default 60)
+
 ## Worker States
 - `running`
 - `paused` (no new chunks)
@@ -125,6 +129,10 @@ Response:
 - `worker:{id}:metrics` -> JSON blob (short-lived)
 - `pool:{name}:desired` -> desired worker count
 - `pool:{name}:online` -> computed count (optional cache)
+
+Snapshot storage (MySQL, optional):
+- `go_worker_snapshots`
+- `go_pool_snapshots`
 
 TTL: heartbeat/metrics keys expire after N seconds to detect offline workers.
 

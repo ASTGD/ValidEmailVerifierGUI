@@ -10,13 +10,17 @@ import (
 
 type OverviewData struct {
 	BasePageData
-	WorkerCount  int
-	PoolCount    int
-	DesiredTotal int
-	Pools        []PoolSummary
-	ChartLabels  []string
-	ChartOnline  []int
-	ChartDesired []int
+	WorkerCount    int
+	PoolCount      int
+	DesiredTotal   int
+	Pools          []PoolSummary
+	ChartLabels    []string
+	ChartOnline    []int
+	ChartDesired   []int
+	HistoryLabels  []string
+	HistoryWorkers []int
+	HistoryDesired []int
+	HasHistory     bool
 }
 
 type WorkersPageData struct {
@@ -70,6 +74,24 @@ func (s *Server) handleUIOverview(w http.ResponseWriter, r *http.Request) {
 		ChartLabels:  labels,
 		ChartOnline:  online,
 		ChartDesired: desired,
+	}
+
+	if s.snapshots != nil {
+		points, err := s.snapshots.GetWorkerSnapshots(r.Context(), 120)
+		if err == nil && len(points) > 0 {
+			historyLabels := make([]string, 0, len(points))
+			historyWorkers := make([]int, 0, len(points))
+			historyDesired := make([]int, 0, len(points))
+			for _, point := range points {
+				historyLabels = append(historyLabels, point.CapturedAt.Format("15:04"))
+				historyWorkers = append(historyWorkers, point.TotalWorkers)
+				historyDesired = append(historyDesired, point.DesiredTotal)
+			}
+			data.HistoryLabels = historyLabels
+			data.HistoryWorkers = historyWorkers
+			data.HistoryDesired = historyDesired
+			data.HasHistory = true
+		}
 	}
 
 	s.views.Render(w, data)

@@ -238,3 +238,8 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 ### 2026-02-05 — Go dashboard branded path
 - Updated Go control plane UI to serve under `/verifier-engine-room/*` with legacy `/ui/*` redirects.
 - Files updated: `services/go-control-plane/server.go`, `services/go-control-plane/ui_handlers.go`, `services/go-control-plane/templates/*`, `services/go-control-plane/views.go`, `services/go-control-plane/README.md`, `docs/GO_WORKER_DASHBOARD_UI.md`.
+
+### 2026-02-05 — Go control plane Phase 3 snapshots
+- Added MySQL snapshot storage for worker/pool history and overview trend chart.
+- Added Laravel migrations for `go_worker_snapshots` and `go_pool_snapshots`.
+- Files updated: `services/go-control-plane/snapshots*.go`, `services/go-control-plane/main.go`, `services/go-control-plane/config.go`, `services/go-control-plane/templates/overview.html`, `services/go-control-plane/.env.example`, `database/migrations/*`, docs updates.
