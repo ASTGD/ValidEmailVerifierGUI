@@ -46,6 +46,7 @@ Option B (better): SSE or WebSocket for live updates.
 
 ## Laravel Integration
 Add a sidebar link in Filament to open the Go dashboard in a new tab.
+- Example: `http://<host>:<port>/verifier-engine-room/overview`
 
 ## Implementation Notes
 - UI lives in `services/go-control-plane/templates` with Tailwind + Chart.js assets in `services/go-control-plane/assets`.

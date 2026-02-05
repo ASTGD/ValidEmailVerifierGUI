@@ -36,16 +36,16 @@
                     <td class="py-3 text-slate-400">{{ .LastHeartbeat }}</td>
                     <td class="py-3">
                         <div class="flex flex-wrap gap-2">
-                            <form method="POST" action="/ui/workers/{{ .WorkerID }}/pause">
+                            <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/pause">
                                 <button class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700" type="submit">Pause</button>
                             </form>
-                            <form method="POST" action="/ui/workers/{{ .WorkerID }}/resume">
+                            <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/resume">
                                 <button class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700" type="submit">Resume</button>
                             </form>
-                            <form method="POST" action="/ui/workers/{{ .WorkerID }}/drain">
+                            <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/drain">
                                 <button class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300 hover:bg-amber-500/30" type="submit">Drain</button>
                             </form>
-                            <form method="POST" action="/ui/workers/{{ .WorkerID }}/stop">
+                            <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/stop">
                                 <button class="rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300 hover:bg-red-500/30" type="submit">Stop</button>
                             </form>
                         </div>

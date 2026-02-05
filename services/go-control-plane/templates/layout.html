@@ -18,9 +18,9 @@
                 <div class="text-xs text-slate-400">{{ .Subtitle }}</div>
             </div>
             <nav class="mx-auto flex max-w-6xl gap-3 px-6 pb-4 text-sm">
-                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "overview" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="/ui/overview">Overview</a>
-                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "workers" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="/ui/workers">Workers</a>
-                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "pools" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="/ui/pools">Pools</a>
+                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "overview" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/overview">Overview</a>
+                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "workers" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/workers">Workers</a>
+                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "pools" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/pools">Pools</a>
             </nav>
         </header>
 

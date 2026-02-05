@@ -16,6 +16,7 @@ type BasePageData struct {
 	Subtitle        string
 	ActiveNav       string
 	ContentTemplate string
+	BasePath        string
 }
 
 func NewViewRenderer() (*ViewRenderer, error) {

@@ -234,3 +234,7 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Added Go-native dashboard UI (overview, workers, pools) with Tailwind + Chart.js assets.
 - Added UI handlers, templates, and asset build pipeline under `services/go-control-plane`.
 - Files updated: `services/go-control-plane/templates/*`, `services/go-control-plane/ui/*`, `services/go-control-plane/assets/*`, `services/go-control-plane/ui_handlers.go`, `services/go-control-plane/views.go`, `services/go-control-plane/server.go`, `services/go-control-plane/http_helpers.go`.
+
+### 2026-02-05 — Go dashboard branded path
+- Updated Go control plane UI to serve under `/verifier-engine-room/*` with legacy `/ui/*` redirects.
+- Files updated: `services/go-control-plane/server.go`, `services/go-control-plane/ui_handlers.go`, `services/go-control-plane/templates/*`, `services/go-control-plane/views.go`, `services/go-control-plane/README.md`, `docs/GO_WORKER_DASHBOARD_UI.md`.
