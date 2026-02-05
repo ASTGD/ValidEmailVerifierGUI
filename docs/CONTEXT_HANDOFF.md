@@ -249,3 +249,12 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Added Slack + SMTP notifications and MySQL alert storage.
 - Added Laravel migration for `go_alerts` and new env settings in control plane `.env.example`.
 - Files updated: `services/go-control-plane/alerts.go`, `services/go-control-plane/notifiers.go`, `services/go-control-plane/store.go`, `services/go-control-plane/snapshots_store.go`, `services/go-control-plane/config.go`, `services/go-control-plane/main.go`, `database/migrations/*`, docs updates.
+
+### 2026-02-05 — Local control plane runtime state (not committed)
+- Control plane running on `http://localhost:9091` with branded UI at `/verifier-engine-room/overview`.
+- Local `services/go-control-plane/.env` contains:
+  - `CONTROL_PLANE_TOKEN=vzxw123!`
+  - `MYSQL_DSN` pointing to Sail MySQL on `127.0.0.1:3307`
+  - `SNAPSHOT_INTERVAL_SECONDS=10`
+  - `ALERTS_ENABLED=true`, `AUTO_ACTIONS_ENABLED=true`
+- Demo heartbeats were seeded for workers `worker-1..3` and pools `default`, `reputation-a`, `reputation-b`.
