@@ -243,3 +243,9 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Added MySQL snapshot storage for worker/pool history and overview trend chart.
 - Added Laravel migrations for `go_worker_snapshots` and `go_pool_snapshots`.
 - Files updated: `services/go-control-plane/snapshots*.go`, `services/go-control-plane/main.go`, `services/go-control-plane/config.go`, `services/go-control-plane/templates/overview.html`, `services/go-control-plane/.env.example`, `database/migrations/*`, docs updates.
+
+### 2026-02-05 — Go control plane Phase 4 alerts
+- Added alert checks (offline workers, pool under-capacity, error-rate threshold) with optional auto-actions.
+- Added Slack + SMTP notifications and MySQL alert storage.
+- Added Laravel migration for `go_alerts` and new env settings in control plane `.env.example`.
+- Files updated: `services/go-control-plane/alerts.go`, `services/go-control-plane/notifiers.go`, `services/go-control-plane/store.go`, `services/go-control-plane/snapshots_store.go`, `services/go-control-plane/config.go`, `services/go-control-plane/main.go`, `database/migrations/*`, docs updates.

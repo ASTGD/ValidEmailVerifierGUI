@@ -66,8 +66,10 @@ func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (stri
 
 	pipe := s.rdb.Pipeline()
 	pipe.SAdd(ctx, "workers:active", req.WorkerID)
+	pipe.SAdd(ctx, "workers:known", req.WorkerID)
 	pipe.Set(ctx, workerKey(req.WorkerID, "status"), status, s.heartbeatTTL)
 	pipe.Set(ctx, workerKey(req.WorkerID, "heartbeat"), now, s.heartbeatTTL)
+	pipe.Set(ctx, workerKey(req.WorkerID, "last_seen"), now, 0)
 	pipe.Set(ctx, workerKey(req.WorkerID, "meta"), metaJSON, s.heartbeatTTL)
 	pipe.Set(ctx, workerKey(req.WorkerID, "metrics"), metricsJSON, s.heartbeatTTL)
 	if req.Pool != "" {
@@ -80,6 +82,45 @@ func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (stri
 	}
 
 	return desiredState, nil
+}
+
+func (s *Store) GetKnownWorkerIDs(ctx context.Context) ([]string, error) {
+	return s.rdb.SMembers(ctx, "workers:known").Result()
+}
+
+func (s *Store) GetWorkerLastSeen(ctx context.Context, workerID string) (time.Time, bool, error) {
+	value, err := s.rdb.Get(ctx, workerKey(workerID, "last_seen")).Result()
+	if err == redis.Nil || value == "" {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return parsed, true, nil
+}
+
+func (s *Store) GetWorkerMetrics(ctx context.Context, workerID string) (*WorkerMetrics, error) {
+	value, err := s.rdb.Get(ctx, workerKey(workerID, "metrics")).Result()
+	if err == redis.Nil || value == "" {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var metrics WorkerMetrics
+	if err := json.Unmarshal([]byte(value), &metrics); err != nil {
+		return nil, err
+	}
+	return &metrics, nil
+}
+
+func (s *Store) ShouldSendAlert(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	return s.rdb.SetNX(ctx, key, "1", ttl).Result()
 }
 
 func (s *Store) SetDesiredState(ctx context.Context, workerID string, state string) error {

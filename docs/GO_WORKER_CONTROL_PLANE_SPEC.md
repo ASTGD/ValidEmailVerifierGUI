@@ -27,6 +27,16 @@ Optional MySQL snapshots:
 - `MYSQL_DSN` (e.g., `user:pass@tcp(127.0.0.1:3306)/db?parseTime=true&charset=utf8mb4&loc=UTC`)
 - `SNAPSHOT_INTERVAL_SECONDS` (default 60)
 
+Alerts and notifications:
+- `ALERTS_ENABLED` (true/false)
+- `ALERT_CHECK_INTERVAL_SECONDS` (default 30)
+- `ALERT_HEARTBEAT_GRACE_SECONDS` (default 120)
+- `ALERT_COOLDOWN_SECONDS` (default 300)
+- `ALERT_ERROR_RATE_THRESHOLD` (errors/min threshold)
+- `AUTO_ACTIONS_ENABLED` (true/false)
+- `SLACK_WEBHOOK_URL`
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_TO`
+
 ## Worker States
 - `running`
 - `paused` (no new chunks)
@@ -133,6 +143,9 @@ Response:
 Snapshot storage (MySQL, optional):
 - `go_worker_snapshots`
 - `go_pool_snapshots`
+
+Alert storage (MySQL, optional):
+- `go_alerts`
 
 TTL: heartbeat/metrics keys expire after N seconds to detect offline workers.
 
