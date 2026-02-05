@@ -16,7 +16,12 @@ Laravel remains control-light and only links to this dashboard.
 
 ## Authentication
 Use a static bearer token (env-based).
-- `GO_CONTROL_PLANE_TOKEN` (stored outside this repo)
+- `CONTROL_PLANE_TOKEN` (stored outside this repo)
+
+Redis connection is configured by env:
+- `REDIS_ADDR` (host:port)
+- `REDIS_PASSWORD`
+- `REDIS_DB`
 
 ## Worker States
 - `running`
