@@ -25,7 +25,13 @@
         </header>
 
         <main class="mx-auto max-w-6xl px-6 py-8">
-            {{ template .ContentTemplate . }}
+            {{ if eq .ActiveNav "overview" }}
+                {{ template "overview" . }}
+            {{ else if eq .ActiveNav "workers" }}
+                {{ template "workers" . }}
+            {{ else if eq .ActiveNav "pools" }}
+                {{ template "pools" . }}
+            {{ end }}
         </main>
     </div>
 </body>
