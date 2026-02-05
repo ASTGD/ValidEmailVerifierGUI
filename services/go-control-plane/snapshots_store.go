@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 )
 
@@ -21,6 +22,14 @@ type WorkerSnapshotPoint struct {
 	CapturedAt   time.Time
 	TotalWorkers int
 	DesiredTotal int
+}
+
+type AlertRecord struct {
+	Type      string
+	Severity  string
+	Message   string
+	Context   string
+	CreatedAt time.Time
 }
 
 func NewSnapshotStore(db *sql.DB) *SnapshotStore {
@@ -92,4 +101,25 @@ func (s *SnapshotStore) GetWorkerSnapshots(ctx context.Context, limit int) ([]Wo
 	}
 
 	return points, nil
+}
+
+func (s *SnapshotStore) SaveAlert(ctx context.Context, alert AlertEvent) error {
+	contextJSON := ""
+	if alert.Context != nil {
+		payload, err := json.Marshal(alert.Context)
+		if err == nil {
+			contextJSON = string(payload)
+		}
+	}
+
+	createdAt := alert.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO go_alerts (type, severity, message, context, created_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, alert.Type, alert.Severity, alert.Message, contextJSON, createdAt)
+	return err
 }

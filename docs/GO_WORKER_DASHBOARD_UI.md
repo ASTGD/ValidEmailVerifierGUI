@@ -52,3 +52,4 @@ Add a sidebar link in Filament to open the Go dashboard in a new tab.
 - UI lives in `services/go-control-plane/templates` with Tailwind + Chart.js assets in `services/go-control-plane/assets`.
 - Access is protected by HTTP Basic Auth (password = `CONTROL_PLANE_TOKEN`).
 - History charts load when MySQL snapshots are enabled.
+- Alert history is stored in MySQL and can be surfaced in a future Alerts page.

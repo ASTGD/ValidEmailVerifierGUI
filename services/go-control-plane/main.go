@@ -45,6 +45,14 @@ func main() {
 		snapshotService.Start()
 	}
 
+	if cfg.AlertsEnabled || cfg.AutoActionsEnabled {
+		slackNotifier := NewSlackNotifier(cfg.SlackWebhookURL)
+		emailNotifier := NewEmailNotifier(cfg)
+		notifier := NewMultiNotifier(slackNotifier, emailNotifier)
+		alertService := NewAlertService(store, snapshotStore, cfg, notifier)
+		alertService.Start()
+	}
+
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
