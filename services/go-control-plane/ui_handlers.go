@@ -32,7 +32,7 @@ type PoolsPageData struct {
 }
 
 func (s *Server) handleUIRedirect(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/ui/overview", http.StatusFound)
+	http.Redirect(w, r, "/verifier-engine-room/overview", http.StatusFound)
 }
 
 func (s *Server) handleUIOverview(w http.ResponseWriter, r *http.Request) {
@@ -61,6 +61,7 @@ func (s *Server) handleUIOverview(w http.ResponseWriter, r *http.Request) {
 			Subtitle:        "Phase 2 dashboard",
 			ActiveNav:       "overview",
 			ContentTemplate: "overview",
+			BasePath:        "/verifier-engine-room",
 		},
 		WorkerCount:  len(workers),
 		PoolCount:    len(pools),
@@ -91,6 +92,7 @@ func (s *Server) handleUIWorkers(w http.ResponseWriter, r *http.Request) {
 			Subtitle:        "Live worker status",
 			ActiveNav:       "workers",
 			ContentTemplate: "workers",
+			BasePath:        "/verifier-engine-room",
 		},
 		WorkerCount: len(workers),
 		Workers:     workers,
@@ -116,6 +118,7 @@ func (s *Server) handleUIPools(w http.ResponseWriter, r *http.Request) {
 			Subtitle:        "Scale worker pools",
 			ActiveNav:       "pools",
 			ContentTemplate: "pools",
+			BasePath:        "/verifier-engine-room",
 		},
 		PoolCount: len(pools),
 		Pools:     pools,

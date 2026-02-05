@@ -28,7 +28,7 @@ Lightweight Go service that tracks worker heartbeats, desired state, and pool sc
 All endpoints require `Authorization: Bearer <CONTROL_PLANE_TOKEN>`.
 
 ## UI
-- Open `http://<host>:<port>/ui/overview`
+- Open `http://<host>:<port>/verifier-engine-room/overview`
 - Use HTTP Basic Auth (any username, password = `CONTROL_PLANE_TOKEN`)
 
 ## Redis Keys

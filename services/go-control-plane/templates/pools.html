@@ -10,7 +10,7 @@
 
     <div class="mt-6 space-y-4">
         {{ range .Pools }}
-            <form method="POST" action="/ui/pools/{{ .Pool }}/scale" class="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <form method="POST" action="{{ $.BasePath }}/pools/{{ .Pool }}/scale" class="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
                 <div class="min-w-[160px]">
                     <p class="text-sm font-semibold">{{ .Pool }}</p>
                     <p class="text-xs text-slate-400">Online {{ .Online }}</p>
