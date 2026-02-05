@@ -9,7 +9,6 @@ use App\Filament\Widgets\OpsJobHealthOverview;
 use App\Filament\Widgets\OpsQueueFallbackAlert;
 use App\Filament\Widgets\OpsQueueDepthChart;
 use App\Filament\Widgets\OpsQueueHealthOverview;
-use App\Filament\Widgets\OpsQueueQuickLinks;
 use App\Filament\Widgets\OpsQueueStatusOverview;
 use App\Filament\Widgets\OpsSystemHealthOverview;
 use App\Filament\Widgets\OpsSystemTrendChart;
@@ -36,7 +35,6 @@ class OpsOverview extends Dashboard
     {
         return [
             OpsQueueFallbackAlert::class,
-            OpsQueueQuickLinks::class,
             OpsSystemHealthOverview::class,
             OpsQueueStatusOverview::class,
             OpsQueueHealthOverview::class,
