@@ -424,6 +424,13 @@ class EngineSettingForm
                             }
                         })
                         ->helperText('Overrides CACHE_STORE for Laravel cache only (verification cache is separate).'),
+                    Placeholder::make('configured_driver')
+                        ->label('Configured')
+                        ->content(fn (Get $get): string => sprintf(
+                            'Queue: %s | Cache: %s',
+                            $get('queue_connection') ?: config('queue.default', 'database'),
+                            $get('cache_store') ?: config('cache.default', 'database')
+                        )),
                 ])
                 ->columns(2),
             Section::make('Horizon Dashboard')
@@ -447,6 +454,59 @@ class EngineSettingForm
                         ->content('If Redis is offline, the app will fall back to the existing queue/cache config to avoid errors.'),
                 ])
                 ->columns(2),
+            Section::make('Worker Tuning')
+                ->description('Stored values are used for recommended commands. Restart workers after changes.')
+                ->schema([
+                    TextInput::make('queue_worker_name')
+                        ->label('Supervisor name')
+                        ->helperText('Horizon supervisor name. Default: supervisor-1.'),
+                    TextInput::make('queue_worker_processes')
+                        ->label('Max processes')
+                        ->numeric()
+                        ->minValue(1)
+                        ->helperText('Total worker processes (Horizon maxProcesses).'),
+                    TextInput::make('queue_worker_memory')
+                        ->label('Memory (MB)')
+                        ->numeric()
+                        ->minValue(64)
+                        ->helperText('Worker memory limit before restart.'),
+                    TextInput::make('queue_worker_timeout')
+                        ->label('Timeout (sec)')
+                        ->numeric()
+                        ->minValue(0)
+                        ->helperText('Max seconds a job may run.'),
+                    TextInput::make('queue_worker_tries')
+                        ->label('Tries')
+                        ->numeric()
+                        ->minValue(0)
+                        ->helperText('Max attempts before failing a job.'),
+                    TextInput::make('queue_worker_sleep')
+                        ->label('Sleep (sec)')
+                        ->numeric()
+                        ->minValue(0)
+                        ->helperText('Used by queue:work fallback.'),
+                    Placeholder::make('queue_worker_configured')
+                        ->label('Configured summary')
+                        ->content(fn (Get $get): string => self::queueWorkerSummary($get, false)),
+                    Placeholder::make('queue_worker_effective')
+                        ->label('Effective defaults')
+                        ->content(fn (): string => self::queueWorkerSummary(null, true)),
+                ])
+                ->columns(2),
+            Section::make('Command Helpers')
+                ->description('Copy these commands into production or server docs.')
+                ->schema([
+                    Placeholder::make('horizon_start')
+                        ->label('Start Horizon')
+                        ->content('php artisan horizon'),
+                    Placeholder::make('horizon_terminate')
+                        ->label('Terminate Horizon')
+                        ->content('php artisan horizon:terminate'),
+                    Placeholder::make('queue_work')
+                        ->label('Queue worker fallback')
+                        ->content(fn (Get $get): string => self::queueWorkCommand($get)),
+                ])
+                ->columns(1),
         ];
 
         return $schema
@@ -550,5 +610,84 @@ class EngineSettingForm
         }
 
         return $fields;
+    }
+
+    private static function queueWorkerSummary(?Get $get, bool $effective): string
+    {
+        $name = self::queueWorkerValue($get, 'queue_worker_name', 'supervisor-1');
+        $processes = self::queueWorkerValue($get, 'queue_worker_processes', self::horizonDefault('maxProcesses', 1));
+        $memory = self::queueWorkerValue($get, 'queue_worker_memory', self::horizonDefault('memory', 128));
+        $timeout = self::queueWorkerValue($get, 'queue_worker_timeout', self::horizonDefault('timeout', 60));
+        $tries = self::queueWorkerValue($get, 'queue_worker_tries', self::horizonDefault('tries', 1));
+        $sleep = self::queueWorkerValue($get, 'queue_worker_sleep', 3);
+
+        if (! $effective && $get) {
+            $configured = [
+                $get('queue_worker_name'),
+                $get('queue_worker_processes'),
+                $get('queue_worker_memory'),
+                $get('queue_worker_timeout'),
+                $get('queue_worker_tries'),
+                $get('queue_worker_sleep'),
+            ];
+
+            $hasConfig = collect($configured)
+                ->filter(fn ($value): bool => $value !== null && $value !== '')
+                ->isNotEmpty();
+
+            if (! $hasConfig) {
+                return 'No overrides set. Defaults will apply.';
+            }
+        }
+
+        return sprintf(
+            'Supervisor: %s | Processes: %s | Memory: %s MB | Timeout: %s s | Tries: %s | Sleep: %s s',
+            $name,
+            $processes,
+            $memory,
+            $timeout,
+            $tries,
+            $sleep
+        );
+    }
+
+    private static function queueWorkCommand(Get $get): string
+    {
+        $driver = (string) config('queue.default', 'database');
+        $queue = config("queue.connections.{$driver}.queue", 'default');
+        $sleep = self::queueWorkerValue($get, 'queue_worker_sleep', 3);
+        $tries = self::queueWorkerValue($get, 'queue_worker_tries', self::horizonDefault('tries', 1));
+        $timeout = self::queueWorkerValue($get, 'queue_worker_timeout', self::horizonDefault('timeout', 60));
+        $memory = self::queueWorkerValue($get, 'queue_worker_memory', self::horizonDefault('memory', 128));
+
+        return sprintf(
+            'php artisan queue:work --queue=%s --sleep=%s --tries=%s --timeout=%s --memory=%s',
+            $queue,
+            $sleep,
+            $tries,
+            $timeout,
+            $memory
+        );
+    }
+
+    private static function queueWorkerValue(?Get $get, string $key, mixed $fallback): mixed
+    {
+        if ($get) {
+            $value = $get($key);
+            if ($value !== null && $value !== '') {
+                return $value;
+            }
+        }
+
+        return $fallback;
+    }
+
+    private static function horizonDefault(string $key, mixed $fallback): mixed
+    {
+        $env = (string) config('app.env');
+
+        return config("horizon.environments.{$env}.supervisor-1.{$key}")
+            ?? config("horizon.defaults.supervisor-1.{$key}")
+            ?? $fallback;
     }
 }

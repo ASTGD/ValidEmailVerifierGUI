@@ -1,6 +1,6 @@
 # Context Handoff (ValidEmailVerifierGUI)
 
-Last updated: 2026-02-03
+Last updated: 2026-02-05
 
 This document is the handoff bundle for a fresh workspace. It summarizes the current system state, key decisions, and how to resume work without losing context. Do not place secrets in this file.
 
@@ -204,3 +204,8 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Added Engine Settings -> Queue Engine tab to control queue connection, cache store, and Horizon toggle.
 - Runtime config overrides apply queue/cache settings from Engine Settings, with Redis availability fallback to avoid errors.
 - Added Operations menu link **Queue Engine** that opens Horizon in a new tab.
+
+### 2026-02-05 — Ops queue UX improvements (feature/redis-queue-ops)
+- Added Ops Overview widgets: Queue quick links, queue status, and Redis fallback alert banner.
+- Added Queue Engine worker tuning fields and command helpers (Horizon + queue:work).
+- Added DB columns for queue worker settings on engine_settings.
