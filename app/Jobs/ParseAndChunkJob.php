@@ -7,8 +7,8 @@ use App\Enums\VerificationJobStatus;
 use App\Models\VerificationJob;
 use App\Models\VerificationJobChunk;
 use App\Services\EmailDedupeStore;
-use App\Services\JobStorage;
 use App\Services\JobMetricsRecorder;
+use App\Services\JobStorage;
 use App\Support\EngineSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -28,42 +28,80 @@ class ParseAndChunkJob implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
+    public int $timeout = 1800;
+
+    public int $tries = 2;
+
+    public bool $failOnTimeout = true;
+
     private int $chunkSize;
+
     private int $maxEmails;
+
     private int $cacheBatchSize;
+
     private int $dedupeMemoryLimit;
+
     private int $xlsxRowBatchSize;
 
     private int $totalUnique = 0;
+
     private int $cachedCount = 0;
+
     private int $unknownCount = 0;
+
     private int $chunksCreated = 0;
+
     private array $cachedCounts = [
         'valid' => 0,
         'invalid' => 0,
         'risky' => 0,
     ];
+
     private array $cachedStreams = [];
+
     private array $cachedKeys = [];
+
     private $cacheMissStream = null;
+
     private ?string $cacheMissKey = null;
 
     private ?VerificationJob $verificationJob = null;
+
     private ?EmailDedupeStore $deduper = null;
+
     private array $batch = [];
+
     private bool $cacheOnlyMode = false;
+
     private string $cacheOnlyMissStatus = 'risky';
+
     private string $cacheFailureMode = 'fail_job';
+
     private bool $skipCache = false;
+
     private bool $cacheWritebackTestEnabled = false;
+
     private ?JobMetricsRecorder $metricsRecorder = null;
 
     private $chunkStream = null;
+
     private int $chunkNo = 1;
+
     private int $chunkEmailCount = 0;
 
     public function __construct(public string $jobId)
     {
+        $this->connection = 'redis_parse';
+        $this->queue = (string) config('queue.connections.redis_parse.queue', 'parse');
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [60, 180];
     }
 
     public function handle(JobStorage $storage, EmailVerificationCacheStore $cacheStore, JobMetricsRecorder $metricsRecorder): void
@@ -211,10 +249,9 @@ class ParseAndChunkJob implements ShouldQueue
         $highestRow = $this->getHighestRow($reader, $tempPath);
 
         for ($startRow = 1; $startRow <= $highestRow; $startRow += $this->xlsxRowBatchSize) {
-            $filter = new class($startRow, $this->xlsxRowBatchSize) implements IReadFilter {
-                public function __construct(private int $startRow, private int $chunkSize)
-                {
-                }
+            $filter = new class($startRow, $this->xlsxRowBatchSize) implements IReadFilter
+            {
+                public function __construct(private int $startRow, private int $chunkSize) {}
 
                 public function readCell($column, $row, $worksheetName = ''): bool
                 {
@@ -361,6 +398,7 @@ class ParseAndChunkJob implements ShouldQueue
             if (array_key_exists($email, $hits)) {
                 $this->cachedCount++;
                 $this->handleCacheHit($email, $hits[$email], $storage, $disk);
+
                 continue;
             }
 

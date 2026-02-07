@@ -13,10 +13,10 @@ class CollectQueueMetrics extends Command
 
     public function handle(QueueMetricsService $service): int
     {
-        $metric = $service->capture();
+        $captured = $service->capture();
 
-        if ($metric) {
-            $this->info('Queue metrics captured.');
+        if ($captured > 0) {
+            $this->info("Queue metrics captured for {$captured} queue lane(s).");
         }
 
         return self::SUCCESS;
