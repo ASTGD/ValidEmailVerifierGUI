@@ -73,6 +73,42 @@ return [
             'after_commit' => false,
         ],
 
+        'redis_prepare' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_PREPARE_NAME', 'prepare'),
+            'retry_after' => (int) env('REDIS_PREPARE_RETRY_AFTER', 300),
+            'block_for' => (int) env('REDIS_PREPARE_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
+        'redis_parse' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_PARSE_NAME', 'parse'),
+            'retry_after' => (int) env('REDIS_PARSE_RETRY_AFTER', 3600),
+            'block_for' => (int) env('REDIS_PARSE_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
+        'redis_finalize' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_FINALIZE_NAME', 'finalize'),
+            'retry_after' => (int) env('REDIS_FINALIZE_RETRY_AFTER', 1200),
+            'block_for' => (int) env('REDIS_FINALIZE_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
+        'redis_import' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_IMPORT_NAME', 'imports'),
+            'retry_after' => (int) env('REDIS_IMPORT_RETRY_AFTER', 1800),
+            'block_for' => (int) env('REDIS_IMPORT_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
         'deferred' => [
             'driver' => 'deferred',
         ],

@@ -8,8 +8,8 @@ Use this runbook to start and stop all local dev services in this repo.
 **Frontend (Vite)**
 1. `./vendor/bin/sail npm run dev`
 
-**Queue worker**
-1. `./vendor/bin/sail artisan queue:work --timeout=1800`
+**Queue workers (Horizon)**
+1. `./vendor/bin/sail artisan horizon`
 
 **Go dashboard (control plane)**
 1. `cd services/go-control-plane`
@@ -48,6 +48,7 @@ Notes:
 - Uses `screen` to keep processes running in the background.
 - Skips the Go dashboard if `services/go-control-plane/.env` is missing.
 - Skips the Go worker if required env vars are missing.
+- `run-queue.sh` starts Horizon (segmented queue workers).
 
 ## Stop background sessions
 

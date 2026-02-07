@@ -11,7 +11,7 @@ if ! command -v screen >/dev/null 2>&1; then
 fi
 
 screen -dmS dev-vite bash -lc "cd '$root_dir' && ./vendor/bin/sail npm run dev"
-screen -dmS dev-queue bash -lc "cd '$root_dir' && ./vendor/bin/sail artisan queue:work --timeout=1800"
+screen -dmS dev-queue bash -lc "cd '$root_dir' && ./vendor/bin/sail artisan horizon"
 
 if [[ -f "$root_dir/services/go-control-plane/.env" ]]; then
   screen -dmS dev-go-dashboard bash -lc "'$root_dir/scripts/run-go-dashboard.sh'"

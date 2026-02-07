@@ -22,8 +22,24 @@ class ImportEmailVerificationOutcomesFromCsv implements ShouldQueue
 
     private const CHUNK_SIZE = 500;
 
+    public int $timeout = 1200;
+
+    public int $tries = 2;
+
+    public bool $failOnTimeout = true;
+
     public function __construct(public int $importId)
     {
+        $this->connection = 'redis_import';
+        $this->queue = (string) config('queue.connections.redis_import.queue', 'imports');
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [120, 300];
     }
 
     public function handle(OutcomeIngestor $ingestor): void

@@ -2,18 +2,19 @@
 
 namespace App\Jobs;
 
+use App\Contracts\CacheWriteBackService;
 use App\Enums\VerificationJobOrigin;
 use App\Enums\VerificationJobStatus;
-use App\Contracts\CacheWriteBackService;
 use App\Models\VerificationJob;
-use App\Services\JobStorage;
 use App\Services\JobMetricsRecorder;
+use App\Services\JobStorage;
 use App\Services\VerificationOutputMapper;
 use App\Services\VerificationResultsMerger;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
@@ -25,8 +26,36 @@ class FinalizeVerificationJob implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
+    public int $timeout = 900;
+
+    public int $tries = 3;
+
+    public bool $failOnTimeout = true;
+
     public function __construct(public string $jobId)
     {
+        $this->connection = 'redis_finalize';
+        $this->queue = (string) config('queue.connections.redis_finalize.queue', 'finalize');
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [30, 120, 300];
+    }
+
+    /**
+     * @return array<int, object>
+     */
+    public function middleware(): array
+    {
+        return [
+            (new WithoutOverlapping("finalize:{$this->jobId}"))
+                ->expireAfter($this->timeout + 120)
+                ->releaseAfter(30),
+        ];
     }
 
     public function handle(
@@ -34,8 +63,7 @@ class FinalizeVerificationJob implements ShouldQueue
         JobStorage $storage,
         CacheWriteBackService $writeBack,
         JobMetricsRecorder $metricsRecorder
-    ): void
-    {
+    ): void {
         $job = VerificationJob::query()
             ->with('chunks')
             ->find($this->jobId);
@@ -166,8 +194,7 @@ class FinalizeVerificationJob implements ShouldQueue
         string $message,
         array $context = [],
         ?JobMetricsRecorder $metricsRecorder = null
-    ): void
-    {
+    ): void {
         $job->update([
             'status' => VerificationJobStatus::Failed,
             'finished_at' => now(),
@@ -185,7 +212,7 @@ class FinalizeVerificationJob implements ShouldQueue
     }
 
     /**
-     * @param array{disk: string, keys: array<string, string>, counts: array<string, int>} $result
+     * @param  array{disk: string, keys: array<string, string>, counts: array<string, int>}  $result
      * @return array{email: string, status: string, sub_status: string, score: int|null, reason: string}|null
      */
     private function extractSingleResult(array $result): ?array
