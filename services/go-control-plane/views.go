@@ -5,6 +5,8 @@ import (
 	"html/template"
 	"net/http"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 type ViewRenderer struct {
@@ -12,11 +14,13 @@ type ViewRenderer struct {
 }
 
 type BasePageData struct {
-	Title           string
-	Subtitle        string
-	ActiveNav       string
-	ContentTemplate string
-	BasePath        string
+	Title            string
+	Subtitle         string
+	ActiveNav        string
+	ContentTemplate  string
+	BasePath         string
+	LiveStreamPath   string
+	AutoReloadOnLive bool
 }
 
 func NewViewRenderer() (*ViewRenderer, error) {
@@ -24,6 +28,22 @@ func NewViewRenderer() (*ViewRenderer, error) {
 		"toJSON": func(value interface{}) template.JS {
 			payload, _ := json.Marshal(value)
 			return template.JS(payload)
+		},
+		"severityClass": func(severity string) string {
+			switch strings.ToLower(strings.TrimSpace(severity)) {
+			case "critical":
+				return "bg-red-500/20 text-red-300"
+			case "warning":
+				return "bg-amber-500/20 text-amber-300"
+			default:
+				return "bg-slate-800 text-slate-200"
+			}
+		},
+		"formatTimestamp": func(value time.Time) string {
+			if value.IsZero() {
+				return "-"
+			}
+			return value.UTC().Format("2006-01-02 15:04:05 UTC")
 		},
 	}
 

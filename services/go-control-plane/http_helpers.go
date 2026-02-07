@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -44,4 +45,44 @@ func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+func (s *Server) requireSameOriginUI(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.isSameOriginUIRequest(r) {
+			writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+
+		next(w, r)
+	}
+}
+
+func (s *Server) isSameOriginUIRequest(r *http.Request) bool {
+	requestHost := normalizeHost(r.Host)
+	if requestHost == "" {
+		return false
+	}
+
+	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
+		parsed, err := url.Parse(origin)
+		if err != nil {
+			return false
+		}
+		return normalizeHost(parsed.Host) == requestHost
+	}
+
+	if referer := strings.TrimSpace(r.Header.Get("Referer")); referer != "" {
+		parsed, err := url.Parse(referer)
+		if err != nil {
+			return false
+		}
+		return normalizeHost(parsed.Host) == requestHost
+	}
+
+	return false
+}
+
+func normalizeHost(host string) string {
+	return strings.ToLower(strings.TrimSpace(host))
 }

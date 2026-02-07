@@ -21,6 +21,8 @@
                 <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "overview" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/overview">Overview</a>
                 <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "workers" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/workers">Workers</a>
                 <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "pools" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/pools">Pools</a>
+                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "alerts" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/alerts">Alerts</a>
+                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "settings" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/settings">Settings</a>
             </nav>
         </header>
 
@@ -31,9 +33,37 @@
                 {{ template "workers" . }}
             {{ else if eq .ActiveNav "pools" }}
                 {{ template "pools" . }}
+            {{ else if eq .ActiveNav "alerts" }}
+                {{ template "alerts" . }}
+            {{ else if eq .ActiveNav "settings" }}
+                {{ template "settings" . }}
             {{ end }}
         </main>
     </div>
+
+    {{ if .LiveStreamPath }}
+    <script>
+        (() => {
+            const source = new EventSource('{{ .LiveStreamPath }}');
+            let lastReload = 0;
+
+            source.addEventListener('stats', (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    window.dispatchEvent(new CustomEvent('cp:live', { detail: payload }));
+                } catch (_) {}
+
+                {{ if .AutoReloadOnLive }}
+                const now = Date.now();
+                if (now - lastReload > 12000) {
+                    lastReload = now;
+                    window.location.reload();
+                }
+                {{ end }}
+            });
+        })();
+    </script>
+    {{ end }}
 </body>
 </html>
 {{ end }}

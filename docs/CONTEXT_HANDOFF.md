@@ -250,6 +250,14 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Added Laravel migration for `go_alerts` and new env settings in control plane `.env.example`.
 - Files updated: `services/go-control-plane/alerts.go`, `services/go-control-plane/notifiers.go`, `services/go-control-plane/store.go`, `services/go-control-plane/snapshots_store.go`, `services/go-control-plane/config.go`, `services/go-control-plane/main.go`, `database/migrations/*`, docs updates.
 
+### 2026-02-07 — Go control plane Phase 5 polish + safety
+- Added protected Prometheus metrics endpoint at `/metrics`.
+- Added SSE stream for UI live updates at `/verifier-engine-room/events`.
+- Added Alerts page (`/verifier-engine-room/alerts`) reading `go_alerts` records.
+- Added Settings page (`/verifier-engine-room/settings`) backed by Redis runtime settings (no `.env` edits).
+- Updated alert service to read runtime settings dynamically (alerts toggle, auto-actions toggle, thresholds/cooldowns).
+- Files updated: `services/go-control-plane/server.go`, `services/go-control-plane/ui_handlers.go`, `services/go-control-plane/templates/*`, `services/go-control-plane/metrics.go`, `services/go-control-plane/stats.go`, `services/go-control-plane/store.go`, `services/go-control-plane/alerts.go`, `services/go-control-plane/snapshots_store.go`, `services/go-control-plane/views.go`, `services/go-control-plane/main.go`, `services/go-control-plane/README.md`.
+
 ### 2026-02-05 — Local control plane runtime state (not committed)
 - Control plane running on `http://localhost:9091` with branded UI at `/verifier-engine-room/overview`.
 - Local `services/go-control-plane/.env` contains:

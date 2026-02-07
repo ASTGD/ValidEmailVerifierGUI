@@ -36,10 +36,6 @@ func NewAlertService(store *Store, snapshots *SnapshotStore, cfg Config, notifie
 }
 
 func (s *AlertService) Start() {
-	if !s.cfg.AlertsEnabled && !s.cfg.AutoActionsEnabled {
-		return
-	}
-
 	interval := s.cfg.AlertCheckInterval
 	if interval <= 0 {
 		interval = 30 * time.Second
@@ -67,19 +63,24 @@ func (s *AlertService) runChecks() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	s.checkOfflineWorkers(ctx)
-	s.checkPoolCapacity(ctx)
-	s.checkWorkerErrorRate(ctx)
+	settings := s.loadRuntimeSettings(ctx)
+	if !settings.AlertsEnabled && !settings.AutoActionsEnabled {
+		return
+	}
+
+	s.checkOfflineWorkers(ctx, settings)
+	s.checkPoolCapacity(ctx, settings)
+	s.checkWorkerErrorRate(ctx, settings)
 }
 
-func (s *AlertService) checkOfflineWorkers(ctx context.Context) {
+func (s *AlertService) checkOfflineWorkers(ctx context.Context, settings RuntimeSettings) {
 	workerIDs, err := s.store.GetKnownWorkerIDs(ctx)
 	if err != nil {
 		log.Printf("alert: failed to load known workers: %v", err)
 		return
 	}
 
-	grace := s.cfg.AlertHeartbeatGrace
+	grace := time.Duration(settings.AlertHeartbeatGraceSecond) * time.Second
 	if grace <= 0 {
 		grace = 120 * time.Second
 	}
@@ -99,7 +100,7 @@ func (s *AlertService) checkOfflineWorkers(ctx context.Context) {
 		}
 
 		alertKey := "alert:offline:" + workerID
-		if !s.shouldSend(ctx, alertKey) {
+		if !s.shouldSend(ctx, alertKey, settings) {
 			continue
 		}
 
@@ -110,11 +111,13 @@ func (s *AlertService) checkOfflineWorkers(ctx context.Context) {
 			Context:   map[string]interface{}{"worker_id": workerID, "last_seen": lastSeen.Format(time.RFC3339)},
 			CreatedAt: now,
 		}
-		s.dispatchAlert(ctx, alert)
+		if settings.AlertsEnabled {
+			s.dispatchAlert(ctx, alert)
+		}
 	}
 }
 
-func (s *AlertService) checkPoolCapacity(ctx context.Context) {
+func (s *AlertService) checkPoolCapacity(ctx context.Context, settings RuntimeSettings) {
 	pools, err := s.store.GetPools(ctx)
 	if err != nil {
 		log.Printf("alert: failed to load pools: %v", err)
@@ -127,7 +130,7 @@ func (s *AlertService) checkPoolCapacity(ctx context.Context) {
 		}
 
 		alertKey := "alert:pool_under:" + pool.Pool
-		if !s.shouldSend(ctx, alertKey) {
+		if !s.shouldSend(ctx, alertKey, settings) {
 			continue
 		}
 
@@ -138,12 +141,14 @@ func (s *AlertService) checkPoolCapacity(ctx context.Context) {
 			Context:   map[string]interface{}{"pool": pool.Pool, "online": pool.Online, "desired": pool.Desired},
 			CreatedAt: time.Now().UTC(),
 		}
-		s.dispatchAlert(ctx, alert)
+		if settings.AlertsEnabled {
+			s.dispatchAlert(ctx, alert)
+		}
 	}
 }
 
-func (s *AlertService) checkWorkerErrorRate(ctx context.Context) {
-	threshold := s.cfg.AlertErrorRateThreshold
+func (s *AlertService) checkWorkerErrorRate(ctx context.Context, settings RuntimeSettings) {
+	threshold := settings.AlertErrorRateThreshold
 	if threshold <= 0 {
 		return
 	}
@@ -164,7 +169,7 @@ func (s *AlertService) checkWorkerErrorRate(ctx context.Context) {
 		}
 
 		alertKey := "alert:error_rate:" + worker.WorkerID
-		if !s.shouldSend(ctx, alertKey) {
+		if !s.shouldSend(ctx, alertKey, settings) {
 			continue
 		}
 
@@ -179,16 +184,18 @@ func (s *AlertService) checkWorkerErrorRate(ctx context.Context) {
 			},
 			CreatedAt: time.Now().UTC(),
 		}
-		s.dispatchAlert(ctx, alert)
+		if settings.AlertsEnabled {
+			s.dispatchAlert(ctx, alert)
+		}
 
-		if s.cfg.AutoActionsEnabled {
+		if settings.AutoActionsEnabled {
 			_ = s.store.SetDesiredState(ctx, worker.WorkerID, "draining")
 		}
 	}
 }
 
-func (s *AlertService) shouldSend(ctx context.Context, key string) bool {
-	cooldown := s.cfg.AlertCooldown
+func (s *AlertService) shouldSend(ctx context.Context, key string, settings RuntimeSettings) bool {
+	cooldown := time.Duration(settings.AlertCooldownSecond) * time.Second
 	if cooldown <= 0 {
 		cooldown = 300 * time.Second
 	}
@@ -200,6 +207,16 @@ func (s *AlertService) shouldSend(ctx context.Context, key string) bool {
 	}
 
 	return allowed
+}
+
+func (s *AlertService) loadRuntimeSettings(ctx context.Context) RuntimeSettings {
+	defaults := defaultRuntimeSettings(s.cfg)
+	settings, err := s.store.GetRuntimeSettings(ctx, defaults)
+	if err != nil {
+		log.Printf("alert: failed to load runtime settings, using defaults: %v", err)
+		return defaults
+	}
+	return settings
 }
 
 func (s *AlertService) dispatchAlert(ctx context.Context, alert AlertEvent) {

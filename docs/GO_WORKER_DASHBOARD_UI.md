@@ -30,6 +30,11 @@
    - High error rate
    - Blacklist/reputation issues
 
+6) **Settings**
+   - Toggle alerts on/off
+   - Toggle auto-actions on/off
+   - Tune error threshold, heartbeat grace, and alert cooldown
+
 ## UI Stack (Go-native)
 - Go HTML templates
 - Tailwind (compiled) or PicoCSS
@@ -37,8 +42,9 @@
 - Charts: Chart.js (lightweight)
 
 ## Update Strategy
-Option A (simple): auto-refresh every N seconds.
-Option B (better): SSE or WebSocket for live updates.
+Implemented: SSE stream at `/verifier-engine-room/events` for live updates.
+- Overview applies live stat/chart updates from SSE.
+- Other pages can do lightweight auto-refresh driven by SSE events.
 
 ## Access Control
 - Admin-only token header
@@ -52,4 +58,5 @@ Add a sidebar link in Filament to open the Go dashboard in a new tab.
 - UI lives in `services/go-control-plane/templates` with Tailwind + Chart.js assets in `services/go-control-plane/assets`.
 - Access is protected by HTTP Basic Auth (password = `CONTROL_PLANE_TOKEN`).
 - History charts load when MySQL snapshots are enabled.
-- Alert history is stored in MySQL and can be surfaced in a future Alerts page.
+- Alert history is listed from `go_alerts` on `/verifier-engine-room/alerts`.
+- Runtime alert settings are stored in Redis from `/verifier-engine-room/settings` (no `.env` edits).
