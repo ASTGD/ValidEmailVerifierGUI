@@ -1,0 +1,13 @@
+{
+    "agents": [
+        "codex"
+    ],
+    "editors": [
+        "codex",
+        "vscode"
+    ],
+    "guidelines": [
+        "filament/filament"
+    ],
+    "sail": true
+}
