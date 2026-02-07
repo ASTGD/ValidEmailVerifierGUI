@@ -15,6 +15,16 @@ type Store struct {
 	heartbeatTTL time.Duration
 }
 
+const runtimeSettingsKey = "control_plane:runtime_settings"
+
+type RuntimeSettings struct {
+	AlertsEnabled             bool    `json:"alerts_enabled"`
+	AutoActionsEnabled        bool    `json:"auto_actions_enabled"`
+	AlertErrorRateThreshold   float64 `json:"alert_error_rate_threshold"`
+	AlertHeartbeatGraceSecond int     `json:"alert_heartbeat_grace_seconds"`
+	AlertCooldownSecond       int     `json:"alert_cooldown_seconds"`
+}
+
 func NewStore(rdb *redis.Client, ttl time.Duration) *Store {
 	return &Store{
 		rdb:          rdb,
@@ -121,6 +131,70 @@ func (s *Store) GetWorkerMetrics(ctx context.Context, workerID string) (*WorkerM
 
 func (s *Store) ShouldSendAlert(ctx context.Context, key string, ttl time.Duration) (bool, error) {
 	return s.rdb.SetNX(ctx, key, "1", ttl).Result()
+}
+
+func defaultRuntimeSettings(cfg Config) RuntimeSettings {
+	grace := int(cfg.AlertHeartbeatGrace / time.Second)
+	if grace <= 0 {
+		grace = 120
+	}
+
+	cooldown := int(cfg.AlertCooldown / time.Second)
+	if cooldown <= 0 {
+		cooldown = 300
+	}
+
+	return RuntimeSettings{
+		AlertsEnabled:             cfg.AlertsEnabled,
+		AutoActionsEnabled:        cfg.AutoActionsEnabled,
+		AlertErrorRateThreshold:   cfg.AlertErrorRateThreshold,
+		AlertHeartbeatGraceSecond: grace,
+		AlertCooldownSecond:       cooldown,
+	}
+}
+
+func normalizeRuntimeSettings(in RuntimeSettings, defaults RuntimeSettings) RuntimeSettings {
+	out := in
+
+	if out.AlertHeartbeatGraceSecond <= 0 {
+		out.AlertHeartbeatGraceSecond = defaults.AlertHeartbeatGraceSecond
+	}
+
+	if out.AlertCooldownSecond <= 0 {
+		out.AlertCooldownSecond = defaults.AlertCooldownSecond
+	}
+
+	if out.AlertErrorRateThreshold < 0 {
+		out.AlertErrorRateThreshold = defaults.AlertErrorRateThreshold
+	}
+
+	return out
+}
+
+func (s *Store) GetRuntimeSettings(ctx context.Context, defaults RuntimeSettings) (RuntimeSettings, error) {
+	value, err := s.rdb.Get(ctx, runtimeSettingsKey).Result()
+	if err == redis.Nil || value == "" {
+		return defaults, nil
+	}
+	if err != nil {
+		return defaults, err
+	}
+
+	var settings RuntimeSettings
+	if err := json.Unmarshal([]byte(value), &settings); err != nil {
+		return defaults, err
+	}
+
+	return normalizeRuntimeSettings(settings, defaults), nil
+}
+
+func (s *Store) SaveRuntimeSettings(ctx context.Context, settings RuntimeSettings) error {
+	payload, err := json.Marshal(settings)
+	if err != nil {
+		return err
+	}
+
+	return s.rdb.Set(ctx, runtimeSettingsKey, payload, 0).Err()
 }
 
 func (s *Store) SetDesiredState(ctx context.Context, workerID string, state string) error {

@@ -18,6 +18,10 @@ Laravel remains control-light and only links to this dashboard.
 Use a static bearer token (env-based).
 - `CONTROL_PLANE_TOKEN` (stored outside this repo)
 
+UI and browser endpoints are protected with HTTP Basic Auth as well.
+- Username: any non-empty value
+- Password: `CONTROL_PLANE_TOKEN`
+
 Redis connection is configured by env:
 - `REDIS_ADDR` (host:port)
 - `REDIS_PASSWORD`
@@ -36,6 +40,14 @@ Alerts and notifications:
 - `AUTO_ACTIONS_ENABLED` (true/false)
 - `SLACK_WEBHOOK_URL`
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_TO`
+
+Runtime overrides (Redis-backed, no `.env` rewrite):
+- `control_plane:runtime_settings` JSON:
+  - `alerts_enabled`
+  - `auto_actions_enabled`
+  - `alert_error_rate_threshold`
+  - `alert_heartbeat_grace_seconds`
+  - `alert_cooldown_seconds`
 
 ## Worker States
 - `running`
@@ -131,6 +143,19 @@ Response:
 ```json
 { "pool": "default", "desired": 5 }
 ```
+
+### GET /metrics
+Prometheus text exposition (auth required).
+Includes worker counts, pool counts, desired totals, and worker/aggregate error-rate gauges.
+
+### GET /verifier-engine-room/events
+SSE stream for live UI updates (auth required).
+
+### GET /verifier-engine-room/alerts
+UI page showing recent alerts from `go_alerts` (auth required).
+
+### GET|POST /verifier-engine-room/settings
+UI page to read/write runtime alert settings to Redis (auth required).
 
 ## Redis Schema (Suggested)
 - `worker:{id}:state` -> current state (string)

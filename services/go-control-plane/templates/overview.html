@@ -1,19 +1,24 @@
 {{ define "overview" }}
-<section class="grid gap-6 lg:grid-cols-3">
+<section class="grid gap-6 lg:grid-cols-4">
     <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
         <p class="text-xs uppercase tracking-widest text-slate-400">Active Workers</p>
-        <p class="mt-3 text-3xl font-semibold">{{ .WorkerCount }}</p>
+        <p id="worker-count" class="mt-3 text-3xl font-semibold">{{ .WorkerCount }}</p>
         <p class="mt-2 text-sm text-slate-400">Workers with fresh heartbeat.</p>
     </div>
     <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
         <p class="text-xs uppercase tracking-widest text-slate-400">Pools Known</p>
-        <p class="mt-3 text-3xl font-semibold">{{ .PoolCount }}</p>
+        <p id="pool-count" class="mt-3 text-3xl font-semibold">{{ .PoolCount }}</p>
         <p class="mt-2 text-sm text-slate-400">Pools registered by workers.</p>
     </div>
     <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
         <p class="text-xs uppercase tracking-widest text-slate-400">Desired Capacity</p>
-        <p class="mt-3 text-3xl font-semibold">{{ .DesiredTotal }}</p>
+        <p id="desired-total" class="mt-3 text-3xl font-semibold">{{ .DesiredTotal }}</p>
         <p class="mt-2 text-sm text-slate-400">Sum of pool desired workers.</p>
+    </div>
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Error Rate (Total/min)</p>
+        <p id="error-rate-total" class="mt-3 text-3xl font-semibold">{{ .ErrorRateTotal }}</p>
+        <p class="mt-2 text-sm text-slate-400">Current summed worker error rate.</p>
     </div>
 </section>
 
@@ -23,7 +28,7 @@
             <h2 class="text-lg font-semibold">Pool Capacity Snapshot</h2>
             <p class="text-sm text-slate-400">Online workers vs desired capacity.</p>
         </div>
-        <span class="text-xs text-slate-400">Updated on refresh</span>
+        <span id="live-updated" class="text-xs text-slate-400">Live stream connected</span>
     </div>
     <div class="mt-6">
         <canvas id="poolChart" height="120"></canvas>
@@ -47,19 +52,19 @@
 
 <section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
     <h2 class="text-lg font-semibold">Pool Summary</h2>
-    <div class="mt-4 grid gap-4 md:grid-cols-2">
+    <div class="mt-4 grid gap-4 md:grid-cols-2" id="pool-summary-grid">
         {{ range .Pools }}
-            <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4" data-pool-card="{{ .Pool }}">
                 <div class="flex items-center justify-between">
                     <div>
                         <p class="text-sm font-semibold">{{ .Pool }}</p>
-                        <p class="text-xs text-slate-400">Online {{ .Online }} / Desired {{ .Desired }}</p>
+                        <p class="text-xs text-slate-400">Online <span data-online>{{ .Online }}</span> / Desired <span data-desired>{{ .Desired }}</span></p>
                     </div>
-                    <span class="rounded-full bg-slate-800 px-3 py-1 text-xs">{{ if gt .Desired 0 }}{{ .Online }} / {{ .Desired }}{{ else }}{{ .Online }} active{{ end }}</span>
+                    <span class="rounded-full bg-slate-800 px-3 py-1 text-xs" data-badge>{{ if gt .Desired 0 }}{{ .Online }} / {{ .Desired }}{{ else }}{{ .Online }} active{{ end }}</span>
                 </div>
             </div>
         {{ else }}
-            <p class="text-sm text-slate-400">No pools yet. Workers will register pools automatically.</p>
+            <p class="text-sm text-slate-400" data-no-pools>No pools yet. Workers will register pools automatically.</p>
         {{ end }}
     </div>
 </section>
@@ -67,14 +72,16 @@
 <script src="/assets/chart.min.js" defer></script>
 <script defer>
     window.addEventListener('DOMContentLoaded', () => {
-        const ctx = document.getElementById('poolChart');
-        if (!ctx) return;
+        const poolCanvas = document.getElementById('poolChart');
+        if (!poolCanvas) {
+            return;
+        }
 
-        const labels = {{ toJSON .ChartLabels }};
-        const online = {{ toJSON .ChartOnline }};
-        const desired = {{ toJSON .ChartDesired }};
+        let labels = {{ toJSON .ChartLabels }};
+        let online = {{ toJSON .ChartOnline }};
+        let desired = {{ toJSON .ChartDesired }};
 
-        new Chart(ctx, {
+        const poolChart = new Chart(poolCanvas, {
             type: 'bar',
             data: {
                 labels,
@@ -103,6 +110,77 @@
                     y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } },
                 },
             },
+        });
+
+        const updatePoolSummary = (pools) => {
+            const grid = document.getElementById('pool-summary-grid');
+            if (!grid) return;
+
+            const noPools = grid.querySelector('[data-no-pools]');
+            if (noPools) {
+                noPools.remove();
+            }
+
+            pools.forEach((pool) => {
+                let card = grid.querySelector(`[data-pool-card="${pool.pool}"]`);
+                if (!card) {
+                    card = document.createElement('div');
+                    card.className = 'rounded-xl border border-slate-800 bg-slate-950/60 p-4';
+                    card.setAttribute('data-pool-card', pool.pool);
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-semibold"></p>
+                                <p class="text-xs text-slate-400">Online <span data-online></span> / Desired <span data-desired></span></p>
+                            </div>
+                            <span class="rounded-full bg-slate-800 px-3 py-1 text-xs" data-badge></span>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                }
+
+                const title = card.querySelector('p.text-sm.font-semibold');
+                const onlineText = card.querySelector('[data-online]');
+                const desiredText = card.querySelector('[data-desired]');
+                const badge = card.querySelector('[data-badge]');
+
+                title.textContent = pool.pool;
+                onlineText.textContent = pool.online;
+                desiredText.textContent = pool.desired;
+                badge.textContent = pool.desired > 0 ? `${pool.online} / ${pool.desired}` : `${pool.online} active`;
+            });
+        };
+
+        window.addEventListener('cp:live', (event) => {
+            const payload = event.detail;
+            if (!payload) {
+                return;
+            }
+
+            const workerCount = document.getElementById('worker-count');
+            const poolCount = document.getElementById('pool-count');
+            const desiredTotal = document.getElementById('desired-total');
+            const errorRateTotal = document.getElementById('error-rate-total');
+            const liveUpdated = document.getElementById('live-updated');
+
+            if (workerCount) workerCount.textContent = payload.worker_count;
+            if (poolCount) poolCount.textContent = payload.pool_count;
+            if (desiredTotal) desiredTotal.textContent = payload.desired_total;
+            if (errorRateTotal) errorRateTotal.textContent = Number(payload.error_rate_total || 0).toFixed(2);
+            if (liveUpdated) liveUpdated.textContent = `Updated ${new Date(payload.timestamp).toLocaleTimeString()}`;
+
+            if (Array.isArray(payload.pools)) {
+                const nextLabels = payload.pools.map((pool) => pool.pool);
+                const nextOnline = payload.pools.map((pool) => pool.online);
+                const nextDesired = payload.pools.map((pool) => pool.desired);
+
+                poolChart.data.labels = nextLabels;
+                poolChart.data.datasets[0].data = nextOnline;
+                poolChart.data.datasets[1].data = nextDesired;
+                poolChart.update('none');
+
+                updatePoolSummary(payload.pools);
+            }
         });
     });
 

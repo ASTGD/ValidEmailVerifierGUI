@@ -47,20 +47,29 @@ func (s *Server) Router() http.Handler {
 
 		router.Get("/api/pools", s.handlePools)
 		router.Post("/api/pools/{pool}/scale", s.handleScalePool)
+		router.Get("/metrics", s.handleMetrics)
 
 		router.Get("/ui", s.handleUIRedirect)
-		router.Get("/ui/overview", s.handleUIRedirect)
-		router.Get("/ui/workers", s.handleUIRedirect)
-		router.Get("/ui/pools", s.handleUIRedirect)
+		router.Get("/ui/overview", s.handleUILegacyRedirect("/verifier-engine-room/overview"))
+		router.Get("/ui/workers", s.handleUILegacyRedirect("/verifier-engine-room/workers"))
+		router.Get("/ui/pools", s.handleUILegacyRedirect("/verifier-engine-room/pools"))
+		router.Get("/ui/alerts", s.handleUILegacyRedirect("/verifier-engine-room/alerts"))
+		router.Get("/ui/settings", s.handleUILegacyRedirect("/verifier-engine-room/settings"))
+		router.Get("/ui/events", s.handleUILegacyRedirect("/verifier-engine-room/events"))
 		router.Post("/ui/workers/{workerID}/pause", s.handleUISetDesired("paused"))
 		router.Post("/ui/workers/{workerID}/resume", s.handleUISetDesired("running"))
 		router.Post("/ui/workers/{workerID}/drain", s.handleUISetDesired("draining"))
 		router.Post("/ui/workers/{workerID}/stop", s.handleUISetDesired("stopped"))
 		router.Post("/ui/pools/{pool}/scale", s.handleUIScalePool)
+		router.Post("/ui/settings", s.handleUIUpdateSettings)
 
 		router.Get("/verifier-engine-room/overview", s.handleUIOverview)
 		router.Get("/verifier-engine-room/workers", s.handleUIWorkers)
 		router.Get("/verifier-engine-room/pools", s.handleUIPools)
+		router.Get("/verifier-engine-room/alerts", s.handleUIAlerts)
+		router.Get("/verifier-engine-room/settings", s.handleUISettings)
+		router.Post("/verifier-engine-room/settings", s.handleUIUpdateSettings)
+		router.Get("/verifier-engine-room/events", s.handleUIEvents)
 		router.Post("/verifier-engine-room/workers/{workerID}/pause", s.handleUISetDesired("paused"))
 		router.Post("/verifier-engine-room/workers/{workerID}/resume", s.handleUISetDesired("running"))
 		router.Post("/verifier-engine-room/workers/{workerID}/drain", s.handleUISetDesired("draining"))
@@ -80,8 +89,9 @@ func (s *Server) ListenAndServe() error {
 		Handler:           s.Router(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       30 * time.Second,
+		// Keep write timeout disabled for long-lived SSE streams.
+		WriteTimeout: 0,
+		IdleTimeout:  30 * time.Second,
 	}
 
 	shutdown := make(chan os.Signal, 1)

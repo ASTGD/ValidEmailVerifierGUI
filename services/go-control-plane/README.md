@@ -24,12 +24,16 @@ Lightweight Go service that tracks worker heartbeats, desired state, and pool sc
 - `POST /api/workers/{id}/pause|resume|drain|stop`
 - `GET /api/pools`
 - `POST /api/pools/{pool}/scale`
+- `GET /metrics` (Prometheus format; auth required)
 
 All endpoints require `Authorization: Bearer <CONTROL_PLANE_TOKEN>`.
 
 ## UI
 - Open `http://<host>:<port>/verifier-engine-room/overview`
 - Use HTTP Basic Auth (any username, password = `CONTROL_PLANE_TOKEN`)
+- Live updates stream from `/verifier-engine-room/events` (SSE)
+- Alerts page: `/verifier-engine-room/alerts`
+- Runtime settings page: `/verifier-engine-room/settings`
 
 ## Snapshots (Phase 3)
 Set `MYSQL_DSN` to enable MySQL snapshots. Example:
@@ -48,6 +52,8 @@ ALERT_COOLDOWN_SECONDS=300
 ALERT_ERROR_RATE_THRESHOLD=10
 AUTO_ACTIONS_ENABLED=false
 ```
+
+Runtime toggles can also be changed from the Settings page. Those updates are stored in Redis and take effect without editing `.env`.
 
 Slack:
 ```

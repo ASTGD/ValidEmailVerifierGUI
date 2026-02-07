@@ -123,3 +123,35 @@ func (s *SnapshotStore) SaveAlert(ctx context.Context, alert AlertEvent) error {
 	`, alert.Type, alert.Severity, alert.Message, contextJSON, createdAt)
 	return err
 }
+
+func (s *SnapshotStore) GetRecentAlerts(ctx context.Context, limit int) ([]AlertRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT type, severity, message, context, created_at
+		FROM go_alerts
+		ORDER BY created_at DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	alerts := make([]AlertRecord, 0, limit)
+	for rows.Next() {
+		var record AlertRecord
+		if err := rows.Scan(&record.Type, &record.Severity, &record.Message, &record.Context, &record.CreatedAt); err != nil {
+			return nil, err
+		}
+		alerts = append(alerts, record)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return alerts, nil
+}

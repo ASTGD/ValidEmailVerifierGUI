@@ -1,0 +1,48 @@
+{{ define "alerts" }}
+<section class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Recent Alerts</h2>
+            <p class="text-sm text-slate-400">Latest records from MySQL `go_alerts`.</p>
+        </div>
+        {{ if .HasStorage }}
+        <span class="text-xs text-slate-400">{{ .AlertCount }} records</span>
+        {{ end }}
+    </div>
+
+    {{ if not .HasStorage }}
+    <div class="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+        MySQL storage is not configured. Set <code>MYSQL_DSN</code> to enable alert persistence and this page.
+    </div>
+    {{ else }}
+    <div class="mt-6 overflow-x-auto">
+        <table class="w-full text-left text-sm">
+            <thead class="text-xs uppercase text-slate-500">
+                <tr>
+                    <th class="py-2">Created At</th>
+                    <th class="py-2">Type</th>
+                    <th class="py-2">Severity</th>
+                    <th class="py-2">Message</th>
+                    <th class="py-2">Context</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+                {{ range .Alerts }}
+                <tr>
+                    <td class="py-3 text-slate-300">{{ formatTimestamp .CreatedAt }}</td>
+                    <td class="py-3 font-medium">{{ .Type }}</td>
+                    <td class="py-3"><span class="rounded-full px-3 py-1 text-xs {{ severityClass .Severity }}">{{ .Severity }}</span></td>
+                    <td class="py-3 text-slate-200">{{ .Message }}</td>
+                    <td class="py-3 text-xs text-slate-400">{{ if .Context }}{{ .Context }}{{ else }}-{{ end }}</td>
+                </tr>
+                {{ else }}
+                <tr>
+                    <td class="py-6 text-center text-slate-400" colspan="5">No alerts recorded yet.</td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    </div>
+    {{ end }}
+</section>
+{{ end }}
