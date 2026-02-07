@@ -20,15 +20,17 @@ class QueueSegmentationConfigTest extends TestCase
 
     public function test_horizon_config_includes_default_queue_coverage(): void
     {
+        $defaultQueue = (string) config('queue.connections.redis.queue', env('REDIS_QUEUE', 'default'));
+        $defaultWaitKey = sprintf('redis:%s', $defaultQueue);
         $waits = config('horizon.waits', []);
         $defaults = config('horizon.defaults', []);
         $local = config('horizon.environments.local', []);
         $production = config('horizon.environments.production', []);
 
-        $this->assertArrayHasKey('redis:default', $waits);
+        $this->assertArrayHasKey($defaultWaitKey, $waits);
         $this->assertArrayHasKey('supervisor-default', $defaults);
         $this->assertSame('redis', data_get($defaults, 'supervisor-default.connection'));
-        $this->assertSame(['default'], data_get($defaults, 'supervisor-default.queue'));
+        $this->assertSame([$defaultQueue], data_get($defaults, 'supervisor-default.queue'));
         $this->assertArrayHasKey('supervisor-default', $local);
         $this->assertArrayHasKey('supervisor-default', $production);
     }

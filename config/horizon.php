@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Str;
 
+$defaultRedisQueue = env('REDIS_QUEUE', 'default');
+
 return [
 
     /*
@@ -97,7 +99,7 @@ return [
     */
 
     'waits' => [
-        'redis:default' => 60,
+        sprintf('redis:%s', $defaultRedisQueue) => 60,
         sprintf('redis_prepare:%s', env('QUEUE_PREPARE_NAME', 'prepare')) => 30,
         sprintf('redis_parse:%s', env('QUEUE_PARSE_NAME', 'parse')) => 120,
         sprintf('redis_finalize:%s', env('QUEUE_FINALIZE_NAME', 'finalize')) => 45,
@@ -203,7 +205,7 @@ return [
     'defaults' => [
         'supervisor-default' => [
             'connection' => 'redis',
-            'queue' => ['default'],
+            'queue' => [$defaultRedisQueue],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
             'maxProcesses' => 2,
