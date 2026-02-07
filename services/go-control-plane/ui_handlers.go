@@ -232,11 +232,6 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUIUpdateSettings(w http.ResponseWriter, r *http.Request) {
-	if !s.isSameOriginUIRequest(r) {
-		writeError(w, http.StatusForbidden, "forbidden")
-		return
-	}
-
 	if err := r.ParseForm(); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid form")
 		return
