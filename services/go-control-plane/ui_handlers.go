@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -231,13 +232,18 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUIUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	if !s.isSameOriginUIRequest(r) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid form")
 		return
 	}
 
 	threshold, err := strconv.ParseFloat(r.FormValue("alert_error_rate_threshold"), 64)
-	if err != nil || threshold < 0 {
+	if err != nil || math.IsNaN(threshold) || math.IsInf(threshold, 0) || threshold < 0 {
 		writeError(w, http.StatusBadRequest, "alert_error_rate_threshold must be >= 0")
 		return
 	}

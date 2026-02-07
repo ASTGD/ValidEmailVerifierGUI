@@ -89,7 +89,8 @@ func (s *Server) ListenAndServe() error {
 		Handler:           s.Router(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		// Keep write timeout disabled for long-lived SSE streams.
+		// Keep write timeout disabled because /verifier-engine-room/events uses long-lived SSE.
+		// TODO: isolate SSE on a dedicated server/router so the main server can restore a finite WriteTimeout.
 		WriteTimeout: 0,
 		IdleTimeout:  30 * time.Second,
 	}
