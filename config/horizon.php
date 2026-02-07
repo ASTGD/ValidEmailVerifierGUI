@@ -98,6 +98,10 @@ return [
 
     'waits' => [
         'redis:default' => 60,
+        sprintf('redis_prepare:%s', env('QUEUE_PREPARE_NAME', 'prepare')) => 30,
+        sprintf('redis_parse:%s', env('QUEUE_PARSE_NAME', 'parse')) => 120,
+        sprintf('redis_finalize:%s', env('QUEUE_FINALIZE_NAME', 'finalize')) => 45,
+        sprintf('redis_import:%s', env('QUEUE_IMPORT_NAME', 'imports')) => 300,
     ],
 
     /*
@@ -197,33 +201,129 @@ return [
     */
 
     'defaults' => [
-        'supervisor-1' => [
+        'supervisor-default' => [
             'connection' => 'redis',
             'queue' => ['default'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
+            'maxProcesses' => 2,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 192,
+            'tries' => 1,
+            'timeout' => 90,
+            'nice' => 0,
+        ],
+
+        'supervisor-finalize' => [
+            'connection' => 'redis_finalize',
+            'queue' => [env('QUEUE_FINALIZE_NAME', 'finalize')],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'minProcesses' => 2,
+            'maxProcesses' => 4,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 3,
+            'timeout' => 900,
+            'nice' => 0,
+        ],
+
+        'supervisor-prepare' => [
+            'connection' => 'redis_prepare',
+            'queue' => [env('QUEUE_PREPARE_NAME', 'prepare')],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'minProcesses' => 1,
+            'maxProcesses' => 3,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 192,
+            'tries' => 3,
+            'timeout' => 120,
+            'nice' => 0,
+        ],
+
+        'supervisor-parse' => [
+            'connection' => 'redis_parse',
+            'queue' => [env('QUEUE_PARSE_NAME', 'parse')],
+            'balance' => 'simple',
+            'maxProcesses' => 2,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 512,
+            'tries' => 2,
+            'timeout' => 1800,
+            'nice' => 0,
+        ],
+
+        'supervisor-imports' => [
+            'connection' => 'redis_import',
+            'queue' => [env('QUEUE_IMPORT_NAME', 'imports')],
+            'balance' => 'simple',
             'maxProcesses' => 1,
             'maxTime' => 0,
             'maxJobs' => 0,
-            'memory' => 128,
-            'tries' => 1,
-            'timeout' => 60,
+            'memory' => 256,
+            'tries' => 2,
+            'timeout' => 1200,
             'nice' => 0,
         ],
     ],
 
     'environments' => [
         'production' => [
-            'supervisor-1' => [
-                'maxProcesses' => 10,
+            'supervisor-default' => [
+                'maxProcesses' => 2,
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
+            ],
+
+            'supervisor-finalize' => [
+                'minProcesses' => 2,
+                'maxProcesses' => 4,
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
+
+            'supervisor-prepare' => [
+                'minProcesses' => 1,
+                'maxProcesses' => 3,
+                'balanceMaxShift' => 1,
+                'balanceCooldown' => 3,
+            ],
+
+            'supervisor-parse' => [
+                'maxProcesses' => 2,
+            ],
+
+            'supervisor-imports' => [
+                'maxProcesses' => 1,
             ],
         ],
 
         'local' => [
-            'supervisor-1' => [
-                'maxProcesses' => 3,
+            'supervisor-default' => [
+                'maxProcesses' => 1,
+            ],
+
+            'supervisor-finalize' => [
+                'minProcesses' => 1,
+                'maxProcesses' => 2,
+            ],
+
+            'supervisor-prepare' => [
+                'minProcesses' => 1,
+                'maxProcesses' => 1,
+            ],
+
+            'supervisor-parse' => [
+                'maxProcesses' => 1,
+            ],
+
+            'supervisor-imports' => [
+                'maxProcesses' => 1,
             ],
         ],
     ],
