@@ -53,9 +53,10 @@
                         <th class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
                             {{ __('Status') }}
                         </th>
-                        {{-- <th
+                        <th
                             class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest text-right">
-                            {{ __('Actions') }}</th> --}}
+                            {{ __('Actions') }}
+                        </th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#E2E8F0]">
@@ -74,15 +75,21 @@
                                 {{ $invoice->formatted_total }}
                             </td>
                             <td class="px-8 py-5">
-                                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase
-                                            @if($invoice->status === 'Paid') bg-green-100 text-green-700
-                                            @elseif($invoice->status === 'Unpaid') bg-yellow-100 text-yellow-700
-                                            @elseif($invoice->status === 'Cancelled') bg-red-100 text-red-700
-                                            @else bg-gray-100 text-gray-700 @endif">
+                                <span
+                                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase
+                                                                                            @if($invoice->status === 'Paid') bg-green-100 text-green-700
+                                                                                            @elseif($invoice->status === 'Unpaid') bg-yellow-100 text-yellow-700
+                                                                                            @elseif($invoice->status === 'Cancelled') bg-red-100 text-red-700
+                                                                                            @else bg-gray-100 text-gray-700 @endif">
                                     {{ $invoice->status }}
                                 </span>
                             </td>
                             <td class="px-8 py-5 text-right space-x-2">
+                                <a href="{{ route('portal.invoices.show', $invoice->id) }}"
+                                    class="text-[#64748B] hover:text-[#1E7CCF] transition-colors inline-block"
+                                    title="{{ __('View Invoice') }}">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
                                 <button wire:click="download('{{ $invoice->id }}')"
                                     class="text-[#64748B] hover:text-[#1E7CCF] transition-colors"
                                     title="{{ __('Download PDF') }}">

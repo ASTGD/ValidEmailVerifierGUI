@@ -2,13 +2,19 @@
 
 namespace App\Filament\Resources\Customers\RelationManagers;
 
-use App\Enums\VerificationOrderStatus;
-use App\Filament\Resources\VerificationOrders\VerificationOrderResource;
-use App\Models\VerificationOrder;
+use App\Models\Invoice;
 use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Actions\ViewAction;
+use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Filament\Actions\CreateAction;
+use Filament\Actions\ViewAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\Action;
+use Filament\Schemas\Schema;
 
 class InvoicesRelationManager extends RelationManager
 {
@@ -21,6 +27,16 @@ class InvoicesRelationManager extends RelationManager
     public static function getBadge(\Illuminate\Database\Eloquent\Model $ownerRecord, string $pageClass): ?string
     {
         return $ownerRecord->invoices()->count();
+    }
+
+    public function form(Schema $form): Schema
+    {
+        return \App\Filament\Resources\InvoiceResource\Schemas\InvoiceForm::configure($form);
+    }
+
+    public function infolist(Schema $infolist): Schema
+    {
+        return \App\Filament\Resources\InvoiceResource\Schemas\InvoiceInfolist::configure($infolist);
     }
 
     public function table(Table $table): Table
@@ -50,7 +66,7 @@ class InvoicesRelationManager extends RelationManager
                     ->placeholder('-'),
                 TextColumn::make('total')
                     ->label('Total')
-                    ->formatStateUsing(function ($state, \App\Models\Invoice $record): string {
+                    ->formatStateUsing(function ($state, Invoice $record): string {
                         $currency = strtoupper((string) ($record->currency ?: 'usd'));
                         $amount = ((int) $state) / 100;
                         return sprintf('%s %.2f', $currency, $amount);
@@ -67,10 +83,40 @@ class InvoicesRelationManager extends RelationManager
                     }),
             ])
             ->filters([])
-            ->headerActions([])
-            ->actions([
-                ViewAction::make(),
+            ->headerActions([
+                CreateAction::make()
+                    ->icon('heroicon-m-plus')
+                    ->color('primary'),
             ])
-            ->bulkActions([]);
+            ->actions([
+                ViewAction::make()
+                    ->icon('heroicon-m-eye')
+                    ->color('gray'),
+
+                EditAction::make()
+                    ->icon('heroicon-m-pencil-square')
+                    ->color('info')
+                    ->label('Edit'),
+
+                DeleteAction::make()
+                    ->icon('heroicon-m-trash')
+                    ->color('danger')
+                    ->label('Delete'),
+
+                Action::make('download_manual')
+                    ->label('PDF')
+                    ->icon('heroicon-m-arrow-down-tray')
+                    ->color('success')
+                    ->action(function (Invoice $record) {
+                        return response()->streamDownload(function () use ($record) {
+                            echo \Barryvdh\DomPDF\Facade\Pdf::loadView('invoices.pdf', ['invoice' => $record])->output();
+                        }, 'invoice-' . $record->invoice_number . '.pdf');
+                    }),
+            ])
+            ->bulkActions([
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
+                ]),
+            ]);
     }
 }

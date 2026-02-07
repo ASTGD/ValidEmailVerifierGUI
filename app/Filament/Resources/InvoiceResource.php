@@ -3,6 +3,8 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\InvoiceResource\Pages;
+use App\Filament\Resources\InvoiceResource\Schemas\InvoiceForm;
+use App\Filament\Resources\InvoiceResource\Schemas\InvoiceInfolist;
 use App\Models\Invoice;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -20,16 +22,26 @@ use UnitEnum;
 
 class InvoiceResource extends Resource
 {
-    // ... (rest of class until actions)
+    public static function form(Schema $schema): Schema
+    {
+        return InvoiceForm::configure($schema);
+    }
+
+    public static function infolist(Schema $schema): Schema
+    {
+        return InvoiceInfolist::configure($schema);
+    }
 
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('invoice_number')
+                    ->label('Invoice #')
                     ->searchable()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('user.name')
+                Tables\Columns\TextColumn::make('user.email')
+                    ->label('Customer')
                     ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('date')
@@ -44,6 +56,8 @@ class InvoiceResource extends Resource
                         'Paid' => 'success',
                         'Unpaid' => 'warning',
                         'Cancelled' => 'danger',
+                        'Refunded' => 'info',
+                        'Collections' => 'danger',
                         default => 'gray',
                     }),
             ])
@@ -53,14 +67,17 @@ class InvoiceResource extends Resource
                         'Unpaid' => 'Unpaid',
                         'Paid' => 'Paid',
                         'Cancelled' => 'Cancelled',
+                        'Refunded' => 'Refunded',
+                        'Collections' => 'Collections',
                     ]),
             ])
             ->actions([
-                ViewAction::make(),
-                EditAction::make(),
-                Action::make('download')
-                    ->label('Download PDF')
+                Tables\Actions\ViewAction::make(),
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('download')
+                    ->label('PDF')
                     ->icon('heroicon-o-arrow-down-tray')
+                    ->color('info')
                     ->action(function (Invoice $record) {
                         return response()->streamDownload(function () use ($record) {
                             echo \Barryvdh\DomPDF\Facade\Pdf::loadView('invoices.pdf', ['invoice' => $record])->output();
@@ -68,8 +85,8 @@ class InvoiceResource extends Resource
                     }),
             ])
             ->bulkActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
     }

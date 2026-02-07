@@ -63,6 +63,7 @@ Route::middleware(['auth', 'verified'])
             ->name('jobs.download');
         Route::get('orders', OrdersIndex::class)->name('orders.index');
         Route::get('invoices', InvoicesIndex::class)->name('invoices.index');
+        Route::get('invoices/{invoice}', \App\Livewire\Portal\InvoiceShow::class)->name('invoices.show');
         Route::get('settings', Settings::class)->name('settings');
         Route::get('support', Support::class)->name('support');
         // Add this line inside the portal route group
