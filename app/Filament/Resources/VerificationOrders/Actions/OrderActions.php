@@ -11,6 +11,7 @@ use App\Models\VerificationJob;
 use App\Models\VerificationOrder;
 use App\Services\JobStorage;
 use App\Services\OrderStorage;
+use App\Services\QueueHealth\QueueBackpressureGate;
 use App\Support\AdminAuditLogger;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -43,6 +44,17 @@ class OrderActions
                         || (! $record->job && (! $record->input_disk || ! $record->input_key));
                 })
                 ->action(function (VerificationOrder $record): void {
+                    $backpressure = app(QueueBackpressureGate::class)->assessHeavySubmission();
+                    if ($backpressure['blocked']) {
+                        Notification::make()
+                            ->warning()
+                            ->title('Queue pressure active')
+                            ->body($backpressure['reason'])
+                            ->send();
+
+                        return;
+                    }
+
                     if ($record->job) {
                         $record->job->update([
                             'status' => VerificationJobStatus::Pending,
@@ -57,7 +69,33 @@ class OrderActions
                             'order_id' => $record->id,
                         ], auth()->id());
 
-                        PrepareVerificationJob::dispatch($record->job->id);
+                        try {
+                            if ((string) config('queue.default', 'sync') === 'sync') {
+                                PrepareVerificationJob::dispatchSync($record->job->id);
+                            } else {
+                                PrepareVerificationJob::dispatch($record->job->id);
+                            }
+                        } catch (\Throwable $exception) {
+                            $record->job->update([
+                                'status' => VerificationJobStatus::Failed,
+                                'error_message' => 'Failed to enqueue verification job.',
+                                'failure_source' => VerificationJob::FAILURE_SOURCE_ENGINE,
+                                'failure_code' => 'enqueue_failed',
+                                'finished_at' => now(),
+                            ]);
+
+                            $record->job->addLog('enqueue_failed', 'Failed to dispatch prepare job.', [
+                                'error' => $exception->getMessage(),
+                            ], auth()->id());
+
+                            Notification::make()
+                                ->danger()
+                                ->title('Queue dispatch failed')
+                                ->body('Failed to enqueue verification job.')
+                                ->send();
+
+                            return;
+                        }
 
                         $record->update([
                             'status' => VerificationOrderStatus::Processing,
@@ -110,7 +148,33 @@ class OrderActions
                         'actor_id' => auth()->id(),
                     ], auth()->id());
 
-                    PrepareVerificationJob::dispatch($job->id);
+                    try {
+                        if ((string) config('queue.default', 'sync') === 'sync') {
+                            PrepareVerificationJob::dispatchSync($job->id);
+                        } else {
+                            PrepareVerificationJob::dispatch($job->id);
+                        }
+                    } catch (\Throwable $exception) {
+                        $job->update([
+                            'status' => VerificationJobStatus::Failed,
+                            'error_message' => 'Failed to enqueue verification job.',
+                            'failure_source' => VerificationJob::FAILURE_SOURCE_ENGINE,
+                            'failure_code' => 'enqueue_failed',
+                            'finished_at' => now(),
+                        ]);
+
+                        $job->addLog('enqueue_failed', 'Failed to dispatch prepare job.', [
+                            'error' => $exception->getMessage(),
+                        ], auth()->id());
+
+                        Notification::make()
+                            ->danger()
+                            ->title('Queue dispatch failed')
+                            ->body('Failed to enqueue verification job.')
+                            ->send();
+
+                        return;
+                    }
 
                     $record->update([
                         'verification_job_id' => $job->id,
@@ -221,6 +285,17 @@ class OrderActions
                 ->requiresConfirmation()
                 ->visible(fn (VerificationOrder $record): bool => in_array($record->status, [VerificationOrderStatus::Cancelled, VerificationOrderStatus::Fraud], true))
                 ->action(function (VerificationOrder $record): void {
+                    $backpressure = app(QueueBackpressureGate::class)->assessHeavySubmission();
+                    if ($backpressure['blocked']) {
+                        Notification::make()
+                            ->warning()
+                            ->title('Queue pressure active')
+                            ->body($backpressure['reason'])
+                            ->send();
+
+                        return;
+                    }
+
                     if ($record->job) {
                         $record->job->update([
                             'status' => VerificationJobStatus::Pending,
@@ -235,7 +310,33 @@ class OrderActions
                             'order_id' => $record->id,
                         ], auth()->id());
 
-                        PrepareVerificationJob::dispatch($record->job->id);
+                        try {
+                            if ((string) config('queue.default', 'sync') === 'sync') {
+                                PrepareVerificationJob::dispatchSync($record->job->id);
+                            } else {
+                                PrepareVerificationJob::dispatch($record->job->id);
+                            }
+                        } catch (\Throwable $exception) {
+                            $record->job->update([
+                                'status' => VerificationJobStatus::Failed,
+                                'error_message' => 'Failed to enqueue verification job.',
+                                'failure_source' => VerificationJob::FAILURE_SOURCE_ENGINE,
+                                'failure_code' => 'enqueue_failed',
+                                'finished_at' => now(),
+                            ]);
+
+                            $record->job->addLog('enqueue_failed', 'Failed to dispatch prepare job.', [
+                                'error' => $exception->getMessage(),
+                            ], auth()->id());
+
+                            Notification::make()
+                                ->danger()
+                                ->title('Queue dispatch failed')
+                                ->body('Failed to enqueue verification job.')
+                                ->send();
+
+                            return;
+                        }
                     }
 
                     $record->update([

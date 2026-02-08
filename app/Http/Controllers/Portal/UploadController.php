@@ -9,18 +9,23 @@ use App\Http\Requests\Portal\UploadVerificationJobRequest;
 use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
+use App\Services\QueueHealth\QueueBackpressureGate;
 use App\Support\EnhancedModeGate;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Throwable;
 
 class UploadController extends Controller
 {
     use AuthorizesRequests;
 
-    public function __invoke(UploadVerificationJobRequest $request, JobStorage $storage)
-    {
+    public function __invoke(
+        UploadVerificationJobRequest $request,
+        JobStorage $storage,
+        QueueBackpressureGate $backpressureGate
+    ) {
         $user = $request->user();
 
         $rateKey = 'portal-upload|'.$user->id;
@@ -46,6 +51,15 @@ class UploadController extends Controller
         ) {
             return back()->withErrors([
                 'file' => __('An active subscription is required to upload lists.'),
+            ]);
+        }
+
+        $backpressure = $backpressureGate->assessHeavySubmission();
+        if ($backpressure['blocked']) {
+            return back()->withErrors([
+                'file' => __('Queue is under pressure. Please try again soon. :reason', [
+                    'reason' => $backpressure['reason'],
+                ]),
             ]);
         }
 
@@ -89,7 +103,29 @@ class UploadController extends Controller
             'actor_id' => $user->id,
         ], $user->id);
 
-        PrepareVerificationJob::dispatch($job->id);
+        try {
+            if ((string) config('queue.default', 'sync') === 'sync') {
+                PrepareVerificationJob::dispatchSync($job->id);
+            } else {
+                PrepareVerificationJob::dispatch($job->id);
+            }
+        } catch (Throwable $exception) {
+            $job->update([
+                'status' => VerificationJobStatus::Failed,
+                'error_message' => 'Failed to enqueue verification job.',
+                'failure_source' => VerificationJob::FAILURE_SOURCE_ENGINE,
+                'failure_code' => 'enqueue_failed',
+                'finished_at' => now(),
+            ]);
+
+            $job->addLog('enqueue_failed', 'Failed to dispatch prepare job.', [
+                'error' => $exception->getMessage(),
+            ], $user->id);
+
+            return back()->withErrors([
+                'file' => __('Failed to queue verification. Please try again shortly.'),
+            ]);
+        }
 
         return redirect()
             ->route('portal.jobs.show', ['job' => $job->id])

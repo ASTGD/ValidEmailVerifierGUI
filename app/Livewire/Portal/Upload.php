@@ -7,16 +7,18 @@ use App\Enums\VerificationMode;
 use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
+use App\Services\QueueHealth\QueueBackpressureGate;
 use App\Support\EnhancedModeGate;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithFileUploads;
-use Illuminate\Validation\Rule;
+use Throwable;
 
 #[Layout('layouts.portal')]
 class Upload extends Component
@@ -25,6 +27,7 @@ class Upload extends Component
     use WithFileUploads;
 
     public $file;
+
     public string $verification_mode = VerificationMode::Standard->value;
 
     protected function maxUploadKilobytes(): int
@@ -44,7 +47,7 @@ class Upload extends Component
         ];
     }
 
-    public function save(JobStorage $storage)
+    public function save(JobStorage $storage, QueueBackpressureGate $backpressureGate)
     {
         $this->validate();
         $user = Auth::user();
@@ -81,6 +84,15 @@ class Upload extends Component
             return;
         }
 
+        $backpressure = $backpressureGate->assessHeavySubmission();
+        if ($backpressure['blocked']) {
+            $this->addError('file', __('Queue is under pressure. Please try again soon. :reason', [
+                'reason' => $backpressure['reason'],
+            ]));
+
+            return;
+        }
+
         try {
             $this->authorize('create', VerificationJob::class);
         } catch (AuthorizationException) {
@@ -112,7 +124,29 @@ class Upload extends Component
             'actor_id' => $user->id,
         ], $user->id);
 
-        PrepareVerificationJob::dispatch($job->id);
+        try {
+            if ((string) config('queue.default', 'sync') === 'sync') {
+                PrepareVerificationJob::dispatchSync($job->id);
+            } else {
+                PrepareVerificationJob::dispatch($job->id);
+            }
+        } catch (Throwable $exception) {
+            $job->update([
+                'status' => VerificationJobStatus::Failed,
+                'error_message' => 'Failed to enqueue verification job.',
+                'failure_source' => VerificationJob::FAILURE_SOURCE_ENGINE,
+                'failure_code' => 'enqueue_failed',
+                'finished_at' => now(),
+            ]);
+
+            $job->addLog('enqueue_failed', 'Failed to dispatch prepare job.', [
+                'error' => $exception->getMessage(),
+            ], $user->id);
+
+            $this->addError('file', __('Failed to queue verification. Please try again shortly.'));
+
+            return;
+        }
 
         $this->reset('file');
 

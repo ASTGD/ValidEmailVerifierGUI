@@ -31,9 +31,18 @@ class HorizonServiceProvider extends HorizonApplicationServiceProvider
             return EngineSettings::horizonEnabled();
         });
 
-        // Horizon::routeSmsNotificationsTo('15556667777');
-        // Horizon::routeMailNotificationsTo('example@example.com');
-        // Horizon::routeSlackNotificationsTo('slack-webhook-url', '#channel');
+        $mailTo = trim((string) config('queue_health.alerts.email', ''));
+        if ($mailTo !== '') {
+            Horizon::routeMailNotificationsTo($mailTo);
+        }
+
+        $slackWebhook = trim((string) config('queue_health.alerts.slack_webhook_url', ''));
+        if ($slackWebhook !== '') {
+            Horizon::routeSlackNotificationsTo(
+                $slackWebhook,
+                (string) config('queue_health.alerts.slack_channel', '#queue-alerts')
+            );
+        }
     }
 
     /**

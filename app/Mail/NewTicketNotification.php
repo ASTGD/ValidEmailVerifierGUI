@@ -2,8 +2,8 @@
 
 namespace App\Mail;
 
-use App\Models\SupportTicket;
 use App\Models\SupportMessage;
+use App\Models\SupportTicket;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
@@ -18,8 +18,7 @@ class NewTicketNotification extends Mailable implements ShouldQueue
     public function __construct(
         public SupportTicket $ticket,
         public SupportMessage $firstMessage
-    ) {
-    }
+    ) {}
 
     public function envelope(): Envelope
     {
@@ -33,5 +32,17 @@ class NewTicketNotification extends Mailable implements ShouldQueue
         return new Content(
             view: 'emails.new-ticket',
         );
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function tags(): array
+    {
+        return [
+            'lane:default',
+            'mail:new_ticket',
+            'ticket:'.$this->ticket->id,
+        ];
     }
 }

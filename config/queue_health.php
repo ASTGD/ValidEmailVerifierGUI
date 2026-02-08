@@ -12,6 +12,8 @@ return [
 
     'report_cache_key' => env('QUEUE_HEALTH_REPORT_CACHE_KEY', 'queue_health:last_report'),
 
+    'max_metric_age_seconds' => (int) env('QUEUE_HEALTH_MAX_METRIC_AGE_SECONDS', 180),
+
     'required_supervisors' => $requiredSupervisors,
 
     'alerts' => [
@@ -19,6 +21,7 @@ return [
         'cooldown_seconds' => (int) env('QUEUE_HEALTH_ALERT_COOLDOWN_SECONDS', 600),
         'email' => env('QUEUE_HEALTH_ALERT_EMAIL'),
         'slack_webhook_url' => env('QUEUE_HEALTH_SLACK_WEBHOOK_URL'),
+        'slack_channel' => env('QUEUE_HEALTH_SLACK_CHANNEL', '#queue-alerts'),
         'cache_prefix' => env('QUEUE_HEALTH_ALERT_CACHE_PREFIX', 'queue_health:alerts'),
     ],
 

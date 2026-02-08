@@ -104,6 +104,17 @@ class ParseAndChunkJob implements ShouldQueue
         return [60, 180];
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public function tags(): array
+    {
+        return [
+            'lane:parse',
+            'verification_job:'.$this->jobId,
+        ];
+    }
+
     public function handle(JobStorage $storage, EmailVerificationCacheStore $cacheStore, JobMetricsRecorder $metricsRecorder): void
     {
         $this->verificationJob = VerificationJob::query()->find($this->jobId);

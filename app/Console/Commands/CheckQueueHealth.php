@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Services\QueueHealth\QueueHealthEvaluator;
 use App\Services\QueueHealth\QueueHealthNotifier;
+use App\Services\QueueHealth\QueueIncidentTracker;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 
@@ -13,8 +14,11 @@ class CheckQueueHealth extends Command
 
     protected $description = 'Check queue reliability health and optionally emit alerts.';
 
-    public function handle(QueueHealthEvaluator $evaluator, QueueHealthNotifier $notifier): int
-    {
+    public function handle(
+        QueueHealthEvaluator $evaluator,
+        QueueHealthNotifier $notifier,
+        QueueIncidentTracker $incidentTracker
+    ): int {
         $enabled = (bool) config('queue_health.enabled', true);
 
         $report = $enabled
@@ -28,6 +32,7 @@ class CheckQueueHealth extends Command
         );
 
         if ($enabled) {
+            $incidentTracker->sync($report);
             $notifier->notify($report);
         }
 

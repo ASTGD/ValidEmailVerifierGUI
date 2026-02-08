@@ -57,6 +57,9 @@ Notes:
 
 - `./vendor/bin/sail artisan ops:queue-health`
 - `./vendor/bin/sail artisan ops:queue-health --json`
+- `./vendor/bin/sail artisan ops:queue-slo-report --json`
+- `./vendor/bin/sail artisan ops:queue-rollup`
+- `./vendor/bin/sail artisan ops:queue-prune --dry-run`
 - `./vendor/bin/sail artisan horizon:status`
 - `./vendor/bin/sail artisan horizon:supervisors`
 
@@ -66,6 +69,7 @@ Notes:
 2. Restart Horizon process manager target (or re-run `./vendor/bin/sail artisan horizon`)
 3. `./vendor/bin/sail artisan horizon:supervisors`
 4. `./vendor/bin/sail artisan ops:queue-health --json`
+5. Optional replay (safe mode): `./vendor/bin/sail artisan ops:queue-recover --lane=parse --strategy=requeue_failed --dry-run`
 
 ## Stop background sessions
 

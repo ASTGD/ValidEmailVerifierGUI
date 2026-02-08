@@ -80,6 +80,7 @@ class QueueHealthEvaluator
         }
 
         $lanes = (array) config('queue_health.lanes', []);
+        $maxMetricAgeSeconds = max(0, (int) config('queue_health.max_metric_age_seconds', 180));
 
         foreach ($lanes as $lane => $definition) {
             $driver = trim((string) ($definition['driver'] ?? ''));
@@ -107,6 +108,23 @@ class QueueHealthEvaluator
                 continue;
             }
 
+            $metricAgeSeconds = $metric->captured_at?->diffInSeconds(now());
+
+            if ($maxMetricAgeSeconds > 0 && $metricAgeSeconds !== null && $metricAgeSeconds > $maxMetricAgeSeconds) {
+                $issues[] = $this->issue(
+                    sprintf('lane_metric_stale:%s:%s', $driver, $queue),
+                    'warning',
+                    'Queue metric stale',
+                    sprintf(
+                        'Lane %s has stale metrics (%ds old, threshold %ds).',
+                        $lane,
+                        $metricAgeSeconds,
+                        $maxMetricAgeSeconds
+                    ),
+                    $lane,
+                );
+            }
+
             $maxDepth = max(0, (int) ($definition['max_depth'] ?? 0));
             if ($maxDepth > 0 && (int) $metric->depth > $maxDepth) {
                 $issues[] = $this->issue(
@@ -131,6 +149,8 @@ class QueueHealthEvaluator
                 );
             }
         }
+
+        $issues = array_merge($issues, $this->retryContractIssues());
 
         $issues = $this->sortIssues($issues);
         $critical = collect($issues)->where('severity', 'critical')->count();
@@ -232,6 +252,40 @@ class QueueHealthEvaluator
 
             return strcmp($left['key'], $right['key']);
         });
+
+        return $issues;
+    }
+
+    /**
+     * @return array<int, array{key: string, severity: string, title: string, detail: string, lane: string|null}>
+     */
+    private function retryContractIssues(): array
+    {
+        $issues = [];
+        $contracts = (array) config('queue_slo.retry_contracts', []);
+        $buffer = max(0, (int) config('queue_slo.retry_safety_buffer_seconds', 30));
+
+        foreach ($contracts as $connection => $contract) {
+            $timeout = max(0, (int) ($contract['timeout'] ?? 0));
+            $retryAfter = max(0, (int) config("queue.connections.{$connection}.retry_after", (int) ($contract['retry_after'] ?? 0)));
+            $requiredMinimum = $timeout + $buffer;
+
+            if ($timeout <= 0 || $retryAfter > $requiredMinimum) {
+                continue;
+            }
+
+            $issues[] = $this->issue(
+                sprintf('retry_contract:%s', $connection),
+                'critical',
+                'Retry contract unsafe',
+                sprintf(
+                    'Connection %s retry_after=%ds is not greater than timeout+buffer=%ds.',
+                    $connection,
+                    $retryAfter,
+                    $requiredMinimum
+                ),
+            );
+        }
 
         return $issues;
     }

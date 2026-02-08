@@ -31,6 +31,7 @@ class QueueHealthCommandTest extends TestCase
             'queue_health.enabled' => true,
             'queue_health.alerts.enabled' => false,
             'queue_health.required_supervisors' => ['supervisor-default'],
+            'queue_slo.retry_contracts' => [],
             'queue_health.lanes' => [
                 'default' => [
                     'driver' => 'redis',
@@ -77,6 +78,7 @@ class QueueHealthCommandTest extends TestCase
             'queue_health.alerts.enabled' => false,
             'queue_health.required_supervisors' => ['supervisor-default', 'supervisor-parse'],
             'queue_health.lanes' => [],
+            'queue_slo.retry_contracts' => [],
         ]);
 
         $exitCode = Artisan::call('ops:queue-health --json');
@@ -104,6 +106,7 @@ class QueueHealthCommandTest extends TestCase
             'queue_health.enabled' => true,
             'queue_health.alerts.enabled' => false,
             'queue_health.required_supervisors' => ['supervisor-default'],
+            'queue_slo.retry_contracts' => [],
             'queue_health.lanes' => [
                 'default' => [
                     'driver' => 'redis',
@@ -133,6 +136,85 @@ class QueueHealthCommandTest extends TestCase
         $issueKeys = collect($report['issues'] ?? [])->pluck('key')->all();
         $this->assertContains('lane_depth:redis:default', $issueKeys);
         $this->assertContains('lane_oldest:redis:default', $issueKeys);
+    }
+
+    public function test_queue_health_command_detects_stale_lane_metrics(): void
+    {
+        $this->mockRedisOnline();
+        $this->bindMasterSupervisors([
+            [
+                'name' => 'master-1',
+                'status' => 'running',
+                'supervisors' => ['host-1:supervisor-default'],
+            ],
+        ]);
+
+        config([
+            'queue_health.enabled' => true,
+            'queue_health.alerts.enabled' => false,
+            'queue_health.max_metric_age_seconds' => 60,
+            'queue_health.required_supervisors' => ['supervisor-default'],
+            'queue_health.lanes' => [
+                'default' => [
+                    'driver' => 'redis',
+                    'queue' => 'default',
+                    'max_depth' => 100,
+                    'max_oldest_age_seconds' => 300,
+                ],
+            ],
+            'queue_slo.retry_contracts' => [],
+        ]);
+
+        QueueMetric::create([
+            'driver' => 'redis',
+            'queue' => 'default',
+            'depth' => 1,
+            'failed_count' => 0,
+            'oldest_age_seconds' => 10,
+            'throughput_per_min' => 1,
+            'captured_at' => now()->subMinutes(5),
+        ]);
+
+        $exitCode = Artisan::call('ops:queue-health --json');
+        $report = json_decode(trim(Artisan::output()), true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertSame(0, $exitCode);
+        $this->assertSame('warning', $report['status']);
+        $this->assertContains('lane_metric_stale:redis:default', collect($report['issues'])->pluck('key')->all());
+    }
+
+    public function test_queue_health_command_detects_retry_contract_violations(): void
+    {
+        $this->mockRedisOnline();
+        $this->bindMasterSupervisors([
+            [
+                'name' => 'master-1',
+                'status' => 'running',
+                'supervisors' => ['host-1:supervisor-default'],
+            ],
+        ]);
+
+        config([
+            'queue_health.enabled' => true,
+            'queue_health.alerts.enabled' => false,
+            'queue_health.required_supervisors' => ['supervisor-default'],
+            'queue_health.lanes' => [],
+            'queue_slo.retry_safety_buffer_seconds' => 30,
+            'queue_slo.retry_contracts' => [
+                'redis_prepare' => [
+                    'timeout' => 200,
+                    'retry_after' => 200,
+                ],
+            ],
+            'queue.connections.redis_prepare.retry_after' => 200,
+        ]);
+
+        $exitCode = Artisan::call('ops:queue-health --json');
+        $report = json_decode(trim(Artisan::output()), true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertSame(1, $exitCode);
+        $this->assertSame('critical', $report['status']);
+        $this->assertContains('retry_contract:redis_prepare', collect($report['issues'])->pluck('key')->all());
     }
 
     public function test_queue_health_command_does_not_mutate_alert_state_when_health_checks_are_disabled(): void

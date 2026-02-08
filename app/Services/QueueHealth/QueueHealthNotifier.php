@@ -98,6 +98,10 @@ class QueueHealthNotifier
 
         $this->sendEmail($subject, $message);
         $this->sendSlack($subject, $message);
+
+        if (strtolower((string) ($issue['severity'] ?? 'warning')) === 'critical') {
+            $this->sendCriticalEscalation($subject, $message);
+        }
     }
 
     /**
@@ -154,6 +158,15 @@ class QueueHealthNotifier
             return;
         }
 
+        $this->sendEmailTo($to, $subject, $message);
+    }
+
+    private function sendEmailTo(string $to, string $subject, string $message): void
+    {
+        if (trim($to) === '') {
+            return;
+        }
+
         try {
             Mail::raw($message, function ($mail) use ($to, $subject): void {
                 $mail->to($to)->subject($subject);
@@ -170,6 +183,15 @@ class QueueHealthNotifier
         $webhook = trim((string) config('queue_health.alerts.slack_webhook_url', ''));
 
         if ($webhook === '') {
+            return;
+        }
+
+        $this->sendSlackTo($webhook, $subject, $message);
+    }
+
+    private function sendSlackTo(string $webhook, string $subject, string $message): void
+    {
+        if (trim($webhook) === '') {
             return;
         }
 
@@ -225,6 +247,20 @@ class QueueHealthNotifier
             return CarbonImmutable::parse($value);
         } catch (Throwable $exception) {
             return null;
+        }
+    }
+
+    private function sendCriticalEscalation(string $subject, string $message): void
+    {
+        $criticalEmail = trim((string) config('queue_slo.escalation.critical_email', ''));
+        $criticalWebhook = trim((string) config('queue_slo.escalation.critical_slack_webhook_url', ''));
+
+        if ($criticalEmail !== '') {
+            $this->sendEmailTo($criticalEmail, '[ONCALL] '.$subject, $message);
+        }
+
+        if ($criticalWebhook !== '') {
+            $this->sendSlackTo($criticalWebhook, '[ONCALL] '.$subject, $message);
         }
     }
 }

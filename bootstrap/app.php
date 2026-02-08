@@ -24,6 +24,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('metrics:queue')->everyMinute()->withoutOverlapping();
         $schedule->command('horizon:snapshot')->everyFiveMinutes()->withoutOverlapping();
         $schedule->command('ops:queue-health')->everyMinute()->withoutOverlapping();
+        $schedule->command('ops:queue-rollup')->hourly()->withoutOverlapping();
+        $schedule->command('ops:queue-slo-report')->everyFiveMinutes()->withoutOverlapping();
+        $schedule->command('ops:queue-prune')->daily()->withoutOverlapping();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
