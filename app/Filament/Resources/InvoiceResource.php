@@ -10,6 +10,7 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Actions\Action;
 use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -22,6 +23,16 @@ use UnitEnum;
 
 class InvoiceResource extends Resource
 {
+    protected static ?string $model = Invoice::class;
+
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
+
+    protected static ?string $navigationLabel = 'Invoices';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Billing';
+
+    protected static ?int $navigationSort = 3;
+
     public static function form(Schema $schema): Schema
     {
         return InvoiceForm::configure($schema);
@@ -72,9 +83,11 @@ class InvoiceResource extends Resource
                     ]),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\Action::make('download')
+                ViewAction::make(),
+                Action::make('edit')
+                    ->icon('heroicon-o-pencil-square')
+                    ->url(fn(Invoice $record): string => static::getUrl('edit', ['record' => $record])),
+                Action::make('download')
                     ->label('PDF')
                     ->icon('heroicon-o-arrow-down-tray')
                     ->color('info')
@@ -85,8 +98,8 @@ class InvoiceResource extends Resource
                     }),
             ])
             ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
                 ]),
             ]);
     }

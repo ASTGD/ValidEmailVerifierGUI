@@ -93,15 +93,18 @@ class InvoicesRelationManager extends RelationManager
                     ->icon('heroicon-m-eye')
                     ->color('gray'),
 
-                EditAction::make()
+                Action::make('edit')
+                    ->label('Edit')
                     ->icon('heroicon-m-pencil-square')
                     ->color('info')
-                    ->label('Edit'),
+                    ->url(fn(Invoice $record): string => \App\Filament\Resources\InvoiceResource::getUrl('edit', ['record' => $record])),
 
-                DeleteAction::make()
+                Action::make('delete')
+                    ->label('Delete')
                     ->icon('heroicon-m-trash')
                     ->color('danger')
-                    ->label('Delete'),
+                    ->requiresConfirmation()
+                    ->action(fn(Invoice $record) => $record->delete()),
 
                 Action::make('download_manual')
                     ->label('PDF')
