@@ -6,9 +6,10 @@ use App\Filament\Widgets\OpsActiveJobsTable;
 use App\Filament\Widgets\OpsEngineActivityTable;
 use App\Filament\Widgets\OpsEngineHealthOverview;
 use App\Filament\Widgets\OpsJobHealthOverview;
-use App\Filament\Widgets\OpsQueueFallbackAlert;
 use App\Filament\Widgets\OpsQueueDepthChart;
+use App\Filament\Widgets\OpsQueueFallbackAlert;
 use App\Filament\Widgets\OpsQueueHealthOverview;
+use App\Filament\Widgets\OpsQueueIncidentStatus;
 use App\Filament\Widgets\OpsQueueStatusOverview;
 use App\Filament\Widgets\OpsSystemHealthOverview;
 use App\Filament\Widgets\OpsSystemTrendChart;
@@ -37,6 +38,7 @@ class OpsOverview extends Dashboard
             OpsQueueFallbackAlert::class,
             OpsSystemHealthOverview::class,
             OpsQueueStatusOverview::class,
+            OpsQueueIncidentStatus::class,
             OpsQueueHealthOverview::class,
             OpsEngineHealthOverview::class,
             OpsJobHealthOverview::class,

@@ -439,7 +439,7 @@ class EngineSettings
         $value = self::stringValue('queue_worker_name', '');
         $value = trim($value);
 
-        return $value !== '' ? $value : 'supervisor-1';
+        return $value !== '' ? $value : self::queueReferenceSupervisor();
     }
 
     public static function queueWorkerProcesses(): int
@@ -612,10 +612,16 @@ class EngineSettings
     private static function horizonDefault(string $key, mixed $fallback = null): mixed
     {
         $env = (string) config('app.env');
+        $reference = self::queueReferenceSupervisor();
 
-        return config("horizon.environments.{$env}.supervisor-1.{$key}")
-            ?? config("horizon.defaults.supervisor-1.{$key}")
+        return config("horizon.environments.{$env}.{$reference}.{$key}")
+            ?? config("horizon.defaults.{$reference}.{$key}")
             ?? $fallback;
+    }
+
+    private static function queueReferenceSupervisor(): string
+    {
+        return 'supervisor-finalize';
     }
 
     private static function optionalInt(mixed $value): ?int

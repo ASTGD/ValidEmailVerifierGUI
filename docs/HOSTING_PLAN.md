@@ -23,6 +23,10 @@ Run long-lived processes as systemd services:
 - Go worker binary
 - Optional Go dashboard binary
 
+Required queue observability jobs:
+- Scheduler must run continuously so `horizon:snapshot` executes every 5 minutes.
+- Scheduler must run continuously so `ops:queue-health` executes every minute.
+
 ## Networking & URLs
 - Laravel app: main domain (CyberPanel vhost)
 - Horizon: `/horizon` (Laravel route)
@@ -32,6 +36,20 @@ Run long-lived processes as systemd services:
 - Use local Redis (`REDIS_HOST=127.0.0.1`)
 - Set `QUEUE_CONNECTION=redis`
 - Set `CACHE_STORE=redis`
+- Configure queue health alerts if needed (`QUEUE_HEALTH_ENABLED=true`, `QUEUE_HEALTH_ALERTS_ENABLED=true`).
+- Optional alert channels: `QUEUE_HEALTH_ALERT_EMAIL`, `QUEUE_HEALTH_SLACK_WEBHOOK_URL`.
+
+## Queue Incident Checklist (first checks)
+1. `php artisan horizon:status`
+2. `php artisan horizon:supervisors`
+3. `php artisan ops:queue-health --json`
+4. Confirm Redis is reachable and queue metrics are updating.
+
+## Queue Recovery Sequence
+1. `php artisan horizon:terminate`
+2. Let systemd/Supervisor restart `php artisan horizon`
+3. Verify all segmented supervisors are back (`supervisor-default`, `supervisor-prepare`, `supervisor-parse`, `supervisor-finalize`, `supervisor-imports`, `supervisor-cache-writeback`).
+4. Re-run `php artisan ops:queue-health --json` and confirm status is `healthy` or only expected warnings.
 
 ## Security
 - Restrict Go dashboard with IP allowlist or basic auth.
