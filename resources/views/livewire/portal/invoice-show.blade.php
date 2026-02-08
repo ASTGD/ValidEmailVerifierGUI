@@ -151,7 +151,7 @@
         <div class="space-y-6">
             <div class="bg-white p-8 rounded-[2.5rem] border border-[#E2E8F0] shadow-sm">
                 <h2 class="text-lg font-black text-[#0F172A] tracking-tight mb-6">{{ __('Payment Status') }}</h2>
-                
+
                 @if($invoice->status === 'Paid')
                     <div class="flex items-center gap-4 p-4 bg-green-50 rounded-2xl border border-green-100">
                         <div class="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center shrink-0">
