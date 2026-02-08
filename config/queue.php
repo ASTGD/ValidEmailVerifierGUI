@@ -109,6 +109,15 @@ return [
             'after_commit' => false,
         ],
 
+        'redis_cache_writeback' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_CACHE_WRITEBACK_NAME', 'cache_writeback'),
+            'retry_after' => (int) env('REDIS_CACHE_WRITEBACK_RETRY_AFTER', 3600),
+            'block_for' => (int) env('REDIS_CACHE_WRITEBACK_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
         'deferred' => [
             'driver' => 'deferred',
         ],

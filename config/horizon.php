@@ -104,6 +104,7 @@ return [
         sprintf('redis_parse:%s', env('QUEUE_PARSE_NAME', 'parse')) => 120,
         sprintf('redis_finalize:%s', env('QUEUE_FINALIZE_NAME', 'finalize')) => 45,
         sprintf('redis_import:%s', env('QUEUE_IMPORT_NAME', 'imports')) => 300,
+        sprintf('redis_cache_writeback:%s', env('QUEUE_CACHE_WRITEBACK_NAME', 'cache_writeback')) => 300,
     ],
 
     /*
@@ -272,6 +273,20 @@ return [
             'timeout' => 1200,
             'nice' => 0,
         ],
+
+        'supervisor-cache-writeback' => [
+            'connection' => 'redis_cache_writeback',
+            'queue' => [env('QUEUE_CACHE_WRITEBACK_NAME', 'cache_writeback')],
+            'balance' => 'simple',
+            'minProcesses' => 1,
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 2,
+            'timeout' => 1800,
+            'nice' => 0,
+        ],
     ],
 
     'environments' => [
@@ -303,6 +318,10 @@ return [
             'supervisor-imports' => [
                 'maxProcesses' => 1,
             ],
+
+            'supervisor-cache-writeback' => [
+                'maxProcesses' => 1,
+            ],
         ],
 
         'local' => [
@@ -325,6 +344,10 @@ return [
             ],
 
             'supervisor-imports' => [
+                'maxProcesses' => 1,
+            ],
+
+            'supervisor-cache-writeback' => [
                 'maxProcesses' => 1,
             ],
         ],
