@@ -1,6 +1,9 @@
-# Engine Worker (Go) — Phase 8B
+# Engine Worker (Go)
 
-This worker pulls chunks from the Laravel API, downloads inputs via signed URLs, performs **DNS/MX + SMTP connectivity** checks, uploads outputs, and completes chunks. It does **not** perform mailbox-level RCPT probing.
+This worker pulls chunks from the Laravel API, downloads inputs via signed URLs, runs stage-specific verification, uploads outputs, and completes chunks.
+
+- `screening` stage uses fast DNS/MX + SMTP connectivity checks.
+- `smtp_probe` stage uses mailbox-level SMTP probing (`MAIL FROM` + `RCPT TO`) when policy and identity prerequisites are available.
 
 ## Requirements
 - Go 1.22+
@@ -14,6 +17,7 @@ Never paste tokens into chat or commit them to git. Use environment variables or
 - `ENGINE_API_BASE_URL` (required) — e.g. `http://localhost:8082`
 - `ENGINE_API_TOKEN` (required) — Sanctum token for verifier-service
 - `WORKER_ID` (optional) — defaults to hostname
+- `WORKER_CAPABILITY` (optional) — `screening`, `smtp_probe`, or `all` (default `all`)
 - `ENGINE_SERVER_NAME` (optional) — defaults to worker id
 - `ENGINE_SERVER_IP` (required) — IP address to register/heartbeat
 - `ENGINE_SERVER_ENV` (optional) — e.g. `local`
@@ -78,7 +82,11 @@ $token = $user->createToken('engine-worker')->plainTextToken;
 
 ## Notes
 - Outputs use schema `email,reason`.
-- Classification uses **connectivity-only** checks:
+- Screening lane classifications are connectivity-oriented:
   - invalid: `syntax`, `mx_missing`, `smtp_unavailable`
   - risky: `dns_timeout`, `dns_servfail`, `smtp_connect_timeout`, `smtp_timeout`, `smtp_tempfail`
   - valid: `smtp_connect_ok`
+- SMTP probe lane adds mailbox-level reasons:
+  - valid: `rcpt_ok`
+  - invalid: `rcpt_rejected`
+  - risky: `catch_all`, `smtp_tempfail`, `smtp_probe_disabled`, `smtp_probe_identity_missing`

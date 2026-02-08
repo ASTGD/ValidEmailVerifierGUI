@@ -8,7 +8,6 @@ use App\Models\EngineServer;
 use App\Models\VerificationJobChunk;
 use App\Support\AdminAuditLogger;
 use App\Support\EngineSettings;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -18,6 +17,7 @@ class VerifierChunkClaimNextController
     {
         $payload = $request->validated();
         $serverData = $payload['engine_server'];
+        $workerCapability = $this->resolveWorkerCapability((string) ($payload['worker_capability'] ?? 'all'));
 
         $update = [
             'name' => $serverData['name'],
@@ -58,9 +58,21 @@ class VerifierChunkClaimNextController
         $leaseSeconds = max(1, $leaseSeconds);
         $now = now();
 
-        $chunk = DB::transaction(function () use ($server, $payload, $leaseSeconds, $now) {
+        $chunk = DB::transaction(function () use ($server, $payload, $leaseSeconds, $now, $workerCapability) {
             $chunk = VerificationJobChunk::query()
                 ->where('status', 'pending')
+                ->when($workerCapability !== 'all', function ($query) use ($workerCapability) {
+                    if ($workerCapability === 'screening') {
+                        $query->where(function ($stageQuery) {
+                            $stageQuery->where('processing_stage', 'screening')
+                                ->orWhereNull('processing_stage');
+                        });
+
+                        return;
+                    }
+
+                    $query->where('processing_stage', $workerCapability);
+                })
                 ->where(function ($query) use ($now) {
                     $query->whereNull('available_at')
                         ->orWhere('available_at', '<=', $now);
@@ -101,12 +113,16 @@ class VerifierChunkClaimNextController
             'claim_expires_at' => $chunk->claim_expires_at?->toIso8601String(),
         ], $request->user()?->id);
 
+        $processingStage = $this->normalizeProcessingStage((string) ($chunk->processing_stage ?? ''));
+
         return response()->json([
             'data' => [
                 'chunk_id' => (string) $chunk->id,
                 'job_id' => (string) $chunk->verification_job_id,
                 'chunk_no' => $chunk->chunk_no,
-                'verification_mode' => $chunk->job?->verification_mode?->value ?? VerificationMode::Standard->value,
+                'verification_mode' => $chunk->job?->verification_mode?->value ?? VerificationMode::Enhanced->value,
+                'processing_stage' => $processingStage,
+                'worker_capability_required' => $this->capabilityForStage($processingStage),
                 'lease_expires_at' => $chunk->claim_expires_at?->toIso8601String(),
                 'input' => [
                     'disk' => $chunk->input_disk,
@@ -114,5 +130,28 @@ class VerifierChunkClaimNextController
                 ],
             ],
         ]);
+    }
+
+    private function resolveWorkerCapability(string $value): string
+    {
+        $value = strtolower(trim($value));
+
+        if (in_array($value, ['screening', 'smtp_probe', 'all'], true)) {
+            return $value;
+        }
+
+        return 'all';
+    }
+
+    private function normalizeProcessingStage(string $value): string
+    {
+        $value = strtolower(trim($value));
+
+        return $value === 'smtp_probe' ? 'smtp_probe' : 'screening';
+    }
+
+    private function capabilityForStage(string $stage): string
+    {
+        return $stage === 'smtp_probe' ? 'smtp_probe' : 'screening';
     }
 }

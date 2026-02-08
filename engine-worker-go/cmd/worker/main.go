@@ -21,6 +21,7 @@ func main() {
 	token := mustEnv("ENGINE_API_TOKEN")
 
 	workerID := envOr("WORKER_ID", hostname())
+	workerCapability := parseWorkerCapability(os.Getenv("WORKER_CAPABILITY"))
 	serverName := envOr("ENGINE_SERVER_NAME", workerID)
 	serverIP := mustEnv("ENGINE_SERVER_IP")
 	serverEnv := os.Getenv("ENGINE_SERVER_ENV")
@@ -83,6 +84,7 @@ func main() {
 		MaxConcurrency:     maxConcurrency,
 		PolicyRefresh:      policyRefresh,
 		WorkerID:           workerID,
+		WorkerCapability:   workerCapability,
 		BaseVerifierConfig: verifierConfig,
 		Server: api.EngineServerPayload{
 			Name:        serverName,
@@ -196,6 +198,15 @@ func parseDomainTypos(value string) map[string]string {
 	}
 
 	return output
+}
+
+func parseWorkerCapability(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "screening" || value == "smtp_probe" || value == "all" {
+		return value
+	}
+
+	return "all"
 }
 
 func parseDisposableDomains(data string) map[string]struct{} {

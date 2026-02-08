@@ -7,8 +7,6 @@ use App\Enums\VerificationJobStatus;
 use App\Enums\VerificationMode;
 use App\Livewire\Portal\SingleCheck;
 use App\Livewire\Portal\Upload;
-use App\Models\EngineSetting;
-use App\Models\EngineVerificationPolicy;
 use App\Models\User;
 use App\Models\VerificationJob;
 use App\Support\Roles;
@@ -35,19 +33,13 @@ class PortalSingleCheckTest extends TestCase
         return $user;
     }
 
-    private function enableEnhanced(): void
-    {
-        EngineSetting::query()->updateOrCreate([], ['enhanced_mode_enabled' => true]);
-        EngineVerificationPolicy::query()
-            ->where('mode', VerificationMode::Enhanced->value)
-            ->update(['enabled' => true]);
-        config(['engine.enhanced_mode_enabled' => true]);
-    }
-
     public function test_single_check_creates_job_with_origin(): void
     {
         Storage::fake('local');
-        config(['filesystems.default' => 'local']);
+        config([
+            'filesystems.default' => 'local',
+            'verifier.storage_disk' => 'local',
+        ]);
 
         $user = $this->makeCustomer();
 
@@ -62,41 +54,25 @@ class PortalSingleCheckTest extends TestCase
         $this->assertNotNull($job);
         $this->assertSame($user->id, $job->user_id);
         $this->assertSame(VerificationJobOrigin::SingleCheck, $job->origin);
-        $this->assertSame(VerificationMode::Standard, $job->verification_mode);
+        $this->assertSame(VerificationMode::Enhanced, $job->verification_mode);
         $this->assertSame('user@example.com', $job->subject_email);
         $this->assertSame(VerificationJobStatus::Processing, $job->status);
         Storage::disk('local')->assertExists($job->input_key);
     }
 
-    public function test_single_check_enhanced_blocked_when_not_entitled(): void
-    {
-        $this->enableEnhanced();
-        config(['engine.enhanced_requires_entitlement' => true]);
-
-        $user = $this->makeCustomer(['enhanced_enabled' => false]);
-
-        Livewire::actingAs($user)
-            ->test(SingleCheck::class)
-            ->set('email', 'user@example.com')
-            ->set('verification_mode', VerificationMode::Enhanced->value)
-            ->call('submit')
-            ->assertHasErrors(['verification_mode']);
-
-        $this->assertSame(0, VerificationJob::query()->count());
-    }
-
-    public function test_upload_respects_enhanced_entitlement(): void
+    public function test_upload_defaults_to_internal_enhanced_mode(): void
     {
         Storage::fake('local');
-        config(['filesystems.default' => 'local']);
+        config([
+            'filesystems.default' => 'local',
+            'verifier.storage_disk' => 'local',
+        ]);
 
-        $this->enableEnhanced();
-        $user = $this->makeCustomer(['enhanced_enabled' => true]);
+        $user = $this->makeCustomer();
 
         Livewire::actingAs($user)
             ->test(Upload::class)
             ->set('file', UploadedFile::fake()->create('emails.csv', 1, 'text/csv'))
-            ->set('verification_mode', VerificationMode::Enhanced->value)
             ->call('save')
             ->assertHasNoErrors();
 
@@ -112,7 +88,7 @@ class PortalSingleCheckTest extends TestCase
         $job = VerificationJob::create([
             'user_id' => $owner->id,
             'status' => VerificationJobStatus::Completed,
-            'verification_mode' => VerificationMode::Standard,
+            'verification_mode' => VerificationMode::Enhanced,
             'origin' => VerificationJobOrigin::SingleCheck,
             'subject_email' => 'private@example.com',
             'single_result_status' => 'valid',
@@ -133,13 +109,16 @@ class PortalSingleCheckTest extends TestCase
     public function test_single_check_rate_limit_applies(): void
     {
         Storage::fake('local');
-        config(['filesystems.default' => 'local']);
+        config([
+            'filesystems.default' => 'local',
+            'verifier.storage_disk' => 'local',
+        ]);
 
         $user = $this->makeCustomer();
-        RateLimiter::clear('portal-single-check|'.$user->id.'|'.VerificationMode::Standard->value);
+        RateLimiter::clear('portal-single-check|'.$user->id);
 
         config([
-            'engine.single_check_rate_limit_standard' => 1,
+            'engine.single_check_rate_limit' => 1,
             'engine.single_check_rate_limit_decay_seconds' => 60,
         ]);
 

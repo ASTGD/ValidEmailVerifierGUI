@@ -2,7 +2,7 @@
 
 $requiredSupervisors = (string) env(
     'QUEUE_HEALTH_REQUIRED_SUPERVISORS',
-    'supervisor-default,supervisor-prepare,supervisor-parse,supervisor-finalize,supervisor-imports,supervisor-cache-writeback'
+    'supervisor-default,supervisor-prepare,supervisor-parse,supervisor-smtp-probe,supervisor-finalize,supervisor-imports,supervisor-cache-writeback'
 );
 
 $requiredSupervisors = array_values(array_filter(array_map('trim', explode(',', $requiredSupervisors))));
@@ -43,6 +43,12 @@ return [
             'queue' => env('QUEUE_PARSE_NAME', 'parse'),
             'max_depth' => (int) env('QUEUE_SLO_PARSE_MAX_DEPTH', 20),
             'max_oldest_age_seconds' => (int) env('QUEUE_SLO_PARSE_MAX_AGE_SECONDS', 900),
+        ],
+        'smtp_probe' => [
+            'driver' => 'redis_smtp_probe',
+            'queue' => env('QUEUE_SMTP_PROBE_NAME', 'smtp_probe'),
+            'max_depth' => (int) env('QUEUE_SLO_SMTP_PROBE_MAX_DEPTH', 60),
+            'max_oldest_age_seconds' => (int) env('QUEUE_SLO_SMTP_PROBE_MAX_AGE_SECONDS', 1800),
         ],
         'finalize' => [
             'driver' => 'redis_finalize',

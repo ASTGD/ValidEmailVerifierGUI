@@ -25,6 +25,7 @@ type Config struct {
 	PolicyRefresh      time.Duration
 	Server             api.EngineServerPayload
 	WorkerID           string
+	WorkerCapability   string
 	BaseVerifierConfig verifier.Config
 }
 
@@ -126,9 +127,10 @@ func (w *Worker) Run(ctx context.Context) error {
 		}
 
 		claimReq := api.ClaimNextRequest{
-			EngineServer: w.cfg.Server,
-			WorkerID:     w.cfg.WorkerID,
-			LeaseSeconds: w.cfg.LeaseSeconds,
+			EngineServer:     w.cfg.Server,
+			WorkerID:         w.cfg.WorkerID,
+			WorkerCapability: w.workerCapability(),
+			LeaseSeconds:     w.cfg.LeaseSeconds,
 		}
 
 		claim, ok, err := w.client.ClaimNext(ctx, claimReq)
@@ -168,34 +170,14 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 		},
 	})
 
-	mode := normalizeVerificationMode(claim.Data.VerificationMode)
-	policy, hasPolicy := w.policyForMode(mode)
-	enhancedAllowed := hasPolicy && w.policyEnhancedAllowed() && policy.Enabled
-	if mode == "enhanced" && !enhancedAllowed {
-		_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
-			"level":   "warning",
-			"event":   "enhanced_mode_requested_but_not_enabled",
-			"message": "Enhanced mode requested but not enabled; running standard pipeline.",
-			"context": map[string]interface{}{
-				"verification_mode": mode,
-			},
-		})
-		mode = "standard"
-		policy, hasPolicy = w.policyForMode(mode)
+	processingStage := normalizeProcessingStage(claim.Data.ProcessingStage)
+	if !w.canProcessStage(processingStage) {
+		return w.failChunk(ctx, chunkID, "worker capability does not match chunk stage", fmt.Errorf("stage=%s capability=%s", processingStage, w.workerCapability()), true)
 	}
 
-	if mode == "enhanced" && !w.hasMailFromIdentity() {
-		_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
-			"level":   "warning",
-			"event":   "enhanced_identity_missing",
-			"message": "Enhanced mode requested but mail-from identity is missing; running standard pipeline.",
-			"context": map[string]interface{}{
-				"verification_mode": mode,
-			},
-		})
-		mode = "standard"
-		policy, hasPolicy = w.policyForMode(mode)
-	}
+	mode := modeForStage(processingStage, claim.Data.VerificationMode)
+	policy, hasPolicy := w.policyForMode(mode)
+	enhancedAllowed := hasPolicy && w.policyEnhancedAllowed() && policy.Enabled
 
 	details, err := w.client.ChunkDetails(ctx, chunkID)
 	if err != nil {
@@ -213,7 +195,37 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 	}
 	defer reader.Close()
 
-	engineVerifier := w.verifierForMode(mode, policy, hasPolicy)
+	var engineVerifier verifier.Verifier
+
+	if processingStage == "smtp_probe" {
+		if !enhancedAllowed {
+			_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
+				"level":   "warning",
+				"event":   "smtp_probe_disabled",
+				"message": "SMTP probe stage requested while enhanced probe policy is disabled; writing conservative risky outcomes.",
+				"context": map[string]interface{}{
+					"processing_stage":  processingStage,
+					"verification_mode": mode,
+				},
+			})
+			engineVerifier = staticRiskyVerifier{reason: "smtp_probe_disabled"}
+		} else if !w.hasMailFromIdentity() {
+			_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
+				"level":   "warning",
+				"event":   "smtp_probe_identity_missing",
+				"message": "SMTP probe stage requested without mail-from identity; writing conservative risky outcomes.",
+				"context": map[string]interface{}{
+					"processing_stage":  processingStage,
+					"verification_mode": mode,
+				},
+			})
+			engineVerifier = staticRiskyVerifier{reason: "smtp_probe_identity_missing"}
+		} else {
+			engineVerifier = w.verifierForMode(mode, policy, hasPolicy)
+		}
+	} else {
+		engineVerifier = w.verifierForMode(mode, policy, hasPolicy)
+	}
 	outputs, err := buildOutputs(ctx, reader, engineVerifier)
 	if err != nil {
 		return w.failChunk(ctx, chunkID, "failed to parse input", err, false)
@@ -742,6 +754,52 @@ func minInt(a, b int) int {
 	return b
 }
 
+func (w *Worker) workerCapability() string {
+	return normalizeWorkerCapability(w.cfg.WorkerCapability)
+}
+
+func (w *Worker) canProcessStage(stage string) bool {
+	capability := w.workerCapability()
+
+	switch capability {
+	case "all":
+		return true
+	case "screening":
+		return stage == "screening"
+	case "smtp_probe":
+		return stage == "smtp_probe"
+	default:
+		return true
+	}
+}
+
+func normalizeWorkerCapability(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "screening" || value == "smtp_probe" || value == "all" {
+		return value
+	}
+
+	return "all"
+}
+
+func normalizeProcessingStage(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "smtp_probe" {
+		return "smtp_probe"
+	}
+
+	return "screening"
+}
+
+func modeForStage(stage, requestedMode string) string {
+	_ = requestedMode
+	if stage == "smtp_probe" {
+		return "enhanced"
+	}
+
+	return "standard"
+}
+
 func normalizeVerificationMode(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	if value == "enhanced" {
@@ -763,4 +821,20 @@ func (w *Worker) applyHeartbeatIdentity(resp *api.HeartbeatResponse) {
 	w.policy.mailFromAddress = strings.TrimSpace(identity.MailFromAddress)
 	w.policy.identityDomain = strings.TrimSpace(identity.IdentityDomain)
 	w.policyMu.Unlock()
+}
+
+type staticRiskyVerifier struct {
+	reason string
+}
+
+func (v staticRiskyVerifier) Verify(context.Context, string) verifier.Result {
+	reason := strings.TrimSpace(v.reason)
+	if reason == "" {
+		reason = "smtp_tempfail"
+	}
+
+	return verifier.Result{
+		Category: verifier.CategoryRisky,
+		Reason:   reason,
+	}
 }

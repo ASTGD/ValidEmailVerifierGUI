@@ -23,6 +23,8 @@ class QueueSegmentationConfigTest extends TestCase
     {
         $defaultQueue = (string) config('queue.connections.redis.queue', env('REDIS_QUEUE', 'default'));
         $defaultWaitKey = sprintf('redis:%s', $defaultQueue);
+        $smtpProbeQueue = (string) config('queue.connections.redis_smtp_probe.queue', env('QUEUE_SMTP_PROBE_NAME', 'smtp_probe'));
+        $smtpProbeWaitKey = sprintf('redis_smtp_probe:%s', $smtpProbeQueue);
         $cacheWriteBackQueue = (string) config('queue.connections.redis_cache_writeback.queue', env('QUEUE_CACHE_WRITEBACK_NAME', 'cache_writeback'));
         $cacheWriteBackWaitKey = sprintf('redis_cache_writeback:%s', $cacheWriteBackQueue);
         $waits = config('horizon.waits', []);
@@ -30,16 +32,23 @@ class QueueSegmentationConfigTest extends TestCase
         $local = config('horizon.environments.local', []);
         $production = config('horizon.environments.production', []);
 
+        $this->assertSame('redis', config('queue.connections.redis_smtp_probe.driver'));
         $this->assertArrayHasKey($defaultWaitKey, $waits);
+        $this->assertArrayHasKey($smtpProbeWaitKey, $waits);
         $this->assertArrayHasKey($cacheWriteBackWaitKey, $waits);
         $this->assertArrayHasKey('supervisor-default', $defaults);
+        $this->assertArrayHasKey('supervisor-smtp-probe', $defaults);
         $this->assertArrayHasKey('supervisor-cache-writeback', $defaults);
         $this->assertSame('redis', data_get($defaults, 'supervisor-default.connection'));
         $this->assertSame([$defaultQueue], data_get($defaults, 'supervisor-default.queue'));
+        $this->assertSame('redis_smtp_probe', data_get($defaults, 'supervisor-smtp-probe.connection'));
+        $this->assertSame([$smtpProbeQueue], data_get($defaults, 'supervisor-smtp-probe.queue'));
         $this->assertSame('redis_cache_writeback', data_get($defaults, 'supervisor-cache-writeback.connection'));
         $this->assertSame([$cacheWriteBackQueue], data_get($defaults, 'supervisor-cache-writeback.queue'));
         $this->assertArrayHasKey('supervisor-default', $local);
         $this->assertArrayHasKey('supervisor-default', $production);
+        $this->assertArrayHasKey('supervisor-smtp-probe', $local);
+        $this->assertArrayHasKey('supervisor-smtp-probe', $production);
         $this->assertArrayHasKey('supervisor-cache-writeback', $local);
         $this->assertArrayHasKey('supervisor-cache-writeback', $production);
     }
@@ -49,6 +58,7 @@ class QueueSegmentationConfigTest extends TestCase
         config([
             'queue.connections.redis_prepare.queue' => 'prepare-custom',
             'queue.connections.redis_parse.queue' => 'parse-custom',
+            'queue.connections.redis_smtp_probe.queue' => 'smtp-probe-custom',
             'queue.connections.redis_finalize.queue' => 'finalize-custom',
             'queue.connections.redis_import.queue' => 'imports-custom',
             'queue.connections.redis_cache_writeback.queue' => 'cache-writeback-custom',
@@ -73,6 +83,8 @@ class QueueSegmentationConfigTest extends TestCase
         $this->assertSame(2, $parse->tries);
         $this->assertTrue($parse->failOnTimeout);
         $this->assertSame([60, 180], $parse->backoff());
+
+        $this->assertSame('smtp-probe-custom', config('queue.connections.redis_smtp_probe.queue'));
 
         $this->assertSame('redis_finalize', $finalize->connection);
         $this->assertSame('finalize-custom', $finalize->queue);

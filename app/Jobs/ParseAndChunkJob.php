@@ -183,6 +183,10 @@ class ParseAndChunkJob implements ShouldQueue
                 'total_emails' => $this->totalUnique,
                 'cache_hit_count' => $this->cachedCount,
                 'cache_miss_count' => max(0, $this->totalUnique - $this->cachedCount),
+                'screening_total_count' => $this->unknownCount,
+                'probe_candidate_count' => 0,
+                'probe_completed_count' => 0,
+                'probe_unknown_count' => 0,
                 'progress_percent' => 50,
             ]);
 
@@ -463,6 +467,7 @@ class ParseAndChunkJob implements ShouldQueue
             'verification_job_id' => $this->verificationJob->id,
             'chunk_no' => $this->chunkNo,
             'status' => 'pending',
+            'processing_stage' => 'screening',
             'input_disk' => $disk,
             'input_key' => $key,
             'email_count' => $this->chunkEmailCount,

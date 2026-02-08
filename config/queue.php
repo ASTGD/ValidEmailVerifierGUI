@@ -91,6 +91,15 @@ return [
             'after_commit' => false,
         ],
 
+        'redis_smtp_probe' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_SMTP_PROBE_NAME', 'smtp_probe'),
+            'retry_after' => (int) env('REDIS_SMTP_PROBE_RETRY_AFTER', 3600),
+            'block_for' => (int) env('REDIS_SMTP_PROBE_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
         'redis_finalize' => [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),

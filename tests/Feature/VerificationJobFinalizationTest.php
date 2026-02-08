@@ -41,6 +41,7 @@ class VerificationJobFinalizationTest extends TestCase
             'verification_job_id' => $job->id,
             'chunk_no' => $chunkNo,
             'status' => 'completed',
+            'processing_stage' => 'screening',
             'input_disk' => $job->input_disk,
             'input_key' => 'chunks/'.$job->id.'/'.$chunkNo.'/input.txt',
         ], $overrides));
@@ -52,6 +53,28 @@ class VerificationJobFinalizationTest extends TestCase
 
         $job = $this->makeJob();
         $this->makeChunk($job, 1, ['status' => 'pending']);
+
+        FinalizeVerificationJob::dispatchSync($job->id);
+
+        $job->refresh();
+
+        $this->assertSame(VerificationJobStatus::Processing, $job->status);
+        $this->assertNull($job->valid_key);
+    }
+
+    public function test_finalization_waits_for_smtp_probe_chunks_after_screening(): void
+    {
+        Storage::fake('s3');
+
+        $job = $this->makeJob();
+        $this->makeChunk($job, 1, [
+            'status' => 'completed',
+            'processing_stage' => 'screening',
+        ]);
+        $this->makeChunk($job, 2, [
+            'status' => 'pending',
+            'processing_stage' => 'smtp_probe',
+        ]);
 
         FinalizeVerificationJob::dispatchSync($job->id);
 

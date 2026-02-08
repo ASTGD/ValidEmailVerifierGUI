@@ -10,6 +10,8 @@ class VerifierChunkDetailsController
 {
     public function __invoke(VerificationJobChunk $chunk): JsonResponse
     {
+        $processingStage = $this->normalizeProcessingStage((string) ($chunk->processing_stage ?? ''));
+
         return response()->json([
             'data' => [
                 'chunk_id' => (string) $chunk->id,
@@ -17,7 +19,9 @@ class VerifierChunkDetailsController
                 'chunk_no' => $chunk->chunk_no,
                 'status' => $chunk->status,
                 'attempts' => $chunk->attempts,
-                'verification_mode' => $chunk->job?->verification_mode?->value ?? VerificationMode::Standard->value,
+                'verification_mode' => $chunk->job?->verification_mode?->value ?? VerificationMode::Enhanced->value,
+                'processing_stage' => $processingStage,
+                'worker_capability_required' => $processingStage === 'smtp_probe' ? 'smtp_probe' : 'screening',
                 'input' => [
                     'disk' => $chunk->input_disk,
                     'key' => $chunk->input_key,
@@ -35,5 +39,12 @@ class VerifierChunkDetailsController
                 ],
             ],
         ]);
+    }
+
+    private function normalizeProcessingStage(string $value): string
+    {
+        $value = strtolower(trim($value));
+
+        return $value === 'smtp_probe' ? 'smtp_probe' : 'screening';
     }
 }

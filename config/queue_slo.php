@@ -12,7 +12,7 @@ return [
 
     'heavy_submission_lanes' => array_values(array_filter(array_map(
         'trim',
-        explode(',', (string) env('QUEUE_SLO_HEAVY_SUBMISSION_LANES', 'prepare,parse,imports,cache_writeback'))
+        explode(',', (string) env('QUEUE_SLO_HEAVY_SUBMISSION_LANES', 'prepare,parse,smtp_probe,imports,cache_writeback'))
     ))),
 
     'retry_contracts' => [
@@ -27,6 +27,10 @@ return [
         'redis_parse' => [
             'timeout' => (int) env('QUEUE_SLO_PARSE_TIMEOUT_SECONDS', 1800),
             'retry_after' => (int) env('REDIS_PARSE_RETRY_AFTER', 3600),
+        ],
+        'redis_smtp_probe' => [
+            'timeout' => (int) env('QUEUE_SLO_SMTP_PROBE_TIMEOUT_SECONDS', 1800),
+            'retry_after' => (int) env('REDIS_SMTP_PROBE_RETRY_AFTER', 3600),
         ],
         'redis_finalize' => [
             'timeout' => (int) env('QUEUE_SLO_FINALIZE_TIMEOUT_SECONDS', 900),

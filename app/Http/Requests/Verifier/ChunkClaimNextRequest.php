@@ -21,6 +21,7 @@ class ChunkClaimNextRequest extends FormRequest
             'engine_server.region' => ['nullable', 'string', 'max:64'],
             'engine_server.meta' => ['nullable', 'array'],
             'worker_id' => ['required', 'string', 'max:255'],
+            'worker_capability' => ['nullable', 'string', 'in:screening,smtp_probe,all'],
             'lease_seconds' => ['nullable', 'integer', 'min:1', 'max:86400'],
         ];
     }

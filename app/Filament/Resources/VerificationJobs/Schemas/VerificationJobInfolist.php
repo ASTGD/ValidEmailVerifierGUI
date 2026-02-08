@@ -184,6 +184,22 @@ class VerificationJobInfolist
                             ->label('Cache misses')
                             ->numeric()
                             ->placeholder('-'),
+                        TextEntry::make('metrics.screening_total_count')
+                            ->label('Screening total')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.probe_candidate_count')
+                            ->label('Probe candidates')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.probe_completed_count')
+                            ->label('Probe completed')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.probe_unknown_count')
+                            ->label('Probe unknown')
+                            ->numeric()
+                            ->placeholder('-'),
                         TextEntry::make('metrics.writeback_written_count')
                             ->label('Write-back written')
                             ->numeric()

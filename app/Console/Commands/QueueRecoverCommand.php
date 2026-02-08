@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Queue;
 class QueueRecoverCommand extends Command
 {
     protected $signature = 'ops:queue-recover
-        {--lane= : Queue lane name (default, prepare, parse, finalize, imports, cache_writeback)}
+        {--lane= : Queue lane name (default, prepare, parse, smtp_probe, finalize, imports, cache_writeback)}
         {--strategy=requeue_failed : Recovery strategy}
         {--job= : Filter by failed job displayName/class}
         {--hours= : Replay failed jobs from this many recent hours}

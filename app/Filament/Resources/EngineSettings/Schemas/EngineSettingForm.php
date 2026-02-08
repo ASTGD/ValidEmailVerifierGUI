@@ -32,7 +32,7 @@ class EngineSettingForm
                         ->helperText('When paused, workers will not claim new chunks.'),
                     Toggle::make('enhanced_mode_enabled')
                         ->label('Enhanced mode enabled')
-                        ->helperText('Enables Enhanced mode selection (pipeline remains standard for now).'),
+                        ->helperText('Internal SMTP probe stage runs only when this toggle and Enhanced Policy -> Enabled are both on.'),
                     Toggle::make('show_single_checks_in_admin')
                         ->label('Show single checks in admin')
                         ->helperText('Disabled hides single-email checks from job lists.'),
@@ -462,7 +462,7 @@ class EngineSettingForm
                         ->helperText('Reference supervisor name for fallback queue:work command. Default: supervisor-finalize.'),
                     Placeholder::make('queue_supervisor_lanes')
                         ->label('Segmented supervisors')
-                        ->content('supervisor-default, supervisor-prepare, supervisor-parse, supervisor-finalize, supervisor-imports, supervisor-cache-writeback'),
+                        ->content('supervisor-default, supervisor-prepare, supervisor-parse, supervisor-smtp-probe, supervisor-finalize, supervisor-imports, supervisor-cache-writeback'),
                     TextInput::make('queue_worker_processes')
                         ->label('Max processes')
                         ->numeric()
