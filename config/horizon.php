@@ -102,6 +102,7 @@ return [
         sprintf('redis:%s', $defaultRedisQueue) => 60,
         sprintf('redis_prepare:%s', env('QUEUE_PREPARE_NAME', 'prepare')) => 30,
         sprintf('redis_parse:%s', env('QUEUE_PARSE_NAME', 'parse')) => 120,
+        sprintf('redis_smtp_probe:%s', env('QUEUE_SMTP_PROBE_NAME', 'smtp_probe')) => 300,
         sprintf('redis_finalize:%s', env('QUEUE_FINALIZE_NAME', 'finalize')) => 45,
         sprintf('redis_import:%s', env('QUEUE_IMPORT_NAME', 'imports')) => 300,
         sprintf('redis_cache_writeback:%s', env('QUEUE_CACHE_WRITEBACK_NAME', 'cache_writeback')) => 300,
@@ -261,6 +262,20 @@ return [
             'nice' => 0,
         ],
 
+        'supervisor-smtp-probe' => [
+            'connection' => 'redis_smtp_probe',
+            'queue' => [env('QUEUE_SMTP_PROBE_NAME', 'smtp_probe')],
+            'balance' => 'simple',
+            'minProcesses' => 1,
+            'maxProcesses' => 2,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 512,
+            'tries' => 2,
+            'timeout' => 1800,
+            'nice' => 0,
+        ],
+
         'supervisor-imports' => [
             'connection' => 'redis_import',
             'queue' => [env('QUEUE_IMPORT_NAME', 'imports')],
@@ -315,6 +330,11 @@ return [
                 'maxProcesses' => 2,
             ],
 
+            'supervisor-smtp-probe' => [
+                'minProcesses' => 1,
+                'maxProcesses' => 2,
+            ],
+
             'supervisor-imports' => [
                 'maxProcesses' => 1,
             ],
@@ -340,6 +360,11 @@ return [
             ],
 
             'supervisor-parse' => [
+                'maxProcesses' => 1,
+            ],
+
+            'supervisor-smtp-probe' => [
+                'minProcesses' => 1,
                 'maxProcesses' => 1,
             ],
 

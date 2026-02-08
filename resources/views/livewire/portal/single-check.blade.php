@@ -1,15 +1,10 @@
-@php
-    $enhancedGate = $this->enhancedGate;
-    $enhancedAllowed = $enhancedGate['allowed'] ?? false;
-@endphp
-
 <div class="bg-white p-8 rounded-[2.5rem] border border-[#E2E8F0] shadow-sm"
     @if ($this->shouldPoll) wire:poll.6s @endif>
     <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
         <div>
             <h3 class="text-xl font-bold text-[#0F172A]">{{ __('Single Email Test') }}</h3>
             <p class="text-sm text-[#64748B] mt-1">
-                {{ __('Run a quick verification for one address. Enhanced performs mailbox-level checks (SG5) when available.') }}
+                {{ __('Run a quick mailbox verification for one address.') }}
             </p>
         </div>
     </div>
@@ -21,35 +16,6 @@
                 class="w-full rounded-xl border border-[#E2E8F0] px-4 py-3 text-sm text-[#0F172A] placeholder-[#94A3B8] focus:border-[#1E7CCF] focus:ring-[#1E7CCF]"
                 placeholder="name@example.com" />
             <x-input-error :messages="$errors->get('email')" class="mt-2 font-bold" />
-        </div>
-
-        <div class="md:col-span-2">
-            <label class="block text-sm font-bold text-[#0F172A] mb-2">{{ __('Verification mode') }}</label>
-            <div class="grid gap-4 md:grid-cols-2">
-                <label
-                    class="flex items-start gap-3 rounded-2xl border border-[#E2E8F0] p-4 hover:border-[#1E7CCF]">
-                    <input type="radio" name="verification_mode" value="standard"
-                        wire:model="verification_mode" class="mt-1 h-4 w-4 text-[#1E7CCF] focus:ring-[#1E7CCF]" />
-                    <div>
-                        <p class="text-sm font-bold text-[#0F172A]">{{ __('Standard') }}</p>
-                        <p class="text-xs text-[#64748B]">{{ __('Best for most checks.') }}</p>
-                    </div>
-                </label>
-                <label
-                    class="flex items-start gap-3 rounded-2xl border border-[#E2E8F0] p-4 hover:border-[#1E7CCF] {{ $enhancedAllowed ? '' : 'opacity-60' }}"
-                    title="{{ $enhancedAllowed ? '' : \App\Support\EnhancedModeGate::helperText(auth()->user()) }}">
-                    <input type="radio" name="verification_mode" value="enhanced"
-                        wire:model="verification_mode" class="mt-1 h-4 w-4 text-[#1E7CCF] focus:ring-[#1E7CCF]"
-                        @disabled(! $enhancedAllowed) />
-                    <div>
-                        <p class="text-sm font-bold text-[#0F172A]">{{ __('Enhanced') }}</p>
-                        <p class="text-xs text-[#64748B]">
-                            {{ $enhancedAllowed ? __('Includes mailbox-level checks when enabled.') : \App\Support\EnhancedModeGate::helperText(auth()->user()) }}
-                        </p>
-                    </div>
-                </label>
-            </div>
-            <x-input-error :messages="$errors->get('verification_mode')" class="mt-2 font-bold" />
         </div>
 
         <div class="md:col-span-2">

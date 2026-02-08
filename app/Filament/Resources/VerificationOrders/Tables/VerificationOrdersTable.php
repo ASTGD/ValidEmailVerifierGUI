@@ -352,7 +352,7 @@ class VerificationOrdersTable
                         $job = new VerificationJob([
                             'user_id' => $record->user_id,
                             'status' => VerificationJobStatus::Pending,
-                            'verification_mode' => VerificationMode::Standard->value,
+                            'verification_mode' => VerificationMode::Enhanced->value,
                             'original_filename' => $record->original_filename,
                         ]);
                         $job->id = (string) Str::uuid();
@@ -367,7 +367,7 @@ class VerificationOrdersTable
                         ], auth()->id());
                         $job->addLog('verification_mode_set', 'Verification mode set at job creation.', [
                             'from' => null,
-                            'to' => VerificationMode::Standard->value,
+                            'to' => VerificationMode::Enhanced->value,
                             'actor_id' => auth()->id(),
                         ], auth()->id());
 

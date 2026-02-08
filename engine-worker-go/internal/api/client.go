@@ -26,19 +26,22 @@ type EngineServerPayload struct {
 }
 
 type ClaimNextRequest struct {
-	EngineServer EngineServerPayload `json:"engine_server"`
-	WorkerID     string              `json:"worker_id"`
-	LeaseSeconds *int                `json:"lease_seconds,omitempty"`
+	EngineServer     EngineServerPayload `json:"engine_server"`
+	WorkerID         string              `json:"worker_id"`
+	WorkerCapability string              `json:"worker_capability,omitempty"`
+	LeaseSeconds     *int                `json:"lease_seconds,omitempty"`
 }
 
 type ClaimNextResponse struct {
 	Data struct {
-		ChunkID          string `json:"chunk_id"`
-		JobID            string `json:"job_id"`
-		ChunkNo          int    `json:"chunk_no"`
-		VerificationMode string `json:"verification_mode"`
-		LeaseExpiresAt   string `json:"lease_expires_at"`
-		Input            struct {
+		ChunkID                  string `json:"chunk_id"`
+		JobID                    string `json:"job_id"`
+		ChunkNo                  int    `json:"chunk_no"`
+		VerificationMode         string `json:"verification_mode"`
+		ProcessingStage          string `json:"processing_stage"`
+		WorkerCapabilityRequired string `json:"worker_capability_required"`
+		LeaseExpiresAt           string `json:"lease_expires_at"`
+		Input                    struct {
 			Disk string `json:"disk"`
 			Key  string `json:"key"`
 		} `json:"input"`
@@ -47,12 +50,14 @@ type ClaimNextResponse struct {
 
 type ChunkDetailsResponse struct {
 	Data struct {
-		ChunkID          string `json:"chunk_id"`
-		JobID            string `json:"job_id"`
-		ChunkNo          int    `json:"chunk_no"`
-		Status           string `json:"status"`
-		VerificationMode string `json:"verification_mode"`
-		Input            struct {
+		ChunkID                  string `json:"chunk_id"`
+		JobID                    string `json:"job_id"`
+		ChunkNo                  int    `json:"chunk_no"`
+		Status                   string `json:"status"`
+		VerificationMode         string `json:"verification_mode"`
+		ProcessingStage          string `json:"processing_stage"`
+		WorkerCapabilityRequired string `json:"worker_capability_required"`
+		Input                    struct {
 			Disk string `json:"disk"`
 			Key  string `json:"key"`
 		} `json:"input"`

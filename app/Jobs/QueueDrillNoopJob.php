@@ -48,6 +48,7 @@ class QueueDrillNoopJob implements ShouldQueue
         return match ($lane) {
             'prepare' => 'redis_prepare',
             'parse' => 'redis_parse',
+            'smtp_probe' => 'redis_smtp_probe',
             'finalize' => 'redis_finalize',
             'imports' => 'redis_import',
             'cache_writeback' => 'redis_cache_writeback',

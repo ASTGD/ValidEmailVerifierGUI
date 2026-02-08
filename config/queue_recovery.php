@@ -14,6 +14,6 @@ return [
 
     'allow_lanes' => array_values(array_filter(array_map(
         'trim',
-        explode(',', (string) env('QUEUE_RECOVERY_ALLOW_LANES', 'default,prepare,parse,finalize,imports,cache_writeback'))
+        explode(',', (string) env('QUEUE_RECOVERY_ALLOW_LANES', 'default,prepare,parse,smtp_probe,finalize,imports,cache_writeback'))
     ))),
 ];

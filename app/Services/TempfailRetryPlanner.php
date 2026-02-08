@@ -10,9 +10,7 @@ use Illuminate\Support\Facades\Storage;
 
 class TempfailRetryPlanner
 {
-    public function __construct(private JobStorage $storage)
-    {
-    }
+    public function __construct(private JobStorage $storage) {}
 
     /**
      * @return array{retry_count: int, tempfail_count: int, retry_chunk_id: string|null}
@@ -67,6 +65,7 @@ class TempfailRetryPlanner
                 if ($this->isRetryReason($reason, $retryReasons)) {
                     fwrite($retryStream, $email."\n");
                     $retryCount++;
+
                     continue;
                 }
 
@@ -199,6 +198,9 @@ class TempfailRetryPlanner
                 'verification_job_id' => $job->id,
                 'chunk_no' => $nextChunkNo,
                 'status' => 'pending',
+                'processing_stage' => 'smtp_probe',
+                'source_stage' => 'smtp_probe',
+                'parent_chunk_id' => $chunk->id,
                 'input_disk' => $inputDisk,
                 'input_key' => $inputKey,
                 'email_count' => $retryCount,

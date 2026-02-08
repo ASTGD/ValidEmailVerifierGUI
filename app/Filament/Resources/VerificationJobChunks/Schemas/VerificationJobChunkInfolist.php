@@ -43,6 +43,14 @@ class VerificationJobChunkInfolist
                                     default => 'gray',
                                 };
                             }),
+                        TextEntry::make('processing_stage')
+                            ->label('Processing stage')
+                            ->badge()
+                            ->formatStateUsing(fn (?string $state): string => $state ? str_replace('_', ' ', strtoupper($state)) : 'SCREENING')
+                            ->color(fn (?string $state): string => $state === 'smtp_probe' ? 'info' : 'gray'),
+                        TextEntry::make('source_stage')
+                            ->label('Source stage')
+                            ->placeholder('-'),
                         TextEntry::make('attempts')
                             ->label('Attempts'),
                         TextEntry::make('created_at')

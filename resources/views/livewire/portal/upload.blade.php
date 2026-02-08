@@ -63,45 +63,13 @@
                 <x-input-error :messages="$errors->get('file')" class="mt-4 font-bold" />
                 </div>
 
-                @php
-                    $enhancedGate = $this->enhancedGate;
-                    $enhancedAllowed = $enhancedGate['allowed'] ?? false;
-                @endphp
-
                 <div class="mt-8 rounded-[2rem] border border-[#E2E8F0] bg-white p-6">
                     <div class="flex flex-col gap-2">
-                        <h4 class="text-lg font-bold text-[#0F172A]">{{ __('Verification Mode') }}</h4>
+                        <h4 class="text-lg font-bold text-[#0F172A]">{{ __('Deep Verification Included') }}</h4>
                         <p class="text-sm text-[#64748B]">
-                            {{ __('Standard runs the default verification pipeline. Enhanced performs mailbox-level checks (SG5) when available.') }}
+                            {{ __('Deep mailbox verification runs automatically when SMTP probing is enabled for your workspace.') }}
                         </p>
                     </div>
-
-                    <div class="mt-4 grid gap-4 md:grid-cols-2">
-                        <label class="flex items-start gap-3 rounded-2xl border border-[#E2E8F0] p-4 hover:border-[#1E7CCF]">
-                            <input type="radio" name="verification_mode" value="standard" wire:model="verification_mode"
-                                class="mt-1 h-4 w-4 text-[#1E7CCF] focus:ring-[#1E7CCF]"
-                                @checked(old('verification_mode', 'standard') === 'standard') />
-                            <div>
-                                <p class="text-sm font-bold text-[#0F172A]">{{ __('Standard') }}</p>
-                                <p class="text-xs text-[#64748B]">{{ __('Recommended for most lists.') }}</p>
-                            </div>
-                        </label>
-                        <label
-                            class="flex items-start gap-3 rounded-2xl border border-[#E2E8F0] p-4 hover:border-[#1E7CCF] {{ $enhancedAllowed ? '' : 'opacity-60' }}"
-                            title="{{ $enhancedAllowed ? '' : \App\Support\EnhancedModeGate::helperText(auth()->user()) }}">
-                            <input type="radio" name="verification_mode" value="enhanced" wire:model="verification_mode"
-                                class="mt-1 h-4 w-4 text-[#1E7CCF] focus:ring-[#1E7CCF]" @disabled(! $enhancedAllowed)
-                                @checked(old('verification_mode') === 'enhanced') />
-                            <div>
-                                <p class="text-sm font-bold text-[#0F172A]">{{ __('Enhanced') }}</p>
-                                <p class="text-xs text-[#64748B]">
-                                    {{ $enhancedAllowed ? __('Enable for deeper checks when available.') : \App\Support\EnhancedModeGate::helperText(auth()->user()) }}
-                                </p>
-                            </div>
-                        </label>
-                    </div>
-
-                    <x-input-error :messages="$errors->get('verification_mode')" class="mt-3 font-bold" />
                 </div>
 
                 <!-- SUBMIT ACTIONS -->

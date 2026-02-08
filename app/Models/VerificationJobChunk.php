@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class VerificationJobChunk extends Model
 {
@@ -18,6 +19,9 @@ class VerificationJobChunk extends Model
         'verification_job_id',
         'chunk_no',
         'status',
+        'processing_stage',
+        'parent_chunk_id',
+        'source_stage',
         'input_disk',
         'input_key',
         'output_disk',
@@ -59,5 +63,15 @@ class VerificationJobChunk extends Model
     public function engineServer(): BelongsTo
     {
         return $this->belongsTo(EngineServer::class);
+    }
+
+    public function parentChunk(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_chunk_id');
+    }
+
+    public function childChunks(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_chunk_id');
     }
 }

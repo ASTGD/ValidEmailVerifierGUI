@@ -72,6 +72,10 @@ return [
     'signed_url_expiry_seconds' => (int) env('ENGINE_SIGNED_URL_EXPIRY_SECONDS', env('VERIFIER_SIGNED_URL_EXPIRY_SECONDS', 300)),
     'single_check_rate_limit_standard' => (int) env('ENGINE_SINGLE_CHECK_RATE_STANDARD_PER_MINUTE', 30),
     'single_check_rate_limit_enhanced' => (int) env('ENGINE_SINGLE_CHECK_RATE_ENHANCED_PER_MINUTE', 10),
+    'single_check_rate_limit' => (int) env(
+        'ENGINE_SINGLE_CHECK_RATE_PER_MINUTE',
+        (int) env('ENGINE_SINGLE_CHECK_RATE_ENHANCED_PER_MINUTE', 10)
+    ),
     'single_check_rate_limit_decay_seconds' => (int) env('ENGINE_SINGLE_CHECK_RATE_DECAY_SECONDS', 60),
     'chunk_inputs_prefix' => env('ENGINE_CHUNK_INPUT_PREFIX', 'chunks'),
     'chunk_outputs_prefix' => env('ENGINE_CHUNK_OUTPUT_PREFIX', 'results/chunks'),
@@ -95,6 +99,10 @@ return [
         'ENGINE_TEMPFAIL_RETRY_REASONS',
         'smtp_tempfail,smtp_timeout,smtp_connect_timeout,dns_timeout,dns_servfail'
     ),
+    'screening_hard_invalid_reasons' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('ENGINE_SCREENING_HARD_INVALID_REASONS', 'syntax,mx_missing'))
+    ))),
     'reputation_window_hours' => (int) env('ENGINE_REPUTATION_WINDOW_HOURS', 24),
     'reputation_min_samples' => (int) env('ENGINE_REPUTATION_MIN_SAMPLES', 100),
     'reputation_tempfail_warn_rate' => (float) env('ENGINE_REPUTATION_TEMPFAIL_WARN_RATE', 0.2),

@@ -8,13 +8,11 @@ use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
 use App\Services\QueueHealth\QueueBackpressureGate;
-use App\Support\EnhancedModeGate;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -28,8 +26,6 @@ class Upload extends Component
 
     public $file;
 
-    public string $verification_mode = VerificationMode::Standard->value;
-
     protected function maxUploadKilobytes(): int
     {
         $maxMb = (int) config('verifier.checkout_upload_max_mb', 10);
@@ -39,11 +35,8 @@ class Upload extends Component
 
     protected function rules(): array
     {
-        $modes = array_map(static fn (VerificationMode $mode) => $mode->value, VerificationMode::cases());
-
         return [
             'file' => ['required', 'file', 'mimes:csv,txt', 'max:'.$this->maxUploadKilobytes()],
-            'verification_mode' => ['required', 'string', Rule::in($modes)],
         ];
     }
 
@@ -51,13 +44,6 @@ class Upload extends Component
     {
         $this->validate();
         $user = Auth::user();
-        $enhancedGate = EnhancedModeGate::evaluate($user);
-
-        if (! $enhancedGate['allowed'] && $this->verification_mode === VerificationMode::Enhanced->value) {
-            $this->addError('verification_mode', EnhancedModeGate::message($user));
-
-            return;
-        }
 
         $rateKey = 'portal-upload|'.$user->id;
         $maxAttempts = (int) config('verifier.portal_upload_max_attempts', 10);
@@ -104,7 +90,7 @@ class Upload extends Component
         $job = new VerificationJob([
             'user_id' => $user->id,
             'status' => VerificationJobStatus::Pending,
-            'verification_mode' => $this->verification_mode,
+            'verification_mode' => VerificationMode::Enhanced,
             'original_filename' => $this->file->getClientOriginalName(),
         ]);
 
@@ -120,7 +106,7 @@ class Upload extends Component
         ], $user->id);
         $job->addLog('verification_mode_set', 'Verification mode set at job creation.', [
             'from' => null,
-            'to' => $this->verification_mode,
+            'to' => VerificationMode::Enhanced->value,
             'actor_id' => $user->id,
         ], $user->id);
 
@@ -156,10 +142,5 @@ class Upload extends Component
     public function render()
     {
         return view('livewire.portal.upload');
-    }
-
-    public function getEnhancedGateProperty(): array
-    {
-        return EnhancedModeGate::evaluate(Auth::user());
     }
 }
