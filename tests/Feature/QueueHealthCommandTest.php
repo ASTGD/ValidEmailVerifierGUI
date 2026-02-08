@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\QueueMetric;
+use App\Services\QueueHealth\QueueHealthNotifier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -132,6 +133,56 @@ class QueueHealthCommandTest extends TestCase
         $issueKeys = collect($report['issues'] ?? [])->pluck('key')->all();
         $this->assertContains('lane_depth:redis:default', $issueKeys);
         $this->assertContains('lane_oldest:redis:default', $issueKeys);
+    }
+
+    public function test_queue_health_command_does_not_mutate_alert_state_when_health_checks_are_disabled(): void
+    {
+        $issueKey = 'horizon_inactive';
+        $prefix = 'queue-health-disabled-no-mutate';
+
+        config([
+            'queue_health.enabled' => true,
+            'queue_health.alerts.enabled' => true,
+            'queue_health.alerts.email' => '',
+            'queue_health.alerts.slack_webhook_url' => '',
+            'queue_health.alerts.cache_prefix' => $prefix,
+        ]);
+
+        /** @var QueueHealthNotifier $notifier */
+        $notifier = app(QueueHealthNotifier::class);
+        $notifier->notify([
+            'status' => 'critical',
+            'checked_at' => now()->toIso8601String(),
+            'issues' => [[
+                'key' => $issueKey,
+                'severity' => 'critical',
+                'title' => 'Horizon inactive',
+                'detail' => 'No Horizon master supervisors are running.',
+                'lane' => null,
+            ]],
+        ]);
+
+        $activeKey = $prefix.':active';
+        $stateKey = $prefix.':issue:'.sha1($issueKey);
+
+        $activeBefore = Cache::get($activeKey);
+        $stateBefore = Cache::get($stateKey);
+
+        $this->assertIsArray($activeBefore);
+        $this->assertContains($issueKey, $activeBefore);
+        $this->assertIsArray($stateBefore);
+
+        config([
+            'queue_health.enabled' => false,
+        ]);
+
+        $exitCode = Artisan::call('ops:queue-health --json');
+        $report = json_decode(trim(Artisan::output()), true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertSame(0, $exitCode);
+        $this->assertSame('disabled', $report['status']);
+        $this->assertSame($activeBefore, Cache::get($activeKey));
+        $this->assertSame($stateBefore, Cache::get($stateKey));
     }
 
     private function mockRedisOnline(): void

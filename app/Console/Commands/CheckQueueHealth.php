@@ -15,7 +15,9 @@ class CheckQueueHealth extends Command
 
     public function handle(QueueHealthEvaluator $evaluator, QueueHealthNotifier $notifier): int
     {
-        $report = (bool) config('queue_health.enabled', true)
+        $enabled = (bool) config('queue_health.enabled', true);
+
+        $report = $enabled
             ? $evaluator->evaluate()
             : $this->disabledReport();
 
@@ -25,12 +27,18 @@ class CheckQueueHealth extends Command
             now()->addDay()
         );
 
-        $notifier->notify($report);
+        if ($enabled) {
+            $notifier->notify($report);
+        }
 
         if ((bool) $this->option('json')) {
             $this->line((string) json_encode($report, JSON_UNESCAPED_SLASHES));
         } else {
             $this->renderHumanReport($report);
+        }
+
+        if (! $enabled) {
+            return self::SUCCESS;
         }
 
         return ($report['status'] ?? 'healthy') === 'critical'
