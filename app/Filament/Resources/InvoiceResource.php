@@ -67,6 +67,7 @@ class InvoiceResource extends Resource
                     ->badge()
                     ->color(fn(string $state): string => match ($state) {
                         'Paid' => 'success',
+                        'Partially Paid' => 'primary',
                         'Unpaid' => 'warning',
                         'Cancelled' => 'danger',
                         'Refunded' => 'info',
@@ -78,6 +79,7 @@ class InvoiceResource extends Resource
                 Tables\Filters\SelectFilter::make('status')
                     ->options([
                         'Unpaid' => 'Unpaid',
+                        'Partially Paid' => 'Partially Paid',
                         'Paid' => 'Paid',
                         'Cancelled' => 'Cancelled',
                         'Refunded' => 'Refunded',

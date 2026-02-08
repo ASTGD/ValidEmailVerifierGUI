@@ -65,8 +65,9 @@ class BillingService
                 'date' => Carbon::now(),
             ]);
 
-            // Check if fully paid
+            // Recalculate paid totals and update invoice status accordingly
             $paidTotal = $invoice->transactions()->sum('amount');
+
             if ($paidTotal >= $invoice->total) {
                 $invoice->update([
                     'status' => 'Paid',
@@ -75,6 +76,68 @@ class BillingService
 
                 // If this was a credit add invoice, update user balance
                 $this->processInvoiceItems($invoice);
+            } elseif ($paidTotal > 0) {
+                // Partially paid
+                $invoice->update([
+                    'status' => 'Partially Paid',
+                ]);
+            } else {
+                $invoice->update([
+                    'status' => 'Unpaid',
+                ]);
+            }
+
+            return $transaction;
+        });
+    }
+
+    /**
+     * Apply a user's credit balance to an invoice.
+     */
+    public function applyCreditToInvoice(Invoice $invoice, int $amount): Transaction
+    {
+        return DB::transaction(function () use ($invoice, $amount) {
+            $user = $invoice->user()->lockForUpdate()->first();
+
+            if ($amount <= 0) {
+                throw new \InvalidArgumentException('Amount must be greater than zero.');
+            }
+
+            $remaining = $invoice->total - $invoice->transactions()->sum('amount');
+            $maxApplicable = min($user->balance, $remaining);
+
+            if ($amount > $maxApplicable) {
+                throw new \InvalidArgumentException('Insufficient balance or amount exceeds remaining invoice balance.');
+            }
+
+            // Deduct from user balance
+            $user->balance -= $amount;
+            $user->save();
+
+            // Record transaction
+            $transaction = Transaction::create([
+                'invoice_id' => $invoice->id,
+                'user_id' => $user->id,
+                'transaction_id' => null,
+                'payment_method' => 'Credit Balance',
+                'amount' => $amount,
+                'date' => Carbon::now(),
+            ]);
+
+            // Update invoice status (reuse recordPayment behavior)
+            $paidTotal = $invoice->transactions()->sum('amount');
+
+            if ($paidTotal >= $invoice->total) {
+                $invoice->update([
+                    'status' => 'Paid',
+                    'paid_at' => Carbon::now(),
+                ]);
+
+                $this->processInvoiceItems($invoice);
+            } else {
+                $invoice->update([
+                    'status' => 'Partially Paid',
+                ]);
             }
 
             return $transaction;

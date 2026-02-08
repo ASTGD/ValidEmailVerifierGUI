@@ -76,6 +76,18 @@ class InvoiceInfolist
                             ])
                             ->columns(4)
                     ]),
+                Section::make('Transactions')
+                    ->columnSpanFull()
+                    ->schema([
+                        RepeatableEntry::make('transactions')
+                            ->schema([
+                                TextEntry::make('date')->date()->columnSpan(1),
+                                TextEntry::make('payment_method')->columnSpan(1),
+                                TextEntry::make('transaction_id')->columnSpan(1),
+                                TextEntry::make('amount')->formatStateUsing(fn($state) => number_format($state / 100, 2))->columnSpan(1),
+                            ])
+                            ->columns(4)
+                    ]),
                 Section::make('Notes')
                     ->columnSpanFull()
                     ->schema([

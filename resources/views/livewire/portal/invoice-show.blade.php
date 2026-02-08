@@ -10,6 +10,13 @@
             <h1 class="text-3xl font-black text-[#0F172A] tracking-tight">
                 {{ __('Invoice') }} #{{ $invoice->invoice_number }}
             </h1>
+
+            @if(session('status'))
+                <div class="mt-4 p-4 rounded-lg bg-green-50 border border-green-100 text-green-800 font-bold">{{ session('status') }}</div>
+            @endif
+            @if(session('error'))
+                <div class="mt-4 p-4 rounded-lg bg-red-50 border border-red-100 text-red-800 font-bold">{{ session('error') }}</div>
+            @endif
             <p class="text-[#64748B] font-medium mt-1">
                 {{ __('Issued on') }} {{ $invoice->date?->format('M d, Y') }}
             </p>
@@ -109,6 +116,35 @@
                     </p>
                 </div>
             @endif
+
+            {{-- Transactions --}}
+            @if($invoice->transactions->isNotEmpty())
+                <div class="bg-white p-8 rounded-[2.5rem] border border-[#E2E8F0] shadow-sm">
+                    <h2 class="text-[11px] font-black text-[#64748B] uppercase tracking-widest mb-4">{{ __('Transactions') }}</h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-white border-b border-[#E2E8F0]">
+                                    <th class="px-4 py-2 text-xs font-black text-[#64748B]">{{ __('Date') }}</th>
+                                    <th class="px-4 py-2 text-xs font-black text-[#64748B]">{{ __('Method') }}</th>
+                                    <th class="px-4 py-2 text-xs font-black text-[#64748B]">{{ __('Transaction ID') }}</th>
+                                    <th class="px-4 py-2 text-xs font-black text-[#64748B] text-right">{{ __('Amount') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-[#E2E8F0]">
+                                @foreach($invoice->transactions as $txn)
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm">{{ $txn->date->format('M d, Y') }}</td>
+                                        <td class="px-4 py-3 text-sm">{{ $txn->payment_method }}</td>
+                                        <td class="px-4 py-3 text-sm">{{ $txn->transaction_id ?? '-' }}</td>
+                                        <td class="px-4 py-3 text-sm text-right">{{ number_format($txn->amount / 100, 2) }} {{ strtoupper($invoice->currency) }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            @endif
         </div>
 
         <!-- Sidebar / Payment Info -->
@@ -126,7 +162,7 @@
                             <div class="text-green-600 text-xs font-medium">{{ __('On') }} {{ $invoice->paid_at?->format('M d, Y') }}</div>
                         </div>
                     </div>
-                @elseif($invoice->status === 'Unpaid')
+                @elseif($invoice->status === 'Unpaid' || $invoice->status === 'Partially Paid')
                     <div class="flex items-center gap-4 p-4 bg-yellow-50 rounded-2xl border border-yellow-100 mb-6">
                         <div class="w-12 h-12 bg-yellow-500 rounded-full flex items-center justify-center shrink-0">
                             <i data-lucide="clock" class="text-white w-6 h-6"></i>
@@ -136,9 +172,20 @@
                             <div class="text-yellow-600 text-xs font-medium">{{ __('Due by') }} {{ $invoice->due_date?->format('M d, Y') }}</div>
                         </div>
                     </div>
-                    <button class="w-full py-4 bg-[#1E7CCF] hover:bg-[#1669B2] text-white rounded-2xl shadow-lg transition-all font-black uppercase tracking-widest text-xs">
-                        {{ __('Pay Now') }}
-                    </button>
+
+                    <div class="mb-4">
+                        <div class="text-xs text-[#64748B] font-medium">{{ __('Available Credit') }}</div>
+                        <div class="text-lg font-black">{{ number_format(($invoice->user->balance ?? 0) / 100, 2) }} {{ strtoupper($invoice->currency) }}</div>
+                    </div>
+
+                    <form wire:submit.prevent="applyCredit">
+                        <label class="block text-xs text-[#64748B] mb-2">{{ __('Amount to apply') }}</label>
+                        <input type="number" step="0.01" wire:model.defer="applyAmount" class="w-full px-4 py-3 rounded-xl border border-[#E2E8F0] mb-3" placeholder="0.00">
+                        <div class="flex gap-3">
+                            <button type="submit" class="flex-1 py-3 bg-[#1E7CCF] hover:bg-[#1669B2] text-white rounded-2xl shadow-lg transition-all font-black uppercase tracking-widest text-xs">{{ __('Apply Credit') }}</button>
+                            <button type="button" onclick="@this.set('applyAmount', {{ min(($invoice->user->balance ?? 0) / 100, ($invoice->total - $invoice->transactions->sum('amount')) / 100) }})" class="py-3 px-4 bg-white rounded-2xl border border-[#E2E8F0] font-bold">{{ __('Max') }}</button>
+                        </div>
+                    </form>
                 @endif
             </div>
 
