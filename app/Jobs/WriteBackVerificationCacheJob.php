@@ -87,7 +87,7 @@ class WriteBackVerificationCacheJob implements ShouldQueue
         }
 
         $metricsRecorder->recordPhase($job, 'writeback', [
-            'progress_percent' => 100,
+            'progress_percent' => 90,
             'writeback_status' => 'running',
             'writeback_last_error' => null,
             'writeback_started_at' => now(),
