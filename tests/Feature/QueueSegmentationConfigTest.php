@@ -7,6 +7,7 @@ use App\Jobs\FinalizeVerificationJob;
 use App\Jobs\ImportEmailVerificationOutcomesFromCsv;
 use App\Jobs\ParseAndChunkJob;
 use App\Jobs\PrepareVerificationJob;
+use App\Jobs\WriteBackVerificationCacheJob;
 use App\Models\User;
 use App\Models\VerificationJob;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -22,17 +23,25 @@ class QueueSegmentationConfigTest extends TestCase
     {
         $defaultQueue = (string) config('queue.connections.redis.queue', env('REDIS_QUEUE', 'default'));
         $defaultWaitKey = sprintf('redis:%s', $defaultQueue);
+        $cacheWriteBackQueue = (string) config('queue.connections.redis_cache_writeback.queue', env('QUEUE_CACHE_WRITEBACK_NAME', 'cache_writeback'));
+        $cacheWriteBackWaitKey = sprintf('redis_cache_writeback:%s', $cacheWriteBackQueue);
         $waits = config('horizon.waits', []);
         $defaults = config('horizon.defaults', []);
         $local = config('horizon.environments.local', []);
         $production = config('horizon.environments.production', []);
 
         $this->assertArrayHasKey($defaultWaitKey, $waits);
+        $this->assertArrayHasKey($cacheWriteBackWaitKey, $waits);
         $this->assertArrayHasKey('supervisor-default', $defaults);
+        $this->assertArrayHasKey('supervisor-cache-writeback', $defaults);
         $this->assertSame('redis', data_get($defaults, 'supervisor-default.connection'));
         $this->assertSame([$defaultQueue], data_get($defaults, 'supervisor-default.queue'));
+        $this->assertSame('redis_cache_writeback', data_get($defaults, 'supervisor-cache-writeback.connection'));
+        $this->assertSame([$cacheWriteBackQueue], data_get($defaults, 'supervisor-cache-writeback.queue'));
         $this->assertArrayHasKey('supervisor-default', $local);
         $this->assertArrayHasKey('supervisor-default', $production);
+        $this->assertArrayHasKey('supervisor-cache-writeback', $local);
+        $this->assertArrayHasKey('supervisor-cache-writeback', $production);
     }
 
     public function test_jobs_define_expected_queue_lane_settings(): void
@@ -42,12 +51,14 @@ class QueueSegmentationConfigTest extends TestCase
             'queue.connections.redis_parse.queue' => 'parse-custom',
             'queue.connections.redis_finalize.queue' => 'finalize-custom',
             'queue.connections.redis_import.queue' => 'imports-custom',
+            'queue.connections.redis_cache_writeback.queue' => 'cache-writeback-custom',
         ]);
 
         $prepare = new PrepareVerificationJob('job-1');
         $parse = new ParseAndChunkJob('job-1');
         $finalize = new FinalizeVerificationJob('job-1');
         $import = new ImportEmailVerificationOutcomesFromCsv(1);
+        $writeBack = new WriteBackVerificationCacheJob('job-1');
 
         $this->assertSame('redis_prepare', $prepare->connection);
         $this->assertSame('prepare-custom', $prepare->queue);
@@ -76,6 +87,13 @@ class QueueSegmentationConfigTest extends TestCase
         $this->assertSame(2, $import->tries);
         $this->assertTrue($import->failOnTimeout);
         $this->assertSame([120, 300], $import->backoff());
+
+        $this->assertSame('redis_cache_writeback', $writeBack->connection);
+        $this->assertSame('cache-writeback-custom', $writeBack->queue);
+        $this->assertSame(1800, $writeBack->timeout);
+        $this->assertSame(2, $writeBack->tries);
+        $this->assertTrue($writeBack->failOnTimeout);
+        $this->assertSame([120, 300], $writeBack->backoff());
     }
 
     public function test_prepare_job_dispatches_parse_job_on_parse_lane(): void
@@ -124,5 +142,20 @@ class QueueSegmentationConfigTest extends TestCase
             return $job->connection === 'redis_import'
                 && $job->queue === (string) config('queue.connections.redis_import.queue', 'imports');
         });
+    }
+
+    public function test_writeback_job_uses_without_overlapping_lock(): void
+    {
+        $job = new WriteBackVerificationCacheJob('job-abc');
+        $middlewares = $job->middleware();
+
+        $this->assertCount(1, $middlewares);
+        $this->assertInstanceOf(WithoutOverlapping::class, $middlewares[0]);
+
+        /** @var WithoutOverlapping $middleware */
+        $middleware = $middlewares[0];
+        $this->assertSame('cache-writeback:job-abc', $middleware->key);
+        $this->assertGreaterThan($job->timeout, $middleware->expiresAfter);
+        $this->assertSame(60, $middleware->releaseAfter);
     }
 }
