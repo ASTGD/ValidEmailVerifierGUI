@@ -89,14 +89,10 @@ class InvoicesRelationManager extends RelationManager
                     ->color('primary'),
             ])
             ->actions([
-                ViewAction::make()
-                    ->icon('heroicon-m-eye')
-                    ->color('gray'),
-
+                ViewAction::make(),
                 Action::make('edit')
                     ->label('Edit')
                     ->icon('heroicon-m-pencil-square')
-                    ->color('info')
                     ->url(fn(Invoice $record): string => \App\Filament\Resources\InvoiceResource::getUrl('edit', ['record' => $record])),
 
                 Action::make('delete')
@@ -109,7 +105,7 @@ class InvoicesRelationManager extends RelationManager
                 Action::make('download_manual')
                     ->label('PDF')
                     ->icon('heroicon-m-arrow-down-tray')
-                    ->color('success')
+                    ->color('info')
                     ->action(function (Invoice $record) {
                         return response()->streamDownload(function () use ($record) {
                             echo \Barryvdh\DomPDF\Facade\Pdf::loadView('invoices.pdf', ['invoice' => $record])->output();

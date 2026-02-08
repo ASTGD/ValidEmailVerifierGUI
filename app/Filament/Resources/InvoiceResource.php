@@ -46,6 +46,8 @@ class InvoiceResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->recordTitleAttribute('invoice_number')
+            ->defaultSort('date', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('invoice_number')
                     ->label('Invoice #')
@@ -87,6 +89,12 @@ class InvoiceResource extends Resource
                 Action::make('edit')
                     ->icon('heroicon-o-pencil-square')
                     ->url(fn(Invoice $record): string => static::getUrl('edit', ['record' => $record])),
+                Action::make('delete')
+                    ->label('Delete')
+                    ->icon('heroicon-m-trash')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->action(fn(Invoice $record) => $record->delete()),
                 Action::make('download')
                     ->label('PDF')
                     ->icon('heroicon-o-arrow-down-tray')
