@@ -19,6 +19,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use Throwable;
 
 #[Layout('layouts.portal')]
 class SingleCheck extends Component
@@ -26,7 +27,9 @@ class SingleCheck extends Component
     use AuthorizesRequests;
 
     public string $email = '';
+
     public string $verification_mode = VerificationMode::Standard->value;
+
     public ?string $jobId = null;
 
     protected function rules(): array
@@ -114,7 +117,29 @@ class SingleCheck extends Component
             'actor_id' => $user->id,
         ], $user->id);
 
-        PrepareVerificationJob::dispatch($job->id);
+        try {
+            if ((string) config('queue.default', 'sync') === 'sync') {
+                PrepareVerificationJob::dispatchSync($job->id);
+            } else {
+                PrepareVerificationJob::dispatch($job->id);
+            }
+        } catch (Throwable $exception) {
+            $job->update([
+                'status' => VerificationJobStatus::Failed,
+                'error_message' => 'Failed to enqueue single check.',
+                'failure_source' => VerificationJob::FAILURE_SOURCE_ENGINE,
+                'failure_code' => 'enqueue_failed',
+                'finished_at' => now(),
+            ]);
+
+            $job->addLog('enqueue_failed', 'Failed to dispatch single-check prepare job.', [
+                'error' => $exception->getMessage(),
+            ], $user->id);
+
+            $this->addError('email', __('Failed to queue single check. Please try again shortly.'));
+
+            return;
+        }
 
         $this->jobId = $job->id;
     }

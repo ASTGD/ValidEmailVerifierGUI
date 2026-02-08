@@ -48,6 +48,17 @@ class FinalizeVerificationJob implements ShouldQueue
     }
 
     /**
+     * @return array<int, string>
+     */
+    public function tags(): array
+    {
+        return [
+            'lane:finalize',
+            'verification_job:'.$this->jobId,
+        ];
+    }
+
+    /**
      * @return array<int, object>
      */
     public function middleware(): array

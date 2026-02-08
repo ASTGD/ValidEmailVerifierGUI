@@ -43,6 +43,17 @@ class WriteBackVerificationCacheJob implements ShouldQueue
     }
 
     /**
+     * @return array<int, string>
+     */
+    public function tags(): array
+    {
+        return [
+            'lane:cache_writeback',
+            'verification_job:'.$this->jobId,
+        ];
+    }
+
+    /**
      * @return array<int, object>
      */
     public function middleware(): array

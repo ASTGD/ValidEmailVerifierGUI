@@ -42,6 +42,17 @@ class ImportEmailVerificationOutcomesFromCsv implements ShouldQueue
         return [120, 300];
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public function tags(): array
+    {
+        return [
+            'lane:imports',
+            'outcome_import:'.$this->importId,
+        ];
+    }
+
     public function handle(OutcomeIngestor $ingestor): void
     {
         $import = EmailVerificationOutcomeImport::query()->find($this->importId);

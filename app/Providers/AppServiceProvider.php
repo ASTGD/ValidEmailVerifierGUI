@@ -16,6 +16,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\ServiceProvider;
@@ -65,8 +66,7 @@ class AppServiceProvider extends ServiceProvider
         \App\Models\SupportTicket::observe(\App\Observers\SupportTicketObserver::class);
         \App\Models\SupportMessage::observe(\App\Observers\SupportMessageObserver::class);
 
-
-        if (app()->environment(['local', 'testing']) && !app()->runningInConsole()) {
+        if (app()->environment(['local', 'testing']) && ! app()->runningInConsole()) {
             $hotFile = public_path('hot');
 
             if (File::exists($hotFile)) {
@@ -74,8 +74,9 @@ class AppServiceProvider extends ServiceProvider
                 $host = $hotUrl !== '' ? parse_url($hotUrl, PHP_URL_HOST) : null;
                 $port = $hotUrl !== '' ? parse_url($hotUrl, PHP_URL_PORT) : null;
 
-                if (!$host || !$port) {
+                if (! $host || ! $port) {
                     File::delete($hotFile);
+
                     return;
                 }
 
@@ -92,14 +93,15 @@ class AppServiceProvider extends ServiceProvider
 
                 $connection = @fsockopen($host, $port, $errno, $errstr, 0.2);
 
-                if (!is_resource($connection)) {
+                if (! is_resource($connection)) {
                     File::delete($hotFile);
+
                     return;
                 }
 
                 fclose($connection);
 
-                $clientUrl = rtrim($hotUrl, '/') . '/@vite/client';
+                $clientUrl = rtrim($hotUrl, '/').'/@vite/client';
                 $context = stream_context_create([
                     'http' => [
                         'timeout' => 0.4,
@@ -107,7 +109,7 @@ class AppServiceProvider extends ServiceProvider
                 ]);
                 $clientResponse = @file_get_contents($clientUrl, false, $context);
 
-                if ($clientResponse === false || !str_contains($clientResponse, 'import.meta.hot')) {
+                if ($clientResponse === false || ! str_contains($clientResponse, 'import.meta.hot')) {
                     File::delete($hotFile);
                 }
             }
@@ -117,14 +119,14 @@ class AppServiceProvider extends ServiceProvider
             $limit = (int) config('verifier.api_rate_limit_per_minute', 120);
             $key = $request->user()?->id ?: $request->ip();
 
-            return Limit::perMinute($limit)->by('verifier-api|' . $key);
+            return Limit::perMinute($limit)->by('verifier-api|'.$key);
         });
 
         RateLimiter::for('feedback-api', function (Request $request): Limit {
             $limit = (int) config('engine.feedback_rate_limit_per_minute', 30);
             $key = $request->user()?->id ?: $request->ip();
 
-            return Limit::perMinute($limit)->by('feedback-api|' . $key);
+            return Limit::perMinute($limit)->by('feedback-api|'.$key);
         });
     }
 
@@ -138,18 +140,31 @@ class AppServiceProvider extends ServiceProvider
         }
 
         $redisAvailable = $this->redisAvailable();
+        $isProduction = app()->environment('production');
 
         if ($queueConnection === 'redis' && ! $redisAvailable) {
-            $queueConnection = config('queue.default', 'database');
-            if ($queueConnection === 'redis') {
-                $queueConnection = 'database';
+            if (! $isProduction) {
+                $queueConnection = config('queue.default', 'database');
+                if ($queueConnection === 'redis') {
+                    $queueConnection = 'database';
+                }
+            } else {
+                Log::critical('Redis unavailable while QUEUE_CONNECTION=redis in production; fallback disabled.', [
+                    'context' => 'runtime_queue_settings',
+                ]);
             }
         }
 
         if ($cacheStore === 'redis' && ! $redisAvailable) {
-            $cacheStore = config('cache.default', 'database');
-            if ($cacheStore === 'redis') {
-                $cacheStore = 'database';
+            if (! $isProduction) {
+                $cacheStore = config('cache.default', 'database');
+                if ($cacheStore === 'redis') {
+                    $cacheStore = 'database';
+                }
+            } else {
+                Log::critical('Redis unavailable while CACHE_STORE=redis in production; fallback disabled.', [
+                    'context' => 'runtime_queue_settings',
+                ]);
             }
         }
 

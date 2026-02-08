@@ -43,13 +43,15 @@ Required queue observability jobs:
 1. `php artisan horizon:status`
 2. `php artisan horizon:supervisors`
 3. `php artisan ops:queue-health --json`
-4. Confirm Redis is reachable and queue metrics are updating.
+4. `php artisan ops:queue-slo-report --json`
+5. Confirm Redis is reachable and queue metrics are updating.
 
 ## Queue Recovery Sequence
 1. `php artisan horizon:terminate`
 2. Let systemd/Supervisor restart `php artisan horizon`
 3. Verify all segmented supervisors are back (`supervisor-default`, `supervisor-prepare`, `supervisor-parse`, `supervisor-finalize`, `supervisor-imports`, `supervisor-cache-writeback`).
 4. Re-run `php artisan ops:queue-health --json` and confirm status is `healthy` or only expected warnings.
+5. If required, run safe replay preview: `php artisan ops:queue-recover --lane=parse --strategy=requeue_failed --dry-run`.
 
 ## Security
 - Restrict Go dashboard with IP allowlist or basic auth.

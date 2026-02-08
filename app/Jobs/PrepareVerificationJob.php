@@ -38,6 +38,17 @@ class PrepareVerificationJob implements ShouldQueue
         return [10, 30, 60];
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public function tags(): array
+    {
+        return [
+            'lane:prepare',
+            'verification_job:'.$this->jobId,
+        ];
+    }
+
     public function handle(): void
     {
         $job = VerificationJob::query()->find($this->jobId);
