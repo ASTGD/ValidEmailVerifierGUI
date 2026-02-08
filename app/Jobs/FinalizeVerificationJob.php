@@ -2,7 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Contracts\CacheWriteBackService;
 use App\Enums\VerificationJobOrigin;
 use App\Enums\VerificationJobStatus;
 use App\Models\VerificationJob;
@@ -10,12 +9,14 @@ use App\Services\JobMetricsRecorder;
 use App\Services\JobStorage;
 use App\Services\VerificationOutputMapper;
 use App\Services\VerificationResultsMerger;
+use App\Support\EngineSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
@@ -61,7 +62,6 @@ class FinalizeVerificationJob implements ShouldQueue
     public function handle(
         VerificationResultsMerger $merger,
         JobStorage $storage,
-        CacheWriteBackService $writeBack,
         JobMetricsRecorder $metricsRecorder
     ): void {
         $job = VerificationJob::query()
@@ -122,12 +122,6 @@ class FinalizeVerificationJob implements ShouldQueue
                 return;
             }
 
-            $metricsRecorder->recordPhase($job, 'writeback', [
-                'progress_percent' => 90,
-            ]);
-
-            $writebackResult = $writeBack->writeBack($job, $result);
-
             $counts = $result['counts'];
             $validCount = (int) ($counts['valid'] ?? 0);
             $invalidCount = (int) ($counts['invalid'] ?? 0);
@@ -180,13 +174,64 @@ class FinalizeVerificationJob implements ShouldQueue
                 'progress_percent' => 100,
                 'total_emails' => $job->total_emails,
                 'processed_emails' => $job->total_emails,
-                'writeback_written_count' => (int) ($writebackResult['written'] ?? 0),
+                'writeback_status' => null,
             ]);
+
+            $this->scheduleWriteBack($job, $metricsRecorder);
         } catch (Throwable $exception) {
             $this->markJobFailed($job, 'Finalization failed.', [
                 'error' => $exception->getMessage(),
             ], $metricsRecorder);
         }
+    }
+
+    private function scheduleWriteBack(VerificationJob $job, JobMetricsRecorder $metricsRecorder): void
+    {
+        if (! EngineSettings::cacheWritebackEnabled()) {
+            $metricsRecorder->recordPhase($job, 'completed', [
+                'progress_percent' => 100,
+                'writeback_status' => 'disabled',
+                'writeback_attempted_count' => 0,
+                'writeback_written_count' => 0,
+                'writeback_last_error' => null,
+                'writeback_queued_at' => null,
+                'writeback_started_at' => null,
+                'writeback_finished_at' => now(),
+            ]);
+
+            return;
+        }
+
+        if (! $job->cache_miss_key) {
+            $metricsRecorder->recordPhase($job, 'completed', [
+                'progress_percent' => 100,
+                'writeback_status' => 'skipped',
+                'writeback_attempted_count' => 0,
+                'writeback_written_count' => 0,
+                'writeback_last_error' => null,
+                'writeback_queued_at' => null,
+                'writeback_started_at' => null,
+                'writeback_finished_at' => now(),
+            ]);
+
+            return;
+        }
+
+        $queuedAt = now();
+        $metricsRecorder->recordPhase($job, 'completed', [
+            'progress_percent' => 100,
+            'writeback_status' => 'queued',
+            'writeback_attempted_count' => 0,
+            'writeback_written_count' => 0,
+            'writeback_last_error' => null,
+            'writeback_queued_at' => $queuedAt,
+            'writeback_started_at' => null,
+            'writeback_finished_at' => null,
+        ]);
+
+        DB::afterCommit(function () use ($job): void {
+            WriteBackVerificationCacheJob::dispatch($job->id);
+        });
     }
 
     private function markJobFailed(

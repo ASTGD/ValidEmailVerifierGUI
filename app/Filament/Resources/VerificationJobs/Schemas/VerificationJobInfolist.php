@@ -188,6 +188,33 @@ class VerificationJobInfolist
                             ->label('Write-back written')
                             ->numeric()
                             ->placeholder('-'),
+                        TextEntry::make('metrics.writeback_attempted_count')
+                            ->label('Write-back attempted')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.writeback_status')
+                            ->label('Write-back status')
+                            ->badge()
+                            ->formatStateUsing(fn ($state): string => $state ? ucfirst((string) $state) : '-')
+                            ->color(function ($state): string {
+                                return match ((string) $state) {
+                                    'completed' => 'success',
+                                    'running' => 'warning',
+                                    'queued' => 'info',
+                                    'failed' => 'danger',
+                                    'skipped', 'disabled' => 'gray',
+                                    default => 'gray',
+                                };
+                            })
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.writeback_finished_at')
+                            ->label('Write-back finished')
+                            ->since()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.writeback_last_error')
+                            ->label('Write-back error')
+                            ->placeholder('-')
+                            ->columnSpanFull(),
                         TextEntry::make('metrics.peak_cpu_percent')
                             ->label('Peak CPU %')
                             ->placeholder('-'),

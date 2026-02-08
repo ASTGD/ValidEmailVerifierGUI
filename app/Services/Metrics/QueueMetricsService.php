@@ -88,7 +88,7 @@ class QueueMetricsService
         $targets = [];
 
         if ($defaultConnection === 'redis') {
-            foreach (['redis_prepare', 'redis_parse', 'redis_finalize', 'redis_import'] as $connection) {
+            foreach (['redis_prepare', 'redis_parse', 'redis_finalize', 'redis_import', 'redis_cache_writeback'] as $connection) {
                 $driver = (string) config("queue.connections.{$connection}.driver", '');
                 $queue = (string) config("queue.connections.{$connection}.queue", '');
 
