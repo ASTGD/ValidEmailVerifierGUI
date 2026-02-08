@@ -11,6 +11,9 @@ Use this runbook to start and stop all local dev services in this repo.
 **Queue workers (Horizon)**
 1. `./vendor/bin/sail artisan horizon`
 
+**Scheduler (required for snapshots + health checks)**
+1. `./vendor/bin/sail artisan schedule:work`
+
 **Go dashboard (control plane)**
 1. `cd services/go-control-plane`
 2. `cp .env.example .env`
@@ -49,6 +52,20 @@ Notes:
 - Skips the Go dashboard if `services/go-control-plane/.env` is missing.
 - Skips the Go worker if required env vars are missing.
 - `run-queue.sh` starts Horizon (segmented queue workers).
+
+## Queue reliability checks
+
+- `./vendor/bin/sail artisan ops:queue-health`
+- `./vendor/bin/sail artisan ops:queue-health --json`
+- `./vendor/bin/sail artisan horizon:status`
+- `./vendor/bin/sail artisan horizon:supervisors`
+
+## Queue recovery sequence
+
+1. `./vendor/bin/sail artisan horizon:terminate`
+2. Restart Horizon process manager target (or re-run `./vendor/bin/sail artisan horizon`)
+3. `./vendor/bin/sail artisan horizon:supervisors`
+4. `./vendor/bin/sail artisan ops:queue-health --json`
 
 ## Stop background sessions
 

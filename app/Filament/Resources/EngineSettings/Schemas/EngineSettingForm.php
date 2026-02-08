@@ -2,14 +2,14 @@
 
 namespace App\Filament\Resources\EngineSettings\Schemas;
 
-use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
-use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\ToggleButtons;
 use Filament\Schemas\Components\Grid;
@@ -442,7 +442,7 @@ class EngineSettingForm
                         ->disabled(fn (Get $get): bool => $get('queue_connection') !== 'redis'),
                     Placeholder::make('horizon_path')
                         ->label('Horizon path')
-                        ->content(fn (): string => '/' . trim((string) config('horizon.path', 'horizon'), '/')),
+                        ->content(fn (): string => '/'.trim((string) config('horizon.path', 'horizon'), '/')),
                     Placeholder::make('runtime_queue')
                         ->label('Runtime queue driver')
                         ->content(fn (): string => (string) config('queue.default')),
@@ -455,11 +455,14 @@ class EngineSettingForm
                 ])
                 ->columns(2),
             Section::make('Worker Tuning')
-                ->description('Stored values are used for recommended commands. Restart workers after changes.')
+                ->description('Stored values are used for recommended commands. Active supervisors are segmented by lane; restart Horizon after changes.')
                 ->schema([
                     TextInput::make('queue_worker_name')
                         ->label('Supervisor name')
-                        ->helperText('Horizon supervisor name. Default: supervisor-1.'),
+                        ->helperText('Reference supervisor name for fallback queue:work command. Default: supervisor-finalize.'),
+                    Placeholder::make('queue_supervisor_lanes')
+                        ->label('Segmented supervisors')
+                        ->content('supervisor-default, supervisor-prepare, supervisor-parse, supervisor-finalize, supervisor-imports, supervisor-cache-writeback'),
                     TextInput::make('queue_worker_processes')
                         ->label('Max processes')
                         ->numeric()
@@ -614,7 +617,7 @@ class EngineSettingForm
 
     private static function queueWorkerSummary(?Get $get, bool $effective): string
     {
-        $name = self::queueWorkerValue($get, 'queue_worker_name', 'supervisor-1');
+        $name = self::queueWorkerValue($get, 'queue_worker_name', self::queueReferenceSupervisor());
         $processes = self::queueWorkerValue($get, 'queue_worker_processes', self::horizonDefault('maxProcesses', 1));
         $memory = self::queueWorkerValue($get, 'queue_worker_memory', self::horizonDefault('memory', 128));
         $timeout = self::queueWorkerValue($get, 'queue_worker_timeout', self::horizonDefault('timeout', 60));
@@ -685,9 +688,15 @@ class EngineSettingForm
     private static function horizonDefault(string $key, mixed $fallback): mixed
     {
         $env = (string) config('app.env');
+        $reference = self::queueReferenceSupervisor();
 
-        return config("horizon.environments.{$env}.supervisor-1.{$key}")
-            ?? config("horizon.defaults.supervisor-1.{$key}")
+        return config("horizon.environments.{$env}.{$reference}.{$key}")
+            ?? config("horizon.defaults.{$reference}.{$key}")
             ?? $fallback;
+    }
+
+    private static function queueReferenceSupervisor(): string
+    {
+        return 'supervisor-finalize';
     }
 }
