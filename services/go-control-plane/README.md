@@ -22,8 +22,12 @@ Lightweight Go service that tracks worker heartbeats, desired state, and pool sc
 - `POST /api/workers/heartbeat`
 - `GET /api/workers`
 - `POST /api/workers/{id}/pause|resume|drain|stop`
+- `POST /api/workers/{id}/quarantine|unquarantine`
 - `GET /api/pools`
 - `POST /api/pools/{pool}/scale`
+- `GET /api/health/ready`
+- `GET /api/incidents`
+- `GET /api/slo`
 - `GET /metrics` (Prometheus format; auth required)
 
 All endpoints require `Authorization: Bearer <CONTROL_PLANE_TOKEN>`.
@@ -55,6 +59,27 @@ AUTO_ACTIONS_ENABLED=false
 
 Runtime toggles can also be changed from the Settings page. Those updates are stored in Redis and take effect without editing `.env`.
 
+## Reliability + automation (Phase 9+)
+Optional runtime controls:
+```
+CONTROL_PLANE_INSTANCE_ID=node-a
+SSE_WRITE_TIMEOUT_SECONDS=15
+LEADER_LOCK_ENABLED=true
+LEADER_LOCK_TTL_SECONDS=45
+STALE_WORKER_TTL_SECONDS=86400
+STUCK_DESIRED_GRACE_SECONDS=600
+AUTOSCALE_ENABLED=false
+AUTOSCALE_INTERVAL_SECONDS=30
+AUTOSCALE_COOLDOWN_SECONDS=120
+AUTOSCALE_MIN_DESIRED=1
+AUTOSCALE_MAX_DESIRED=4
+AUTOSCALE_CANARY_PERCENT=100
+QUARANTINE_ERROR_RATE_THRESHOLD=15
+```
+- Leader lock protects alert/snapshot/autoscale loops in multi-instance deployments.
+- Incident lifecycle is tracked in Redis (`active` and `resolved`) and exposed in `/api/incidents`.
+- Worker quarantine endpoints allow auto-protect or manual quarantine for unstable workers.
+
 Slack:
 ```
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
@@ -76,6 +101,11 @@ SMTP_TO=ceo@domain.com,ops@domain.com
 - `worker:{id}:desired_state`
 - `worker:{id}:meta`
 - `worker:{id}:metrics`
+- `worker:{id}:stage_metrics`
+- `worker:{id}:smtp_metrics`
+- `worker:{id}:quarantined`
 - `workers:active`
 - `pools:known`
 - `pool:{pool}:desired_count`
+- `control_plane:incident:*`
+- `control_plane:leader:*`

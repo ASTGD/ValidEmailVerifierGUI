@@ -57,3 +57,16 @@ func TestApplyProviderOverrides(t *testing.T) {
 		t.Fatalf("expected retries %d", retries)
 	}
 }
+
+func TestWithProviderProfile(t *testing.T) {
+	prober := NetSMTPProber{}
+	updated := withProviderProfile(prober, "gmail")
+
+	typed, ok := updated.(NetSMTPProber)
+	if !ok {
+		t.Fatalf("expected NetSMTPProber type")
+	}
+	if typed.ProviderProfile != "gmail" {
+		t.Fatalf("expected provider profile gmail, got %q", typed.ProviderProfile)
+	}
+}

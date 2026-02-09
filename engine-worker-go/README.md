@@ -90,3 +90,7 @@ $token = $user->createToken('engine-worker')->plainTextToken;
   - valid: `rcpt_ok`
   - invalid: `rcpt_rejected`
   - risky: `catch_all`, `smtp_tempfail`, `smtp_probe_disabled`, `smtp_probe_identity_missing`
+- SMTP reply intelligence is provider-aware and conservative:
+  - parses multiline SMTP replies and enhanced status codes (`X.Y.Z`)
+  - applies deterministic decision classes internally (`deliverable`, `undeliverable`, `retryable`, `policy_blocked`, `unknown`)
+  - keeps uncertain evidence in risky paths (never silently promotes unknown signals to valid)

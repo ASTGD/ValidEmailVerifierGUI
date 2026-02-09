@@ -159,14 +159,17 @@ func (w *Worker) Run(ctx context.Context) error {
 
 func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse) error {
 	chunkID := claim.Data.ChunkID
+	correlationID := fmt.Sprintf("%s:%s", claim.Data.JobID, chunkID)
 
 	_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
 		"level":   "info",
 		"event":   "chunk_claimed",
 		"message": "Chunk claimed by worker.",
 		"context": map[string]interface{}{
-			"worker_id": w.cfg.WorkerID,
-			"chunk_no":  claim.Data.ChunkNo,
+			"worker_id":        w.cfg.WorkerID,
+			"chunk_no":         claim.Data.ChunkNo,
+			"processing_stage": claim.Data.ProcessingStage,
+			"correlation_id":   correlationID,
 		},
 	})
 
@@ -266,11 +269,13 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 		"event":   "chunk_completed",
 		"message": "Chunk completed by worker.",
 		"context": map[string]interface{}{
-			"chunk_no":      details.Data.ChunkNo,
-			"email_count":   outputs.EmailCount,
-			"valid_count":   outputs.ValidCount,
-			"invalid_count": outputs.InvalidCount,
-			"risky_count":   outputs.RiskyCount,
+			"chunk_no":         details.Data.ChunkNo,
+			"email_count":      outputs.EmailCount,
+			"valid_count":      outputs.ValidCount,
+			"invalid_count":    outputs.InvalidCount,
+			"risky_count":      outputs.RiskyCount,
+			"processing_stage": processingStage,
+			"correlation_id":   correlationID,
 		},
 	})
 

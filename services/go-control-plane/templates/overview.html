@@ -1,5 +1,5 @@
 {{ define "overview" }}
-<section class="grid gap-6 lg:grid-cols-4">
+<section class="grid gap-6 lg:grid-cols-5">
     <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
         <p class="text-xs uppercase tracking-widest text-slate-400">Active Workers</p>
         <p id="worker-count" class="mt-3 text-3xl font-semibold">{{ .WorkerCount }}</p>
@@ -19,6 +19,34 @@
         <p class="text-xs uppercase tracking-widest text-slate-400">Error Rate (Total/min)</p>
         <p id="error-rate-total" class="mt-3 text-3xl font-semibold">{{ .ErrorRateTotal }}</p>
         <p class="mt-2 text-sm text-slate-400">Current summed worker error rate.</p>
+    </div>
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Active Incidents</p>
+        <p id="incident-count" class="mt-3 text-3xl font-semibold">{{ .IncidentCount }}</p>
+        <p class="mt-2 text-sm text-slate-400">Open operational incidents.</p>
+    </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Probe SLO Snapshot</h2>
+            <p class="text-sm text-slate-400">Average SMTP probe quality signals from active workers.</p>
+        </div>
+    </div>
+    <div class="mt-5 grid gap-4 md:grid-cols-3">
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Unknown Rate</p>
+            <p id="probe-unknown-rate" class="mt-2 text-2xl font-semibold">{{ printf "%.2f" .ProbeUnknownRate }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Tempfail Rate</p>
+            <p id="probe-tempfail-rate" class="mt-2 text-2xl font-semibold">{{ printf "%.2f" .ProbeTempfailRate }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Reject Rate</p>
+            <p id="probe-reject-rate" class="mt-2 text-2xl font-semibold">{{ printf "%.2f" .ProbeRejectRate }}</p>
+        </div>
     </div>
 </section>
 
@@ -161,12 +189,20 @@
             const poolCount = document.getElementById('pool-count');
             const desiredTotal = document.getElementById('desired-total');
             const errorRateTotal = document.getElementById('error-rate-total');
+            const incidentCount = document.getElementById('incident-count');
+            const probeUnknownRate = document.getElementById('probe-unknown-rate');
+            const probeTempfailRate = document.getElementById('probe-tempfail-rate');
+            const probeRejectRate = document.getElementById('probe-reject-rate');
             const liveUpdated = document.getElementById('live-updated');
 
             if (workerCount) workerCount.textContent = payload.worker_count;
             if (poolCount) poolCount.textContent = payload.pool_count;
             if (desiredTotal) desiredTotal.textContent = payload.desired_total;
             if (errorRateTotal) errorRateTotal.textContent = Number(payload.error_rate_total || 0).toFixed(2);
+            if (incidentCount) incidentCount.textContent = payload.incident_count || 0;
+            if (probeUnknownRate) probeUnknownRate.textContent = Number(payload.probe_unknown_rate || 0).toFixed(2);
+            if (probeTempfailRate) probeTempfailRate.textContent = Number(payload.probe_tempfail_rate || 0).toFixed(2);
+            if (probeRejectRate) probeRejectRate.textContent = Number(payload.probe_reject_rate || 0).toFixed(2);
             if (liveUpdated) liveUpdated.textContent = `Updated ${new Date(payload.timestamp).toLocaleTimeString()}`;
 
             if (Array.isArray(payload.pools)) {

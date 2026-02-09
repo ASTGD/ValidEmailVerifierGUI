@@ -7,16 +7,25 @@ import (
 )
 
 type SnapshotService struct {
+	instanceID  string
 	store       *Store
 	snapshots   *SnapshotStore
+	cfg         Config
 	interval    time.Duration
 	stopChannel chan struct{}
 }
 
-func NewSnapshotService(store *Store, snapshots *SnapshotStore, interval time.Duration) *SnapshotService {
+func NewSnapshotService(store *Store, snapshots *SnapshotStore, cfg Config, instanceID string) *SnapshotService {
+	interval := cfg.SnapshotInterval
+	if interval <= 0 {
+		interval = 60 * time.Second
+	}
+
 	return &SnapshotService{
+		instanceID:  instanceID,
 		store:       store,
 		snapshots:   snapshots,
+		cfg:         cfg,
 		interval:    interval,
 		stopChannel: make(chan struct{}),
 	}
@@ -52,6 +61,10 @@ func (s *SnapshotService) capture() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	if !s.shouldRun(ctx) {
+		return
+	}
+
 	workers, err := s.store.GetWorkers(ctx)
 	if err != nil {
 		log.Printf("snapshot: failed to load workers: %v", err)
@@ -85,4 +98,18 @@ func (s *SnapshotService) capture() {
 		log.Printf("snapshot: failed to save pool snapshots: %v", err)
 		return
 	}
+}
+
+func (s *SnapshotService) shouldRun(ctx context.Context) bool {
+	if !s.cfg.LeaderLockEnabled {
+		return true
+	}
+
+	ok, err := s.store.HoldLeaderLease(ctx, "snapshots", s.instanceID, s.cfg.LeaderLockTTL)
+	if err != nil {
+		log.Printf("snapshot: leader lock error: %v", err)
+		return false
+	}
+
+	return ok
 }
