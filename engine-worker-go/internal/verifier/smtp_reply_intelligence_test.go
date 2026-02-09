@@ -14,7 +14,7 @@ func TestClassifySMTPRcptReplyUndeliverable(t *testing.T) {
 		Message:      "User unknown",
 	}
 
-	result := classifySMTPRcptReply(reply, "gmail", "gmail-smtp-in.l.google.com", true)
+	result := classifySMTPRcptReply(reply, "gmail", "gmail-smtp-in.l.google.com", true, nil, false)
 	if result.Category != CategoryInvalid {
 		t.Fatalf("expected invalid category, got %q", result.Category)
 	}
@@ -36,7 +36,7 @@ func TestClassifySMTPRcptReplyPolicyBlocked(t *testing.T) {
 		Message:      "Access denied by policy",
 	}
 
-	result := classifySMTPRcptReply(reply, "microsoft", "outlook-com.olc.protection.outlook.com", true)
+	result := classifySMTPRcptReply(reply, "microsoft", "outlook-com.olc.protection.outlook.com", true, nil, false)
 	if result.Category != CategoryRisky {
 		t.Fatalf("expected risky category, got %q", result.Category)
 	}
@@ -58,7 +58,7 @@ func TestClassifySMTPRcptReplyTempfailRetryWindow(t *testing.T) {
 		Message:      "Greylisted, try again later",
 	}
 
-	result := classifySMTPRcptReply(reply, "generic", "mx.example.test", true)
+	result := classifySMTPRcptReply(reply, "generic", "mx.example.test", true, nil, false)
 	if result.Category != CategoryRisky {
 		t.Fatalf("expected risky category, got %q", result.Category)
 	}
@@ -92,5 +92,69 @@ func TestReadSMTPReplyParsesMultilineEnhanced(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(reply.Message), "ready") {
 		t.Fatalf("expected message to include ready, got %q", reply.Message)
+	}
+}
+
+func TestClassifySMTPPolicyEngineUsesEnhancedRulePrecedence(t *testing.T) {
+	engine := DefaultProviderReplyPolicyEngine()
+	engine.Profiles["generic"] = ProviderReplyProfile{
+		Name: "generic",
+		EnhancedRules: []ProviderReplyRule{
+			{
+				EnhancedPrefixes: []string{"5.1.1"},
+				DecisionClass:    DecisionUndeliverable,
+				Category:         CategoryInvalid,
+				Reason:           "rcpt_rejected",
+				ReasonCode:       "mailbox_not_found",
+			},
+		},
+		SMTPCodeRules: []ProviderReplyRule{
+			{
+				SMTPCodes:     []int{550},
+				DecisionClass: DecisionPolicyBlocked,
+				Category:      CategoryRisky,
+				Reason:        "smtp_tempfail",
+				ReasonCode:    "smtp_policy_blocked",
+			},
+		},
+		MessageRules: nil,
+		Retry: ProviderRetryPolicy{
+			DefaultSeconds:      60,
+			TempfailSeconds:     90,
+			GreylistSeconds:     180,
+			PolicyBlockedSecond: 300,
+			UnknownSeconds:      75,
+		},
+	}
+
+	reply := smtpReply{
+		Code:         550,
+		EnhancedCode: "5.1.1",
+		Message:      "user unknown",
+	}
+
+	result := classifySMTPRcptReply(reply, "generic", "mx.example.test", true, engine, true)
+	if result.DecisionClass != DecisionUndeliverable {
+		t.Fatalf("expected enhanced rule precedence to choose undeliverable, got %q", result.DecisionClass)
+	}
+	if result.Category != CategoryInvalid {
+		t.Fatalf("expected invalid from enhanced rule precedence, got %q", result.Category)
+	}
+}
+
+func TestClassifySMTPPolicyEngineAdaptiveRetryProfile(t *testing.T) {
+	engine := DefaultProviderReplyPolicyEngine()
+	reply := smtpReply{
+		Code:         451,
+		EnhancedCode: "4.4.1",
+		Message:      "temporarily deferred",
+	}
+
+	result := classifySMTPRcptReply(reply, "microsoft", "mx.microsoft.test", true, engine, true)
+	if result.DecisionClass != DecisionRetryable {
+		t.Fatalf("expected retryable decision class, got %q", result.DecisionClass)
+	}
+	if result.RetryAfterSecond < 150 {
+		t.Fatalf("expected adaptive retry delay >= 150 for microsoft tempfail, got %d", result.RetryAfterSecond)
 	}
 }

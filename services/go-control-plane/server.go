@@ -52,6 +52,10 @@ func (s *Server) Router() http.Handler {
 		router.Get("/api/health/ready", s.handleReadiness)
 		router.Get("/api/incidents", s.handleIncidents)
 		router.Get("/api/slo", s.handleSLO)
+		router.Get("/api/providers/health", s.handleProvidersHealth)
+		router.Get("/api/providers/policies", s.handleProviderPolicies)
+		router.Post("/api/providers/{provider}/mode", s.handleProviderMode)
+		router.Post("/api/providers/policies/reload", s.handleProviderPoliciesReload)
 		router.Get("/metrics", s.handleMetrics)
 
 		router.Get("/ui", s.handleUIRedirect)
@@ -69,6 +73,8 @@ func (s *Server) Router() http.Handler {
 		router.Post("/ui/workers/{workerID}/unquarantine", s.requireSameOriginUI(s.handleUIQuarantine(false)))
 		router.Post("/ui/pools/{pool}/scale", s.requireSameOriginUI(s.handleUIScalePool))
 		router.Post("/ui/settings", s.requireSameOriginUI(s.handleUIUpdateSettings))
+		router.Post("/ui/providers/{provider}/mode", s.requireSameOriginUI(s.handleUIProviderMode))
+		router.Post("/ui/providers/policies/reload", s.requireSameOriginUI(s.handleUIProviderPoliciesReload))
 
 		router.Get("/verifier-engine-room/overview", s.handleUIOverview)
 		router.Get("/verifier-engine-room/workers", s.handleUIWorkers)
@@ -84,6 +90,8 @@ func (s *Server) Router() http.Handler {
 		router.Post("/verifier-engine-room/workers/{workerID}/quarantine", s.requireSameOriginUI(s.handleUIQuarantine(true)))
 		router.Post("/verifier-engine-room/workers/{workerID}/unquarantine", s.requireSameOriginUI(s.handleUIQuarantine(false)))
 		router.Post("/verifier-engine-room/pools/{pool}/scale", s.requireSameOriginUI(s.handleUIScalePool))
+		router.Post("/verifier-engine-room/providers/{provider}/mode", s.requireSameOriginUI(s.handleUIProviderMode))
+		router.Post("/verifier-engine-room/providers/policies/reload", s.requireSameOriginUI(s.handleUIProviderPoliciesReload))
 
 		router.Handle("/assets/*", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
 	})

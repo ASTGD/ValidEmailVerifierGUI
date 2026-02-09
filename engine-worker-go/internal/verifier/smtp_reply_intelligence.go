@@ -85,8 +85,18 @@ func readSMTPReply(conn net.Conn, timeout time.Duration) (smtpReply, *Result) {
 	return reply, nil
 }
 
-func classifySMTPSessionReply(command string, reply smtpReply, providerHint, host string) (Result, bool) {
+func classifySMTPSessionReply(
+	command string,
+	reply smtpReply,
+	providerHint, host string,
+	engine *ProviderReplyPolicyEngine,
+	adaptiveRetryEnabled bool,
+) (Result, bool) {
 	profile := detectSMTPProviderProfile(providerHint, host, reply.Message)
+
+	if result, ok := classifySMTPWithPolicyEngine(command, reply, profile, engine, adaptiveRetryEnabled); ok {
+		return result, true
+	}
 
 	switch {
 	case reply.Code >= 200 && reply.Code < 300:
@@ -99,7 +109,13 @@ func classifySMTPSessionReply(command string, reply smtpReply, providerHint, hos
 			DecisionRetryable,
 			reply,
 			profile,
-			retryDelaySeconds(reply),
+			resolveAdaptiveRetryDelay(
+				reply,
+				DecisionRetryable,
+				profile,
+				lookupProviderReplyProfile(engine, profile),
+				adaptiveRetryEnabled,
+			),
 		), true
 	case reply.Code >= 500:
 		if isPolicyBlockedReply(reply) {
@@ -122,7 +138,13 @@ func classifySMTPSessionReply(command string, reply smtpReply, providerHint, hos
 				DecisionRetryable,
 				reply,
 				profile,
-				retryDelaySeconds(reply),
+				resolveAdaptiveRetryDelay(
+					reply,
+					DecisionRetryable,
+					profile,
+					lookupProviderReplyProfile(engine, profile),
+					adaptiveRetryEnabled,
+				),
 			), true
 		}
 
@@ -143,13 +165,40 @@ func classifySMTPSessionReply(command string, reply smtpReply, providerHint, hos
 			DecisionUnknown,
 			reply,
 			profile,
-			retryDelaySeconds(reply),
+			resolveAdaptiveRetryDelay(
+				reply,
+				DecisionUnknown,
+				profile,
+				lookupProviderReplyProfile(engine, profile),
+				adaptiveRetryEnabled,
+			),
 		), true
 	}
 }
 
-func classifySMTPRcptReply(reply smtpReply, providerHint, host string, allowValid bool) Result {
+func classifySMTPRcptReply(
+	reply smtpReply,
+	providerHint, host string,
+	allowValid bool,
+	engine *ProviderReplyPolicyEngine,
+	adaptiveRetryEnabled bool,
+) Result {
 	profile := detectSMTPProviderProfile(providerHint, host, reply.Message)
+
+	if result, ok := classifySMTPWithPolicyEngine("rcpt_to", reply, profile, engine, adaptiveRetryEnabled); ok {
+		if result.Category == CategoryValid && !allowValid {
+			return smtpResult(
+				CategoryRisky,
+				"catch_all",
+				"catch_all",
+				DecisionUnknown,
+				reply,
+				profile,
+				0,
+			)
+		}
+		return result
+	}
 
 	switch {
 	case reply.Code >= 200 && reply.Code < 300:
@@ -181,7 +230,13 @@ func classifySMTPRcptReply(reply smtpReply, providerHint, host string, allowVali
 			DecisionRetryable,
 			reply,
 			profile,
-			retryDelaySeconds(reply),
+			resolveAdaptiveRetryDelay(
+				reply,
+				DecisionRetryable,
+				profile,
+				lookupProviderReplyProfile(engine, profile),
+				adaptiveRetryEnabled,
+			),
 		)
 	case reply.Code >= 500:
 		if isPolicyBlockedReply(reply) {
@@ -225,9 +280,78 @@ func classifySMTPRcptReply(reply smtpReply, providerHint, host string, allowVali
 			DecisionUnknown,
 			reply,
 			profile,
-			retryDelaySeconds(reply),
+			resolveAdaptiveRetryDelay(
+				reply,
+				DecisionUnknown,
+				profile,
+				lookupProviderReplyProfile(engine, profile),
+				adaptiveRetryEnabled,
+			),
 		)
 	}
+}
+
+func classifySMTPWithPolicyEngine(
+	command string,
+	reply smtpReply,
+	profile string,
+	engine *ProviderReplyPolicyEngine,
+	adaptiveRetryEnabled bool,
+) (Result, bool) {
+	if engine == nil || !engine.Enabled {
+		return Result{}, false
+	}
+
+	replyProfile := lookupProviderReplyProfile(engine, profile)
+	rule, ok := matchProviderReplyRule(replyProfile, reply)
+	if !ok {
+		return Result{}, false
+	}
+
+	category := strings.TrimSpace(rule.Category)
+	reason := strings.TrimSpace(rule.Reason)
+	reasonCode := strings.TrimSpace(rule.ReasonCode)
+	decisionClass := strings.TrimSpace(rule.DecisionClass)
+
+	if category == "" {
+		category = CategoryRisky
+	}
+	if reason == "" {
+		reason = "smtp_tempfail"
+	}
+	if reasonCode == "" {
+		reasonCode = "smtp_unknown"
+	}
+	if decisionClass == "" {
+		decisionClass = DecisionUnknown
+	}
+
+	if command == "mail_from" && decisionClass == DecisionUndeliverable {
+		category = CategoryRisky
+		reason = "smtp_tempfail"
+		reasonCode = "smtp_mailfrom_rejected"
+		decisionClass = DecisionRetryable
+	}
+
+	if command != "rcpt_to" && category == CategoryValid {
+		// Session-level commands should not force a valid terminal state.
+		return Result{}, false
+	}
+
+	retryAfter := rule.RetryAfterSecond
+	if retryAfter <= 0 && (decisionClass == DecisionRetryable || decisionClass == DecisionUnknown || decisionClass == DecisionPolicyBlocked) {
+		retryAfter = resolveAdaptiveRetryDelay(reply, decisionClass, profile, replyProfile, adaptiveRetryEnabled)
+	}
+
+	return smtpResult(
+		category,
+		reason,
+		reasonCode,
+		decisionClass,
+		reply,
+		profile,
+		retryAfter,
+	), true
 }
 
 func smtpResult(category, reason, reasonCode, decisionClass string, reply smtpReply, profile string, retryAfter int) Result {
@@ -240,6 +364,13 @@ func smtpResult(category, reason, reasonCode, decisionClass string, reply smtpRe
 		EnhancedCode:     reply.EnhancedCode,
 		ProviderProfile:  profile,
 		RetryAfterSecond: retryAfter,
+		Evidence: &ReplyEvidence{
+			ReasonCode:      reasonCode,
+			SMTPCode:        reply.Code,
+			EnhancedCode:    reply.EnhancedCode,
+			ProviderProfile: profile,
+			DecisionClass:   decisionClass,
+		},
 	}
 }
 

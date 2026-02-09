@@ -87,6 +87,27 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("# TYPE go_control_plane_probe_reject_rate_avg gauge\n")
 	fmt.Fprintf(&b, "go_control_plane_probe_reject_rate_avg %s\n", formatPromFloat(stats.ProbeRejectRate))
 
+	b.WriteString("# HELP go_control_plane_provider_tempfail_rate Provider tempfail rate.\n")
+	b.WriteString("# TYPE go_control_plane_provider_tempfail_rate gauge\n")
+	b.WriteString("# HELP go_control_plane_provider_reject_rate Provider reject rate.\n")
+	b.WriteString("# TYPE go_control_plane_provider_reject_rate gauge\n")
+	b.WriteString("# HELP go_control_plane_provider_unknown_rate Provider unknown rate.\n")
+	b.WriteString("# TYPE go_control_plane_provider_unknown_rate gauge\n")
+	b.WriteString("# HELP go_control_plane_provider_avg_retry_after_seconds Provider average retry-after seconds.\n")
+	b.WriteString("# TYPE go_control_plane_provider_avg_retry_after_seconds gauge\n")
+	b.WriteString("# HELP go_control_plane_provider_workers Provider worker count reporting telemetry.\n")
+	b.WriteString("# TYPE go_control_plane_provider_workers gauge\n")
+	for _, provider := range stats.ProviderHealth {
+		providerLabel := promLabelValue(provider.Provider)
+		modeLabel := promLabelValue(provider.Mode)
+		statusLabel := promLabelValue(provider.Status)
+		fmt.Fprintf(&b, "go_control_plane_provider_tempfail_rate{provider=\"%s\",mode=\"%s\",status=\"%s\"} %s\n", providerLabel, modeLabel, statusLabel, formatPromFloat(provider.TempfailRate))
+		fmt.Fprintf(&b, "go_control_plane_provider_reject_rate{provider=\"%s\",mode=\"%s\",status=\"%s\"} %s\n", providerLabel, modeLabel, statusLabel, formatPromFloat(provider.RejectRate))
+		fmt.Fprintf(&b, "go_control_plane_provider_unknown_rate{provider=\"%s\",mode=\"%s\",status=\"%s\"} %s\n", providerLabel, modeLabel, statusLabel, formatPromFloat(provider.UnknownRate))
+		fmt.Fprintf(&b, "go_control_plane_provider_avg_retry_after_seconds{provider=\"%s\",mode=\"%s\",status=\"%s\"} %s\n", providerLabel, modeLabel, statusLabel, formatPromFloat(provider.AvgRetryAfter))
+		fmt.Fprintf(&b, "go_control_plane_provider_workers{provider=\"%s\",mode=\"%s\",status=\"%s\"} %d\n", providerLabel, modeLabel, statusLabel, provider.Workers)
+	}
+
 	_, _ = w.Write([]byte(b.String()))
 }
 

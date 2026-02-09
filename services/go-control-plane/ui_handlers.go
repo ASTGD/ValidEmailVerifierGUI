@@ -24,6 +24,7 @@ type OverviewData struct {
 	ProbeUnknownRate  float64
 	ProbeTempfailRate float64
 	ProbeRejectRate   float64
+	ProviderHealth    []ProviderHealthSummary
 	Pools             []PoolSummary
 	ChartLabels       []string
 	ChartOnline       []int
@@ -57,25 +58,28 @@ type AlertsPageData struct {
 
 type SettingsPageData struct {
 	BasePageData
-	Saved    bool
-	Settings RuntimeSettings
+	Saved            bool
+	Settings         RuntimeSettings
+	ProviderHealth   []ProviderHealthSummary
+	ProviderPolicies ProviderPoliciesData
 }
 
 type LivePayload struct {
-	Timestamp          string        `json:"timestamp"`
-	WorkerCount        int           `json:"worker_count"`
-	PoolCount          int           `json:"pool_count"`
-	DesiredTotal       int           `json:"desired_total"`
-	ErrorRateTotal     float64       `json:"error_rate_total"`
-	ErrorRateAverage   float64       `json:"error_rate_average"`
-	Pools              []PoolSummary `json:"pools"`
-	IncidentCount      int           `json:"incident_count"`
-	ProbeUnknownRate   float64       `json:"probe_unknown_rate"`
-	ProbeTempfailRate  float64       `json:"probe_tempfail_rate"`
-	ProbeRejectRate    float64       `json:"probe_reject_rate"`
-	AlertsEnabled      bool          `json:"alerts_enabled"`
-	AutoActionsEnabled bool          `json:"auto_actions_enabled"`
-	AutoscaleEnabled   bool          `json:"autoscale_enabled"`
+	Timestamp          string                  `json:"timestamp"`
+	WorkerCount        int                     `json:"worker_count"`
+	PoolCount          int                     `json:"pool_count"`
+	DesiredTotal       int                     `json:"desired_total"`
+	ErrorRateTotal     float64                 `json:"error_rate_total"`
+	ErrorRateAverage   float64                 `json:"error_rate_average"`
+	Pools              []PoolSummary           `json:"pools"`
+	IncidentCount      int                     `json:"incident_count"`
+	ProbeUnknownRate   float64                 `json:"probe_unknown_rate"`
+	ProbeTempfailRate  float64                 `json:"probe_tempfail_rate"`
+	ProbeRejectRate    float64                 `json:"probe_reject_rate"`
+	ProviderHealth     []ProviderHealthSummary `json:"provider_health,omitempty"`
+	AlertsEnabled      bool                    `json:"alerts_enabled"`
+	AutoActionsEnabled bool                    `json:"auto_actions_enabled"`
+	AutoscaleEnabled   bool                    `json:"autoscale_enabled"`
 }
 
 func (s *Server) handleUIRedirect(w http.ResponseWriter, r *http.Request) {
@@ -122,6 +126,7 @@ func (s *Server) handleUIOverview(w http.ResponseWriter, r *http.Request) {
 		ProbeUnknownRate:  stats.ProbeUnknownRate,
 		ProbeTempfailRate: stats.ProbeTempfailRate,
 		ProbeRejectRate:   stats.ProbeRejectRate,
+		ProviderHealth:    stats.ProviderHealth,
 		Pools:             stats.Pools,
 		ChartLabels:       labels,
 		ChartOnline:       online,
@@ -241,6 +246,19 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 		settings = defaults
 	}
 
+	stats, statsErr := s.collectControlPlaneStats(r.Context())
+	providerHealth := make([]ProviderHealthSummary, 0)
+	providerPolicies := ProviderPoliciesData{
+		PolicyEngineEnabled:  s.cfg.ProviderPolicyEngineEnabled,
+		AdaptiveRetryEnabled: s.cfg.AdaptiveRetryEnabled,
+		AutoProtectEnabled:   s.cfg.ProviderAutoprotectEnabled,
+		Modes:                []ProviderModeState{},
+	}
+	if statsErr == nil {
+		providerHealth = stats.ProviderHealth
+		providerPolicies = stats.ProviderPolicies
+	}
+
 	data := SettingsPageData{
 		BasePageData: BasePageData{
 			Title:           "Verifier Engine Room · Settings",
@@ -250,8 +268,10 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 			BasePath:        "/verifier-engine-room",
 			LiveStreamPath:  "/verifier-engine-room/events",
 		},
-		Saved:    r.URL.Query().Get("saved") == "1",
-		Settings: settings,
+		Saved:            r.URL.Query().Get("saved") == "1",
+		Settings:         settings,
+		ProviderHealth:   providerHealth,
+		ProviderPolicies: providerPolicies,
 	}
 
 	s.views.Render(w, data)
@@ -326,6 +346,31 @@ func (s *Server) handleUIUpdateSettings(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, "/verifier-engine-room/settings?saved=1", http.StatusSeeOther)
 }
 
+func (s *Server) handleUIProviderMode(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid form")
+		return
+	}
+
+	provider := chi.URLParam(r, "provider")
+	mode := strings.TrimSpace(r.FormValue("mode"))
+	if _, err := s.store.SetProviderMode(r.Context(), provider, mode, "manual"); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	http.Redirect(w, r, "/verifier-engine-room/settings?saved=1", http.StatusSeeOther)
+}
+
+func (s *Server) handleUIProviderPoliciesReload(w http.ResponseWriter, r *http.Request) {
+	if _, err := s.store.MarkProviderPoliciesReloaded(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	http.Redirect(w, r, "/verifier-engine-room/settings?saved=1", http.StatusSeeOther)
+}
+
 func (s *Server) handleUIEvents(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -380,6 +425,7 @@ func (s *Server) pushLiveEvent(w http.ResponseWriter, r *http.Request) {
 		ProbeUnknownRate:   stats.ProbeUnknownRate,
 		ProbeTempfailRate:  stats.ProbeTempfailRate,
 		ProbeRejectRate:    stats.ProbeRejectRate,
+		ProviderHealth:     stats.ProviderHealth,
 		AlertsEnabled:      stats.Settings.AlertsEnabled,
 		AutoActionsEnabled: stats.Settings.AutoActionsEnabled,
 		AutoscaleEnabled:   stats.Settings.AutoscaleEnabled,

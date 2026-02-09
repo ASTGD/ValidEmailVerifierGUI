@@ -28,6 +28,10 @@ Lightweight Go service that tracks worker heartbeats, desired state, and pool sc
 - `GET /api/health/ready`
 - `GET /api/incidents`
 - `GET /api/slo`
+- `GET /api/providers/health`
+- `GET /api/providers/policies`
+- `POST /api/providers/{provider}/mode`
+- `POST /api/providers/policies/reload`
 - `GET /metrics` (Prometheus format; auth required)
 
 All endpoints require `Authorization: Bearer <CONTROL_PLANE_TOKEN>`.
@@ -38,6 +42,7 @@ All endpoints require `Authorization: Bearer <CONTROL_PLANE_TOKEN>`.
 - Live updates stream from `/verifier-engine-room/events` (SSE)
 - Alerts page: `/verifier-engine-room/alerts`
 - Runtime settings page: `/verifier-engine-room/settings`
+- Provider controls are available under Settings (mode override + policy reload).
 
 ## Snapshots (Phase 3)
 Set `MYSQL_DSN` to enable MySQL snapshots. Example:
@@ -75,6 +80,15 @@ AUTOSCALE_MIN_DESIRED=1
 AUTOSCALE_MAX_DESIRED=4
 AUTOSCALE_CANARY_PERCENT=100
 QUARANTINE_ERROR_RATE_THRESHOLD=15
+PROVIDER_POLICY_ENGINE_ENABLED=false
+ADAPTIVE_RETRY_ENABLED=false
+PROVIDER_AUTOPROTECT_ENABLED=false
+PROVIDER_TEMPFAIL_WARN_RATE=0.30
+PROVIDER_TEMPFAIL_CRITICAL_RATE=0.55
+PROVIDER_REJECT_WARN_RATE=0.20
+PROVIDER_REJECT_CRITICAL_RATE=0.40
+PROVIDER_UNKNOWN_WARN_RATE=0.20
+PROVIDER_UNKNOWN_CRITICAL_RATE=0.35
 ```
 - Leader lock protects alert/snapshot/autoscale loops in multi-instance deployments.
 - Incident lifecycle is tracked in Redis (`active` and `resolved`) and exposed in `/api/incidents`.
@@ -103,9 +117,12 @@ SMTP_TO=ceo@domain.com,ops@domain.com
 - `worker:{id}:metrics`
 - `worker:{id}:stage_metrics`
 - `worker:{id}:smtp_metrics`
+- `worker:{id}:provider_metrics`
 - `worker:{id}:quarantined`
 - `workers:active`
 - `pools:known`
 - `pool:{pool}:desired_count`
 - `control_plane:incident:*`
 - `control_plane:leader:*`
+- `control_plane:provider_modes`
+- `control_plane:provider_policy_state`

@@ -164,6 +164,67 @@ func (s *Server) handleSLO(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleProvidersHealth(w http.ResponseWriter, r *http.Request) {
+	stats, err := s.collectControlPlaneStats(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, ProviderHealthResponse{Data: stats.ProviderHealth})
+}
+
+func (s *Server) handleProviderMode(w http.ResponseWriter, r *http.Request) {
+	provider := chi.URLParam(r, "provider")
+	if provider == "" {
+		writeError(w, http.StatusBadRequest, "provider is required")
+		return
+	}
+
+	var payload struct {
+		Mode string `json:"mode"`
+	}
+	if err := decodeJSON(r, &payload); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	modeState, err := s.store.SetProviderMode(r.Context(), provider, payload.Mode, "manual")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": modeState,
+	})
+}
+
+func (s *Server) handleProviderPolicies(w http.ResponseWriter, r *http.Request) {
+	stats, err := s.collectControlPlaneStats(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, ProviderPoliciesResponse{Data: stats.ProviderPolicies})
+}
+
+func (s *Server) handleProviderPoliciesReload(w http.ResponseWriter, r *http.Request) {
+	state, err := s.store.MarkProviderPoliciesReloaded(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": map[string]interface{}{
+			"last_reload_at": state.LastReloadAt,
+			"reload_count":   state.ReloadCount,
+		},
+	})
+}
+
 func (s *Server) handleQuarantineWorker(enabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		workerID := chi.URLParam(r, "workerID")
