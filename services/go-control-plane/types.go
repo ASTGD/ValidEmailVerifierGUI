@@ -1,25 +1,46 @@
 package main
 
 type WorkerMetrics struct {
-	EmailsPerSec  float64 `json:"emails_per_sec,omitempty"`
-	ErrorsPerMin  float64 `json:"errors_per_min,omitempty"`
-	CacheHitRate  float64 `json:"cache_hit_rate,omitempty"`
-	AvgLatencyMS  float64 `json:"avg_latency_ms,omitempty"`
-	BounceRate    float64 `json:"bounce_rate,omitempty"`
-	UnknownRate   float64 `json:"unknown_rate,omitempty"`
+	EmailsPerSec float64 `json:"emails_per_sec,omitempty"`
+	ErrorsPerMin float64 `json:"errors_per_min,omitempty"`
+	CacheHitRate float64 `json:"cache_hit_rate,omitempty"`
+	AvgLatencyMS float64 `json:"avg_latency_ms,omitempty"`
+	BounceRate   float64 `json:"bounce_rate,omitempty"`
+	UnknownRate  float64 `json:"unknown_rate,omitempty"`
+}
+
+type StageMetric struct {
+	Processed int64 `json:"processed,omitempty"`
+	Errors    int64 `json:"errors,omitempty"`
+}
+
+type StageMetrics struct {
+	Screening *StageMetric `json:"screening,omitempty"`
+	SMTPProbe *StageMetric `json:"smtp_probe,omitempty"`
+}
+
+type SMTPMetrics struct {
+	TempfailRate float64 `json:"tempfail_rate,omitempty"`
+	RejectRate   float64 `json:"reject_rate,omitempty"`
+	CatchAllRate float64 `json:"catch_all_rate,omitempty"`
+	UnknownRate  float64 `json:"unknown_rate,omitempty"`
 }
 
 type HeartbeatRequest struct {
-	WorkerID       string        `json:"worker_id"`
-	Host           string        `json:"host,omitempty"`
-	IPAddress      string        `json:"ip_address,omitempty"`
-	Version        string        `json:"version,omitempty"`
-	Pool           string        `json:"pool,omitempty"`
-	Tags           []string      `json:"tags,omitempty"`
-	Status         string        `json:"status"`
-	CurrentJobID   string        `json:"current_job_id,omitempty"`
-	CurrentChunkID string        `json:"current_chunk_id,omitempty"`
+	WorkerID       string         `json:"worker_id"`
+	Host           string         `json:"host,omitempty"`
+	IPAddress      string         `json:"ip_address,omitempty"`
+	Version        string         `json:"version,omitempty"`
+	Pool           string         `json:"pool,omitempty"`
+	Tags           []string       `json:"tags,omitempty"`
+	Status         string         `json:"status"`
+	CurrentJobID   string         `json:"current_job_id,omitempty"`
+	CurrentChunkID string         `json:"current_chunk_id,omitempty"`
+	CorrelationID  string         `json:"correlation_id,omitempty"`
 	Metrics        *WorkerMetrics `json:"metrics,omitempty"`
+	StageMetrics   *StageMetrics  `json:"stage_metrics,omitempty"`
+	SMTPMetrics    *SMTPMetrics   `json:"smtp_metrics,omitempty"`
+	PoolHealthHint *float64       `json:"pool_health_hint,omitempty"`
 }
 
 type HeartbeatResponse struct {
@@ -28,16 +49,21 @@ type HeartbeatResponse struct {
 }
 
 type WorkerSummary struct {
-	WorkerID       string `json:"worker_id"`
-	Host           string `json:"host,omitempty"`
-	IPAddress      string `json:"ip_address,omitempty"`
-	Version        string `json:"version,omitempty"`
-	Pool           string `json:"pool,omitempty"`
-	Status         string `json:"status"`
-	DesiredState   string `json:"desired_state"`
-	LastHeartbeat  string `json:"last_heartbeat_at"`
-	CurrentJobID   string `json:"current_job_id,omitempty"`
-	CurrentChunkID string `json:"current_chunk_id,omitempty"`
+	WorkerID       string        `json:"worker_id"`
+	Host           string        `json:"host,omitempty"`
+	IPAddress      string        `json:"ip_address,omitempty"`
+	Version        string        `json:"version,omitempty"`
+	Pool           string        `json:"pool,omitempty"`
+	Status         string        `json:"status"`
+	DesiredState   string        `json:"desired_state"`
+	Quarantined    bool          `json:"quarantined"`
+	LastHeartbeat  string        `json:"last_heartbeat_at"`
+	CurrentJobID   string        `json:"current_job_id,omitempty"`
+	CurrentChunkID string        `json:"current_chunk_id,omitempty"`
+	CorrelationID  string        `json:"correlation_id,omitempty"`
+	StageMetrics   *StageMetrics `json:"stage_metrics,omitempty"`
+	SMTPMetrics    *SMTPMetrics  `json:"smtp_metrics,omitempty"`
+	PoolHealthHint float64       `json:"pool_health_hint,omitempty"`
 }
 
 type WorkersResponse struct {
@@ -45,9 +71,10 @@ type WorkersResponse struct {
 }
 
 type PoolSummary struct {
-	Pool    string `json:"pool"`
-	Online  int    `json:"online"`
-	Desired int    `json:"desired"`
+	Pool        string  `json:"pool"`
+	Online      int     `json:"online"`
+	Desired     int     `json:"desired"`
+	HealthScore float64 `json:"health_score,omitempty"`
 }
 
 type PoolsResponse struct {
@@ -72,4 +99,21 @@ type workerMeta struct {
 	Tags           []string `json:"tags,omitempty"`
 	CurrentJobID   string   `json:"current_job_id,omitempty"`
 	CurrentChunkID string   `json:"current_chunk_id,omitempty"`
+	CorrelationID  string   `json:"correlation_id,omitempty"`
+}
+
+type IncidentRecord struct {
+	Key        string                 `json:"key"`
+	Type       string                 `json:"type"`
+	Severity   string                 `json:"severity"`
+	Status     string                 `json:"status"`
+	Message    string                 `json:"message"`
+	Context    map[string]interface{} `json:"context,omitempty"`
+	OpenedAt   string                 `json:"opened_at"`
+	UpdatedAt  string                 `json:"updated_at"`
+	ResolvedAt string                 `json:"resolved_at,omitempty"`
+}
+
+type IncidentsResponse struct {
+	Data []IncidentRecord `json:"data"`
 }

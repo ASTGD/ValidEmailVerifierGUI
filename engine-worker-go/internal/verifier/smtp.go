@@ -1,7 +1,6 @@
 package verifier
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"errors"
@@ -21,12 +20,13 @@ type SMTPDialer interface {
 }
 
 type NetSMTPChecker struct {
-	Dialer         SMTPDialer
-	ConnectTimeout time.Duration
-	ReadTimeout    time.Duration
-	EhloTimeout    time.Duration
-	HeloName       string
-	RateLimiter    *RateLimiter
+	Dialer          SMTPDialer
+	ConnectTimeout  time.Duration
+	ReadTimeout     time.Duration
+	EhloTimeout     time.Duration
+	HeloName        string
+	ProviderProfile string
+	RateLimiter     *RateLimiter
 }
 
 func (c NetSMTPChecker) Check(ctx context.Context, host, email string) Result {
@@ -56,12 +56,10 @@ func (c NetSMTPChecker) Check(ctx context.Context, host, email string) Result {
 	}
 	defer conn.Close()
 
-	if code, res := readSMTPResponse(conn, c.ReadTimeout); res != nil {
+	if reply, res := readSMTPReply(conn, c.ReadTimeout); res != nil {
 		return *res
-	} else if code >= 500 {
-		return Result{Category: CategoryInvalid, Reason: "smtp_unavailable"}
-	} else if code >= 400 {
-		return Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
+	} else if result, stop := classifySMTPSessionReply("banner", reply, c.ProviderProfile, host); stop {
+		return result
 	}
 
 	if err := writeSMTP(conn, fmt.Sprintf("EHLO %s", c.HeloName), c.EhloTimeout); err != nil {
@@ -71,17 +69,21 @@ func (c NetSMTPChecker) Check(ctx context.Context, host, email string) Result {
 		return Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
 	}
 
-	if code, res := readSMTPResponse(conn, c.EhloTimeout); res != nil {
+	if reply, res := readSMTPReply(conn, c.EhloTimeout); res != nil {
 		return *res
-	} else if code >= 500 {
-		return Result{Category: CategoryInvalid, Reason: "smtp_unavailable"}
-	} else if code >= 400 {
-		return Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
+	} else if result, stop := classifySMTPSessionReply("ehlo", reply, c.ProviderProfile, host); stop {
+		return result
 	}
 
 	_ = writeSMTP(conn, "QUIT", c.ReadTimeout)
 
-	return Result{Category: CategoryValid, Reason: "smtp_connect_ok"}
+	return Result{
+		Category:        CategoryValid,
+		Reason:          "smtp_connect_ok",
+		ReasonCode:      "smtp_connect_ok",
+		DecisionClass:   DecisionDeliverable,
+		ProviderProfile: detectSMTPProviderProfile(c.ProviderProfile, host, ""),
+	}
 }
 
 type NetSMTPProber struct {
@@ -90,6 +92,7 @@ type NetSMTPProber struct {
 	ReadTimeout              time.Duration
 	EhloTimeout              time.Duration
 	HeloName                 string
+	ProviderProfile          string
 	MailFromAddress          string
 	RateLimiter              *RateLimiter
 	CatchAllDetectionEnabled bool
@@ -129,15 +132,13 @@ func (p NetSMTPProber) Check(ctx context.Context, host, email string) Result {
 	}
 	defer conn.Close()
 
-	if code, res := readSMTPResponse(conn, p.ReadTimeout); res != nil {
+	if reply, res := readSMTPReply(conn, p.ReadTimeout); res != nil {
 		return *res
-	} else if code >= 500 {
-		return Result{Category: CategoryInvalid, Reason: "smtp_unavailable"}
-	} else if code >= 400 {
-		return Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
+	} else if result, stop := classifySMTPSessionReply("banner", reply, p.ProviderProfile, host); stop {
+		return result
 	}
 
-	if result := p.sayHello(conn); result.Category != "" {
+	if result := p.sayHello(conn, host); result.Category != "" {
 		return result
 	}
 
@@ -148,22 +149,20 @@ func (p NetSMTPProber) Check(ctx context.Context, host, email string) Result {
 		return Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
 	}
 
-	if code, res := readSMTPResponse(conn, p.ReadTimeout); res != nil {
+	if reply, res := readSMTPReply(conn, p.ReadTimeout); res != nil {
 		return *res
-	} else if code >= 500 {
-		return Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
-	} else if code >= 400 {
-		return Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
+	} else if result, stop := classifySMTPSessionReply("mail_from", reply, p.ProviderProfile, host); stop {
+		return result
 	}
 
-	rcptResult := p.checkRcpt(conn, email, true)
+	rcptResult := p.checkRcpt(conn, host, email, true)
 	if rcptResult.Category != CategoryValid {
 		_ = writeSMTP(conn, "QUIT", p.ReadTimeout)
 		return rcptResult
 	}
 
 	if p.CatchAllDetectionEnabled {
-		catchAllResult := p.checkCatchAll(conn, email)
+		catchAllResult := p.checkCatchAll(conn, host, email)
 		_ = writeSMTP(conn, "QUIT", p.ReadTimeout)
 		return catchAllResult
 	}
@@ -180,7 +179,7 @@ func (p NetSMTPProber) waitRate(ctx context.Context) error {
 	return p.RateLimiter.Wait(ctx)
 }
 
-func (p NetSMTPProber) sayHello(conn net.Conn) Result {
+func (p NetSMTPProber) sayHello(conn net.Conn, host string) Result {
 	if err := writeSMTP(conn, fmt.Sprintf("EHLO %s", p.HeloName), p.EhloTimeout); err != nil {
 		if isTimeout(err) {
 			return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
@@ -188,30 +187,28 @@ func (p NetSMTPProber) sayHello(conn net.Conn) Result {
 		return Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
 	}
 
-	if code, res := readSMTPResponse(conn, p.EhloTimeout); res != nil {
+	if reply, res := readSMTPReply(conn, p.EhloTimeout); res != nil {
 		return *res
-	} else if code >= 500 {
+	} else if reply.Code >= 500 {
 		if err := writeSMTP(conn, fmt.Sprintf("HELO %s", p.HeloName), p.EhloTimeout); err != nil {
 			if isTimeout(err) {
 				return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
 			}
 			return Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
 		}
-		if code, res := readSMTPResponse(conn, p.EhloTimeout); res != nil {
+		if heloReply, res := readSMTPReply(conn, p.EhloTimeout); res != nil {
 			return *res
-		} else if code >= 500 {
-			return Result{Category: CategoryInvalid, Reason: "smtp_unavailable"}
-		} else if code >= 400 {
-			return Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
+		} else if result, stop := classifySMTPSessionReply("helo", heloReply, p.ProviderProfile, host); stop {
+			return result
 		}
-	} else if code >= 400 {
-		return Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
+	} else if result, stop := classifySMTPSessionReply("ehlo", reply, p.ProviderProfile, host); stop {
+		return result
 	}
 
 	return Result{}
 }
 
-func (p NetSMTPProber) checkRcpt(conn net.Conn, email string, allowValid bool) Result {
+func (p NetSMTPProber) checkRcpt(conn net.Conn, host, email string, allowValid bool) Result {
 	if err := writeSMTP(conn, fmt.Sprintf("RCPT TO:<%s>", email), p.ReadTimeout); err != nil {
 		if isTimeout(err) {
 			return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
@@ -219,27 +216,15 @@ func (p NetSMTPProber) checkRcpt(conn net.Conn, email string, allowValid bool) R
 		return Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
 	}
 
-	code, res := readSMTPResponse(conn, p.ReadTimeout)
+	reply, res := readSMTPReply(conn, p.ReadTimeout)
 	if res != nil {
 		return *res
 	}
 
-	switch {
-	case code >= 500:
-		return Result{Category: CategoryInvalid, Reason: "rcpt_rejected"}
-	case code >= 400:
-		return Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
-	case code >= 200 && code < 300:
-		if allowValid {
-			return Result{Category: CategoryValid, Reason: "rcpt_ok"}
-		}
-		return Result{Category: CategoryRisky, Reason: "catch_all"}
-	default:
-		return Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
-	}
+	return classifySMTPRcptReply(reply, p.ProviderProfile, host, allowValid)
 }
 
-func (p NetSMTPProber) checkCatchAll(conn net.Conn, email string) Result {
+func (p NetSMTPProber) checkCatchAll(conn net.Conn, host, email string) Result {
 	domain := ""
 	if at := strings.LastIndex(email, "@"); at != -1 && at+1 < len(email) {
 		domain = email[at+1:]
@@ -251,7 +236,7 @@ func (p NetSMTPProber) checkCatchAll(conn net.Conn, email string) Result {
 	randomLocal := p.randomLocalPart()
 	randomEmail := fmt.Sprintf("%s@%s", randomLocal, domain)
 
-	result := p.checkRcpt(conn, randomEmail, true)
+	result := p.checkRcpt(conn, host, randomEmail, true)
 	if result.Category == CategoryValid {
 		return Result{Category: CategoryRisky, Reason: "catch_all"}
 	}
@@ -288,39 +273,6 @@ func (c NetSMTPChecker) waitRate(ctx context.Context) error {
 	}
 
 	return c.RateLimiter.Wait(ctx)
-}
-
-func readSMTPResponse(conn net.Conn, timeout time.Duration) (int, *Result) {
-	_ = conn.SetReadDeadline(time.Now().Add(timeout))
-	reader := bufio.NewReader(conn)
-
-	line, err := reader.ReadString('\n')
-	if err != nil {
-		if isTimeout(err) {
-			result := Result{Category: CategoryRisky, Reason: "smtp_timeout"}
-			return 0, &result
-		}
-		result := Result{Category: CategoryRisky, Reason: "smtp_tempfail"}
-		return 0, &result
-	}
-
-	line = strings.TrimSpace(line)
-	code := parseSMTPCode(line)
-
-	if len(line) >= 4 && line[3] == '-' {
-		for {
-			next, err := reader.ReadString('\n')
-			if err != nil {
-				break
-			}
-			next = strings.TrimSpace(next)
-			if len(next) >= 4 && next[3] == ' ' {
-				break
-			}
-		}
-	}
-
-	return code, nil
 }
 
 func writeSMTP(conn net.Conn, command string, timeout time.Duration) error {

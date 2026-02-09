@@ -17,6 +17,7 @@ type AlertEvent struct {
 }
 
 type AlertService struct {
+	instanceID  string
 	store       *Store
 	snapshots   *SnapshotStore
 	cfg         Config
@@ -25,8 +26,9 @@ type AlertService struct {
 	checkTicker *time.Ticker
 }
 
-func NewAlertService(store *Store, snapshots *SnapshotStore, cfg Config, notifier Notifier) *AlertService {
+func NewAlertService(store *Store, snapshots *SnapshotStore, cfg Config, notifier Notifier, instanceID string) *AlertService {
 	return &AlertService{
+		instanceID:  instanceID,
 		store:       store,
 		snapshots:   snapshots,
 		cfg:         cfg,
@@ -63,7 +65,14 @@ func (s *AlertService) runChecks() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	if !s.shouldRun(ctx) {
+		return
+	}
+
 	settings := s.loadRuntimeSettings(ctx)
+
+	s.cleanupStaleWorkers(ctx, settings)
+
 	if !settings.AlertsEnabled && !settings.AutoActionsEnabled {
 		return
 	}
@@ -71,6 +80,56 @@ func (s *AlertService) runChecks() {
 	s.checkOfflineWorkers(ctx, settings)
 	s.checkPoolCapacity(ctx, settings)
 	s.checkWorkerErrorRate(ctx, settings)
+	s.checkStuckDesiredState(ctx, settings)
+}
+
+func (s *AlertService) shouldRun(ctx context.Context) bool {
+	if !s.cfg.LeaderLockEnabled {
+		return true
+	}
+
+	ok, err := s.store.HoldLeaderLease(ctx, "alerts", s.instanceID, s.cfg.LeaderLockTTL)
+	if err != nil {
+		log.Printf("alert: leader lock error: %v", err)
+		return false
+	}
+
+	return ok
+}
+
+func (s *AlertService) cleanupStaleWorkers(ctx context.Context, settings RuntimeSettings) {
+	if s.cfg.StaleWorkerTTL <= 0 {
+		return
+	}
+
+	cutoff := time.Now().UTC().Add(-s.cfg.StaleWorkerTTL)
+	staleWorkers, err := s.store.CleanupStaleKnownWorkers(ctx, cutoff)
+	if err != nil {
+		log.Printf("alert: stale worker cleanup failed: %v", err)
+		return
+	}
+
+	for _, workerID := range staleWorkers {
+		_, _, _ = s.store.ResolveIncident(ctx, incidentStateKey("worker_offline", workerID), "Worker removed during stale cleanup.", map[string]interface{}{
+			"worker_id": workerID,
+		})
+		_, _, _ = s.store.ResolveIncident(ctx, incidentStateKey("worker_error_rate", workerID), "Worker removed during stale cleanup.", map[string]interface{}{
+			"worker_id": workerID,
+		})
+		_, _, _ = s.store.ResolveIncident(ctx, incidentStateKey("worker_stuck_desired", workerID), "Worker removed during stale cleanup.", map[string]interface{}{
+			"worker_id": workerID,
+		})
+
+		if settings.AlertsEnabled {
+			s.dispatchAlert(ctx, AlertEvent{
+				Type:      "worker_stale_removed",
+				Severity:  "warning",
+				Message:   "Worker removed from active state after stale TTL exceeded",
+				Context:   map[string]interface{}{"worker_id": workerID, "cutoff": cutoff.Format(time.RFC3339)},
+				CreatedAt: time.Now().UTC(),
+			})
+		}
+	}
 }
 
 func (s *AlertService) checkOfflineWorkers(ctx context.Context, settings RuntimeSettings) {
@@ -87,33 +146,29 @@ func (s *AlertService) checkOfflineWorkers(ctx context.Context, settings Runtime
 
 	now := time.Now().UTC()
 	for _, workerID := range workerIDs {
-		lastSeen, ok, err := s.store.GetWorkerLastSeen(ctx, workerID)
-		if err != nil {
-			log.Printf("alert: failed to get last seen for %s: %v", workerID, err)
-			continue
-		}
-		if !ok {
-			continue
-		}
-		if now.Sub(lastSeen) <= grace {
+		lastSeen, ok, seenErr := s.store.GetWorkerLastSeen(ctx, workerID)
+		if seenErr != nil {
+			log.Printf("alert: failed to get last seen for %s: %v", workerID, seenErr)
 			continue
 		}
 
-		alertKey := "alert:offline:" + workerID
-		if !s.shouldSend(ctx, alertKey, settings) {
-			continue
+		active := false
+		contextData := map[string]interface{}{"worker_id": workerID}
+		if ok {
+			contextData["last_seen"] = lastSeen.Format(time.RFC3339)
+			active = now.Sub(lastSeen) > grace
 		}
 
-		alert := AlertEvent{
-			Type:      "worker_offline",
-			Severity:  "critical",
-			Message:   "Worker heartbeat missing",
-			Context:   map[string]interface{}{"worker_id": workerID, "last_seen": lastSeen.Format(time.RFC3339)},
-			CreatedAt: now,
-		}
-		if settings.AlertsEnabled {
-			s.dispatchAlert(ctx, alert)
-		}
+		s.syncIncident(
+			ctx,
+			settings,
+			incidentStateKey("worker_offline", workerID),
+			"worker_offline",
+			"critical",
+			"Worker heartbeat missing",
+			active,
+			contextData,
+		)
 	}
 }
 
@@ -125,25 +180,22 @@ func (s *AlertService) checkPoolCapacity(ctx context.Context, settings RuntimeSe
 	}
 
 	for _, pool := range pools {
-		if pool.Desired <= 0 || pool.Online >= pool.Desired {
-			continue
-		}
+		active := pool.Desired > 0 && pool.Online < pool.Desired
 
-		alertKey := "alert:pool_under:" + pool.Pool
-		if !s.shouldSend(ctx, alertKey, settings) {
-			continue
-		}
-
-		alert := AlertEvent{
-			Type:      "pool_under_capacity",
-			Severity:  "warning",
-			Message:   "Pool online workers below desired capacity",
-			Context:   map[string]interface{}{"pool": pool.Pool, "online": pool.Online, "desired": pool.Desired},
-			CreatedAt: time.Now().UTC(),
-		}
-		if settings.AlertsEnabled {
-			s.dispatchAlert(ctx, alert)
-		}
+		s.syncIncident(
+			ctx,
+			settings,
+			incidentStateKey("pool_under_capacity", pool.Pool),
+			"pool_under_capacity",
+			"warning",
+			"Pool online workers below desired capacity",
+			active,
+			map[string]interface{}{
+				"pool":    pool.Pool,
+				"online":  pool.Online,
+				"desired": pool.Desired,
+			},
+		)
 	}
 }
 
@@ -159,54 +211,164 @@ func (s *AlertService) checkWorkerErrorRate(ctx context.Context, settings Runtim
 		return
 	}
 
+	quarantineThreshold := settings.QuarantineErrorRateThreshold
+	if quarantineThreshold <= 0 {
+		quarantineThreshold = threshold * 1.5
+	}
+
 	for _, worker := range workers {
-		metrics, err := s.store.GetWorkerMetrics(ctx, worker.WorkerID)
-		if err != nil || metrics == nil {
-			continue
-		}
-		if metrics.ErrorsPerMin < threshold {
+		metrics, metricsErr := s.store.GetWorkerMetrics(ctx, worker.WorkerID)
+		if metricsErr != nil || metrics == nil {
 			continue
 		}
 
-		alertKey := "alert:error_rate:" + worker.WorkerID
-		if !s.shouldSend(ctx, alertKey, settings) {
-			continue
-		}
+		errorRate := metrics.ErrorsPerMin
+		active := errorRate >= threshold
 
-		alert := AlertEvent{
-			Type:     "worker_error_rate",
-			Severity: "warning",
-			Message:  "Worker error rate above threshold",
-			Context: map[string]interface{}{
+		s.syncIncident(
+			ctx,
+			settings,
+			incidentStateKey("worker_error_rate", worker.WorkerID),
+			"worker_error_rate",
+			"warning",
+			"Worker error rate above threshold",
+			active,
+			map[string]interface{}{
 				"worker_id":      worker.WorkerID,
-				"errors_per_min": metrics.ErrorsPerMin,
+				"errors_per_min": errorRate,
 				"threshold":      threshold,
+				"pool":           worker.Pool,
 			},
-			CreatedAt: time.Now().UTC(),
-		}
-		if settings.AlertsEnabled {
-			s.dispatchAlert(ctx, alert)
+		)
+
+		if !active {
+			continue
 		}
 
 		if settings.AutoActionsEnabled {
 			_ = s.store.SetDesiredState(ctx, worker.WorkerID, "draining")
 		}
+
+		if settings.AutoActionsEnabled && quarantineThreshold > 0 && errorRate >= quarantineThreshold {
+			_ = s.store.SetWorkerQuarantined(ctx, worker.WorkerID, true, "error_rate_threshold")
+		}
 	}
 }
 
-func (s *AlertService) shouldSend(ctx context.Context, key string, settings RuntimeSettings) bool {
-	cooldown := time.Duration(settings.AlertCooldownSecond) * time.Second
-	if cooldown <= 0 {
-		cooldown = 300 * time.Second
+func (s *AlertService) checkStuckDesiredState(ctx context.Context, settings RuntimeSettings) {
+	grace := s.cfg.StuckDesiredGrace
+	if grace <= 0 {
+		grace = 10 * time.Minute
 	}
 
-	allowed, err := s.store.ShouldSendAlert(ctx, key, cooldown)
+	workers, err := s.store.GetWorkers(ctx)
 	if err != nil {
-		log.Printf("alert: suppression check failed: %v", err)
-		return false
+		log.Printf("alert: failed to load workers for desired-state drift: %v", err)
+		return
 	}
 
-	return allowed
+	now := time.Now().UTC()
+	for _, worker := range workers {
+		desired := normalizeDesiredState(worker.DesiredState)
+		if desired == "" {
+			continue
+		}
+
+		status := normalizeDesiredState(worker.Status)
+		stateUpdated, ok, updatedErr := s.store.GetDesiredStateUpdatedAt(ctx, worker.WorkerID)
+		if updatedErr != nil {
+			continue
+		}
+
+		active := false
+		contextData := map[string]interface{}{
+			"worker_id":      worker.WorkerID,
+			"current_status": status,
+			"desired_status": desired,
+			"last_heartbeat": worker.LastHeartbeat,
+		}
+
+		if ok {
+			contextData["desired_state_updated"] = stateUpdated.Format(time.RFC3339)
+		}
+
+		if status != desired && ok {
+			active = now.Sub(stateUpdated) > grace
+		}
+
+		s.syncIncident(
+			ctx,
+			settings,
+			incidentStateKey("worker_stuck_desired", worker.WorkerID),
+			"worker_stuck_desired",
+			"warning",
+			"Worker is not converging to desired state",
+			active,
+			contextData,
+		)
+	}
+}
+
+func incidentStateKey(incidentType, subject string) string {
+	return incidentType + ":" + subject
+}
+
+func (s *AlertService) syncIncident(
+	ctx context.Context,
+	settings RuntimeSettings,
+	incidentKey string,
+	incidentType string,
+	severity string,
+	message string,
+	active bool,
+	contextData map[string]interface{},
+) {
+	if active {
+		_, opened, err := s.store.ActivateIncident(ctx, incidentKey, incidentType, severity, message, contextData)
+		if err != nil {
+			log.Printf("alert: activate incident failed type=%s key=%s err=%v", incidentType, incidentKey, err)
+			return
+		}
+
+		if settings.AlertsEnabled && opened {
+			s.dispatchAlert(ctx, AlertEvent{
+				Type:      incidentType,
+				Severity:  severity,
+				Message:   message,
+				Context:   contextData,
+				CreatedAt: time.Now().UTC(),
+			})
+		}
+
+		return
+	}
+
+	record, resolved, err := s.store.ResolveIncident(ctx, incidentKey, message, contextData)
+	if err != nil {
+		log.Printf("alert: resolve incident failed type=%s key=%s err=%v", incidentType, incidentKey, err)
+		return
+	}
+	if !resolved || !settings.AlertsEnabled {
+		return
+	}
+
+	recoveryContext := map[string]interface{}{}
+	for key, value := range record.Context {
+		recoveryContext[key] = value
+	}
+	for key, value := range contextData {
+		recoveryContext[key] = value
+	}
+	recoveryContext["incident_key"] = incidentKey
+	recoveryContext["resolved_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	s.dispatchAlert(ctx, AlertEvent{
+		Type:      incidentType + "_recovered",
+		Severity:  "info",
+		Message:   "Incident recovered",
+		Context:   recoveryContext,
+		CreatedAt: time.Now().UTC(),
+	})
 }
 
 func (s *AlertService) loadRuntimeSettings(ctx context.Context) RuntimeSettings {

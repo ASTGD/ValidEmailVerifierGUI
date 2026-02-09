@@ -36,6 +36,14 @@ func NewSnapshotStore(db *sql.DB) *SnapshotStore {
 	return &SnapshotStore{db: db}
 }
 
+func (s *SnapshotStore) Ping(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+
+	return s.db.PingContext(ctx)
+}
+
 func (s *SnapshotStore) SaveWorkerSnapshot(ctx context.Context, snapshot WorkerSnapshot) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO go_worker_snapshots (captured_at, total_workers, pool_count, desired_total, created_at)

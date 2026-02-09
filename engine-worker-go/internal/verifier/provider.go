@@ -68,12 +68,34 @@ func (p *ProviderAwareVerifier) verifierFor(key string, policy *ProviderPolicy) 
 	var smtpChecker SMTPChecker
 	if p.smtpFactory != nil {
 		smtpChecker = p.smtpFactory(config)
+		if policy != nil && policy.Name != "" {
+			smtpChecker = withProviderProfile(smtpChecker, policy.Name)
+		}
 	}
 
 	verifier := NewPipelineVerifier(config, p.resolver, smtpChecker)
 	p.cache[key] = verifier
 
 	return verifier
+}
+
+func withProviderProfile(checker SMTPChecker, profile string) SMTPChecker {
+	switch typed := checker.(type) {
+	case NetSMTPProber:
+		typed.ProviderProfile = profile
+		return typed
+	case *NetSMTPProber:
+		typed.ProviderProfile = profile
+		return typed
+	case NetSMTPChecker:
+		typed.ProviderProfile = profile
+		return typed
+	case *NetSMTPChecker:
+		typed.ProviderProfile = profile
+		return typed
+	default:
+		return checker
+	}
 }
 
 func (p *ProviderAwareVerifier) matchPolicy(domain string) (string, *ProviderPolicy) {

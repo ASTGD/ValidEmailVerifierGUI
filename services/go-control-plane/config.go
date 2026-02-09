@@ -10,6 +10,8 @@ import (
 
 type Config struct {
 	Port                    string
+	SSEWriteTimeoutSec      int
+	InstanceID              string
 	RedisAddr               string
 	RedisPassword           string
 	RedisDB                 int
@@ -18,12 +20,23 @@ type Config struct {
 	ControlPlaneToken       string
 	HeartbeatTTL            time.Duration
 	ShutdownTimeoutSec      int
+	LeaderLockEnabled       bool
+	LeaderLockTTL           time.Duration
+	StaleWorkerTTL          time.Duration
+	StuckDesiredGrace       time.Duration
 	AlertsEnabled           bool
 	AlertCheckInterval      time.Duration
 	AlertHeartbeatGrace     time.Duration
 	AlertCooldown           time.Duration
 	AlertErrorRateThreshold float64
 	AutoActionsEnabled      bool
+	AutoScaleEnabled        bool
+	AutoScaleInterval       time.Duration
+	AutoScaleCooldown       time.Duration
+	AutoScaleMinDesired     int
+	AutoScaleMaxDesired     int
+	AutoScaleCanaryPercent  int
+	QuarantineErrorRate     float64
 	SlackWebhookURL         string
 	SMTPHost                string
 	SMTPPort                int
@@ -37,6 +50,7 @@ func LoadConfig() (Config, error) {
 	var cfg Config
 
 	cfg.Port = os.Getenv("PORT")
+	cfg.InstanceID = strings.TrimSpace(os.Getenv("CONTROL_PLANE_INSTANCE_ID"))
 	cfg.RedisAddr = os.Getenv("REDIS_ADDR")
 	cfg.RedisPassword = os.Getenv("REDIS_PASSWORD")
 	cfg.ControlPlaneToken = os.Getenv("CONTROL_PLANE_TOKEN")
@@ -90,6 +104,46 @@ func LoadConfig() (Config, error) {
 	}
 	cfg.HeartbeatTTL = time.Duration(heartbeatTTL) * time.Second
 
+	leaderTTL := 45
+	if value := os.Getenv("LEADER_LOCK_TTL_SECONDS"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return cfg, fmt.Errorf("LEADER_LOCK_TTL_SECONDS must be an integer")
+		}
+		if parsed > 0 {
+			leaderTTL = parsed
+		}
+	}
+	cfg.LeaderLockTTL = time.Duration(leaderTTL) * time.Second
+	cfg.LeaderLockEnabled = true
+	if value := os.Getenv("LEADER_LOCK_ENABLED"); value != "" {
+		cfg.LeaderLockEnabled = parseBool(value)
+	}
+
+	staleTTL := 86400
+	if value := os.Getenv("STALE_WORKER_TTL_SECONDS"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return cfg, fmt.Errorf("STALE_WORKER_TTL_SECONDS must be an integer")
+		}
+		if parsed > 0 {
+			staleTTL = parsed
+		}
+	}
+	cfg.StaleWorkerTTL = time.Duration(staleTTL) * time.Second
+
+	stuckGrace := 600
+	if value := os.Getenv("STUCK_DESIRED_GRACE_SECONDS"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return cfg, fmt.Errorf("STUCK_DESIRED_GRACE_SECONDS must be an integer")
+		}
+		if parsed > 0 {
+			stuckGrace = parsed
+		}
+	}
+	cfg.StuckDesiredGrace = time.Duration(stuckGrace) * time.Second
+
 	alertCheckInterval := 30
 	if value := os.Getenv("ALERT_CHECK_INTERVAL_SECONDS"); value != "" {
 		parsed, err := strconv.Atoi(value)
@@ -137,6 +191,81 @@ func LoadConfig() (Config, error) {
 	cfg.AlertsEnabled = parseBool(os.Getenv("ALERTS_ENABLED"))
 	cfg.AutoActionsEnabled = parseBool(os.Getenv("AUTO_ACTIONS_ENABLED"))
 
+	autoScaleInterval := 30
+	if value := os.Getenv("AUTOSCALE_INTERVAL_SECONDS"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return cfg, fmt.Errorf("AUTOSCALE_INTERVAL_SECONDS must be an integer")
+		}
+		if parsed > 0 {
+			autoScaleInterval = parsed
+		}
+	}
+	cfg.AutoScaleInterval = time.Duration(autoScaleInterval) * time.Second
+	cfg.AutoScaleEnabled = parseBool(os.Getenv("AUTOSCALE_ENABLED"))
+
+	autoScaleCooldown := 120
+	if value := os.Getenv("AUTOSCALE_COOLDOWN_SECONDS"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return cfg, fmt.Errorf("AUTOSCALE_COOLDOWN_SECONDS must be an integer")
+		}
+		if parsed > 0 {
+			autoScaleCooldown = parsed
+		}
+	}
+	cfg.AutoScaleCooldown = time.Duration(autoScaleCooldown) * time.Second
+
+	cfg.AutoScaleMinDesired = 1
+	if value := os.Getenv("AUTOSCALE_MIN_DESIRED"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return cfg, fmt.Errorf("AUTOSCALE_MIN_DESIRED must be an integer")
+		}
+		if parsed >= 0 {
+			cfg.AutoScaleMinDesired = parsed
+		}
+	}
+
+	cfg.AutoScaleMaxDesired = 4
+	if value := os.Getenv("AUTOSCALE_MAX_DESIRED"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return cfg, fmt.Errorf("AUTOSCALE_MAX_DESIRED must be an integer")
+		}
+		if parsed >= cfg.AutoScaleMinDesired {
+			cfg.AutoScaleMaxDesired = parsed
+		}
+	}
+
+	cfg.AutoScaleCanaryPercent = 100
+	if value := os.Getenv("AUTOSCALE_CANARY_PERCENT"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return cfg, fmt.Errorf("AUTOSCALE_CANARY_PERCENT must be an integer")
+		}
+		if parsed < 0 {
+			parsed = 0
+		}
+		if parsed > 100 {
+			parsed = 100
+		}
+		cfg.AutoScaleCanaryPercent = parsed
+	}
+
+	cfg.QuarantineErrorRate = cfg.AlertErrorRateThreshold * 1.5
+	if value := os.Getenv("QUARANTINE_ERROR_RATE_THRESHOLD"); value != "" {
+		parsed, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return cfg, fmt.Errorf("QUARANTINE_ERROR_RATE_THRESHOLD must be a number")
+		}
+		if parsed >= 0 {
+			cfg.QuarantineErrorRate = parsed
+		}
+	}
+
+	cfg.SSEWriteTimeoutSec = 0
+
 	if value := os.Getenv("SMTP_PORT"); value != "" {
 		parsed, err := strconv.Atoi(value)
 		if err != nil {
@@ -154,6 +283,16 @@ func LoadConfig() (Config, error) {
 		shutdownTimeout = parsed
 	}
 	cfg.ShutdownTimeoutSec = shutdownTimeout
+
+	if value := os.Getenv("SSE_WRITE_TIMEOUT_SECONDS"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return cfg, fmt.Errorf("SSE_WRITE_TIMEOUT_SECONDS must be an integer")
+		}
+		if parsed >= 0 {
+			cfg.SSEWriteTimeoutSec = parsed
+		}
+	}
 
 	return cfg, nil
 }

@@ -130,7 +130,7 @@ func (p *PipelineVerifier) lookupMX(ctx context.Context, domain string) ([]*net.
 			return nil, classifyDNSError(err)
 		}
 
-		backoffSleep(ctx, p.config.BackoffBaseMs, attempt)
+		backoffSleep(ctx, p.config.BackoffBaseMs, attempt, 0)
 	}
 
 	if lastErr != nil {
@@ -196,7 +196,7 @@ func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host, emai
 			return result
 		}
 
-		backoffSleep(ctx, p.config.BackoffBaseMs, attempt)
+		backoffSleep(ctx, p.config.BackoffBaseMs, attempt, result.RetryAfterSecond)
 	}
 
 	if last.Category == "" {
@@ -279,6 +279,13 @@ func isRetryableDNSError(err error) bool {
 }
 
 func isRetryableSMTPResult(result Result) bool {
+	switch result.DecisionClass {
+	case DecisionPolicyBlocked, DecisionUndeliverable:
+		return false
+	case DecisionRetryable:
+		return true
+	}
+
 	switch result.Reason {
 	case "smtp_timeout", "smtp_connect_timeout", "smtp_tempfail":
 		return true
@@ -287,12 +294,18 @@ func isRetryableSMTPResult(result Result) bool {
 	}
 }
 
-func backoffSleep(ctx context.Context, baseMs int, attempt int) {
+func backoffSleep(ctx context.Context, baseMs int, attempt int, retryAfterSeconds int) {
 	if baseMs <= 0 {
 		baseMs = 200
 	}
 
 	delay := time.Duration(baseMs*(attempt+1)) * time.Millisecond
+	if retryAfterSeconds > 0 {
+		retryDelay := time.Duration(retryAfterSeconds) * time.Second
+		if retryDelay > delay {
+			delay = retryDelay
+		}
+	}
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
 

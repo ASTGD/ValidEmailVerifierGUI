@@ -44,9 +44,14 @@ func (s *Server) Router() http.Handler {
 		router.Post("/api/workers/{workerID}/resume", s.handleSetDesired("running"))
 		router.Post("/api/workers/{workerID}/drain", s.handleSetDesired("draining"))
 		router.Post("/api/workers/{workerID}/stop", s.handleSetDesired("stopped"))
+		router.Post("/api/workers/{workerID}/quarantine", s.handleQuarantineWorker(true))
+		router.Post("/api/workers/{workerID}/unquarantine", s.handleQuarantineWorker(false))
 
 		router.Get("/api/pools", s.handlePools)
 		router.Post("/api/pools/{pool}/scale", s.handleScalePool)
+		router.Get("/api/health/ready", s.handleReadiness)
+		router.Get("/api/incidents", s.handleIncidents)
+		router.Get("/api/slo", s.handleSLO)
 		router.Get("/metrics", s.handleMetrics)
 
 		router.Get("/ui", s.handleUIRedirect)
@@ -60,6 +65,8 @@ func (s *Server) Router() http.Handler {
 		router.Post("/ui/workers/{workerID}/resume", s.requireSameOriginUI(s.handleUISetDesired("running")))
 		router.Post("/ui/workers/{workerID}/drain", s.requireSameOriginUI(s.handleUISetDesired("draining")))
 		router.Post("/ui/workers/{workerID}/stop", s.requireSameOriginUI(s.handleUISetDesired("stopped")))
+		router.Post("/ui/workers/{workerID}/quarantine", s.requireSameOriginUI(s.handleUIQuarantine(true)))
+		router.Post("/ui/workers/{workerID}/unquarantine", s.requireSameOriginUI(s.handleUIQuarantine(false)))
 		router.Post("/ui/pools/{pool}/scale", s.requireSameOriginUI(s.handleUIScalePool))
 		router.Post("/ui/settings", s.requireSameOriginUI(s.handleUIUpdateSettings))
 
@@ -74,6 +81,8 @@ func (s *Server) Router() http.Handler {
 		router.Post("/verifier-engine-room/workers/{workerID}/resume", s.requireSameOriginUI(s.handleUISetDesired("running")))
 		router.Post("/verifier-engine-room/workers/{workerID}/drain", s.requireSameOriginUI(s.handleUISetDesired("draining")))
 		router.Post("/verifier-engine-room/workers/{workerID}/stop", s.requireSameOriginUI(s.handleUISetDesired("stopped")))
+		router.Post("/verifier-engine-room/workers/{workerID}/quarantine", s.requireSameOriginUI(s.handleUIQuarantine(true)))
+		router.Post("/verifier-engine-room/workers/{workerID}/unquarantine", s.requireSameOriginUI(s.handleUIQuarantine(false)))
 		router.Post("/verifier-engine-room/pools/{pool}/scale", s.requireSameOriginUI(s.handleUIScalePool))
 
 		router.Handle("/assets/*", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
@@ -84,14 +93,17 @@ func (s *Server) Router() http.Handler {
 
 func (s *Server) ListenAndServe() error {
 	addr := ":" + s.cfg.Port
+	writeTimeout := 15 * time.Second
+	if s.cfg.SSEWriteTimeoutSec > 0 {
+		writeTimeout = time.Duration(s.cfg.SSEWriteTimeoutSec) * time.Second
+	}
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           s.Router(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		// Keep write timeout disabled because /verifier-engine-room/events uses long-lived SSE.
-		// TODO: isolate SSE on a dedicated server/router so the main server can restore a finite WriteTimeout.
-		WriteTimeout: 0,
+		// Main server uses finite write timeout; SSE endpoint explicitly clears its own write deadline.
+		WriteTimeout: writeTimeout,
 		IdleTimeout:  30 * time.Second,
 	}
 

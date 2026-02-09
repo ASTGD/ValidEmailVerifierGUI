@@ -6,11 +6,23 @@ const (
 	CategoryValid   = "valid"
 	CategoryInvalid = "invalid"
 	CategoryRisky   = "risky"
+
+	DecisionDeliverable   = "deliverable"
+	DecisionUndeliverable = "undeliverable"
+	DecisionRetryable     = "retryable"
+	DecisionPolicyBlocked = "policy_blocked"
+	DecisionUnknown       = "unknown"
 )
 
 type Result struct {
-	Category string
-	Reason   string
+	Category         string
+	Reason           string
+	DecisionClass    string
+	ReasonCode       string
+	SMTPCode         int
+	EnhancedCode     string
+	ProviderProfile  string
+	RetryAfterSecond int
 }
 
 type Verifier interface {

@@ -45,4 +45,47 @@
     </div>
     {{ end }}
 </section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Incident Timeline</h2>
+            <p class="text-sm text-slate-400">Lifecycle view (active + recovered incidents).</p>
+        </div>
+        <span class="text-xs text-slate-400">{{ .ActiveIncidentCount }} active</span>
+    </div>
+
+    <div class="mt-6 overflow-x-auto">
+        <table class="w-full text-left text-sm">
+            <thead class="text-xs uppercase text-slate-500">
+                <tr>
+                    <th class="py-2">Updated At</th>
+                    <th class="py-2">Type</th>
+                    <th class="py-2">Severity</th>
+                    <th class="py-2">Status</th>
+                    <th class="py-2">Message</th>
+                    <th class="py-2">Context</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+                {{ range .Incidents }}
+                <tr>
+                    <td class="py-3 text-slate-300">{{ .UpdatedAt }}</td>
+                    <td class="py-3 font-medium">{{ .Type }}</td>
+                    <td class="py-3"><span class="rounded-full px-3 py-1 text-xs {{ severityClass .Severity }}">{{ .Severity }}</span></td>
+                    <td class="py-3">
+                        <span class="rounded-full px-3 py-1 text-xs {{ if eq .Status "active" }}bg-red-500/20 text-red-300{{ else }}bg-emerald-500/20 text-emerald-300{{ end }}">{{ .Status }}</span>
+                    </td>
+                    <td class="py-3 text-slate-200">{{ .Message }}</td>
+                    <td class="py-3 text-xs text-slate-400">{{ if .Context }}{{ toJSON .Context }}{{ else }}-{{ end }}</td>
+                </tr>
+                {{ else }}
+                <tr>
+                    <td class="py-6 text-center text-slate-400" colspan="6">No incidents tracked yet.</td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    </div>
+</section>
 {{ end }}

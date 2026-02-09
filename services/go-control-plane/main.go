@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
+	"os"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/redis/go-redis/v9"
@@ -26,6 +28,15 @@ func main() {
 	}
 
 	store := NewStore(rdb, cfg.HeartbeatTTL)
+	instanceID := cfg.InstanceID
+	if instanceID == "" {
+		host, _ := os.Hostname()
+		if host == "" {
+			host = "control-plane"
+		}
+		instanceID = fmt.Sprintf("%s-%d", host, os.Getpid())
+	}
+
 	var snapshotStore *SnapshotStore
 	if cfg.MySQLDSN != "" {
 		db, err := sql.Open("mysql", cfg.MySQLDSN)
@@ -41,15 +52,18 @@ func main() {
 	server := NewServer(store, snapshotStore, cfg)
 
 	if snapshotStore != nil {
-		snapshotService := NewSnapshotService(store, snapshotStore, cfg.SnapshotInterval)
+		snapshotService := NewSnapshotService(store, snapshotStore, cfg, instanceID)
 		snapshotService.Start()
 	}
 
 	slackNotifier := NewSlackNotifier(cfg.SlackWebhookURL)
 	emailNotifier := NewEmailNotifier(cfg)
 	notifier := NewMultiNotifier(slackNotifier, emailNotifier)
-	alertService := NewAlertService(store, snapshotStore, cfg, notifier)
+	alertService := NewAlertService(store, snapshotStore, cfg, notifier, instanceID)
 	alertService.Start()
+
+	autoScaleService := NewAutoScaleService(store, cfg, instanceID)
+	autoScaleService.Start()
 
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("server error: %v", err)
