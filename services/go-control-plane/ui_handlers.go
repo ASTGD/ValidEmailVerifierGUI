@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,19 +15,23 @@ import (
 
 type OverviewData struct {
 	BasePageData
-	WorkerCount      int
-	PoolCount        int
-	DesiredTotal     int
-	ErrorRateTotal   float64
-	ErrorRateAverage float64
-	Pools            []PoolSummary
-	ChartLabels      []string
-	ChartOnline      []int
-	ChartDesired     []int
-	HistoryLabels    []string
-	HistoryWorkers   []int
-	HistoryDesired   []int
-	HasHistory       bool
+	WorkerCount       int
+	PoolCount         int
+	DesiredTotal      int
+	ErrorRateTotal    float64
+	ErrorRateAverage  float64
+	IncidentCount     int
+	ProbeUnknownRate  float64
+	ProbeTempfailRate float64
+	ProbeRejectRate   float64
+	Pools             []PoolSummary
+	ChartLabels       []string
+	ChartOnline       []int
+	ChartDesired      []int
+	HistoryLabels     []string
+	HistoryWorkers    []int
+	HistoryDesired    []int
+	HasHistory        bool
 }
 
 type WorkersPageData struct {
@@ -43,9 +48,11 @@ type PoolsPageData struct {
 
 type AlertsPageData struct {
 	BasePageData
-	HasStorage bool
-	AlertCount int
-	Alerts     []AlertRecord
+	HasStorage          bool
+	AlertCount          int
+	Alerts              []AlertRecord
+	Incidents           []IncidentRecord
+	ActiveIncidentCount int
 }
 
 type SettingsPageData struct {
@@ -62,8 +69,13 @@ type LivePayload struct {
 	ErrorRateTotal     float64       `json:"error_rate_total"`
 	ErrorRateAverage   float64       `json:"error_rate_average"`
 	Pools              []PoolSummary `json:"pools"`
+	IncidentCount      int           `json:"incident_count"`
+	ProbeUnknownRate   float64       `json:"probe_unknown_rate"`
+	ProbeTempfailRate  float64       `json:"probe_tempfail_rate"`
+	ProbeRejectRate    float64       `json:"probe_reject_rate"`
 	AlertsEnabled      bool          `json:"alerts_enabled"`
 	AutoActionsEnabled bool          `json:"auto_actions_enabled"`
+	AutoscaleEnabled   bool          `json:"autoscale_enabled"`
 }
 
 func (s *Server) handleUIRedirect(w http.ResponseWriter, r *http.Request) {
@@ -101,15 +113,19 @@ func (s *Server) handleUIOverview(w http.ResponseWriter, r *http.Request) {
 			BasePath:        "/verifier-engine-room",
 			LiveStreamPath:  "/verifier-engine-room/events",
 		},
-		WorkerCount:      stats.WorkerCount,
-		PoolCount:        stats.PoolCount,
-		DesiredTotal:     stats.DesiredTotal,
-		ErrorRateTotal:   stats.ErrorRateTotal,
-		ErrorRateAverage: stats.ErrorRateAverage,
-		Pools:            stats.Pools,
-		ChartLabels:      labels,
-		ChartOnline:      online,
-		ChartDesired:     desired,
+		WorkerCount:       stats.WorkerCount,
+		PoolCount:         stats.PoolCount,
+		DesiredTotal:      stats.DesiredTotal,
+		ErrorRateTotal:    stats.ErrorRateTotal,
+		ErrorRateAverage:  stats.ErrorRateAverage,
+		IncidentCount:     stats.IncidentCount,
+		ProbeUnknownRate:  stats.ProbeUnknownRate,
+		ProbeTempfailRate: stats.ProbeTempfailRate,
+		ProbeRejectRate:   stats.ProbeRejectRate,
+		Pools:             stats.Pools,
+		ChartLabels:       labels,
+		ChartOnline:       online,
+		ChartDesired:      desired,
 	}
 
 	if s.snapshots != nil {
@@ -205,6 +221,16 @@ func (s *Server) handleUIAlerts(w http.ResponseWriter, r *http.Request) {
 		data.AlertCount = len(alerts)
 	}
 
+	incidents, err := s.store.ListIncidents(r.Context(), 100, true)
+	if err == nil {
+		data.Incidents = incidents
+		for _, incident := range incidents {
+			if incident.Status == "active" {
+				data.ActiveIncidentCount++
+			}
+		}
+	}
+
 	s.views.Render(w, data)
 }
 
@@ -218,7 +244,7 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 	data := SettingsPageData{
 		BasePageData: BasePageData{
 			Title:           "Verifier Engine Room · Settings",
-			Subtitle:        "Runtime alert controls (Redis-backed)",
+			Subtitle:        "Runtime controls (alerts, safety, autoscale)",
 			ActiveNav:       "settings",
 			ContentTemplate: "settings",
 			BasePath:        "/verifier-engine-room",
@@ -255,12 +281,41 @@ func (s *Server) handleUIUpdateSettings(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	autoscaleCanary := s.cfg.AutoScaleCanaryPercent
+	if autoscaleCanary <= 0 {
+		autoscaleCanary = 100
+	}
+	if value := strings.TrimSpace(r.FormValue("autoscale_canary_percent")); value != "" {
+		parsed, parseErr := strconv.Atoi(value)
+		if parseErr != nil || parsed < 1 || parsed > 100 {
+			writeError(w, http.StatusBadRequest, "autoscale_canary_percent must be between 1 and 100")
+			return
+		}
+		autoscaleCanary = parsed
+	}
+
+	quarantineThreshold := s.cfg.QuarantineErrorRate
+	if quarantineThreshold <= 0 {
+		quarantineThreshold = threshold * 1.5
+	}
+	if value := strings.TrimSpace(r.FormValue("quarantine_error_rate_threshold")); value != "" {
+		parsed, parseErr := strconv.ParseFloat(value, 64)
+		if parseErr != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) || parsed < 0 {
+			writeError(w, http.StatusBadRequest, "quarantine_error_rate_threshold must be >= 0")
+			return
+		}
+		quarantineThreshold = parsed
+	}
+
 	settings := RuntimeSettings{
-		AlertsEnabled:             r.FormValue("alerts_enabled") != "",
-		AutoActionsEnabled:        r.FormValue("auto_actions_enabled") != "",
-		AlertErrorRateThreshold:   threshold,
-		AlertHeartbeatGraceSecond: grace,
-		AlertCooldownSecond:       cooldown,
+		AlertsEnabled:                r.FormValue("alerts_enabled") != "",
+		AutoActionsEnabled:           r.FormValue("auto_actions_enabled") != "",
+		AlertErrorRateThreshold:      threshold,
+		AlertHeartbeatGraceSecond:    grace,
+		AlertCooldownSecond:          cooldown,
+		AutoscaleEnabled:             r.FormValue("autoscale_enabled") != "",
+		AutoscaleCanaryPercent:       autoscaleCanary,
+		QuarantineErrorRateThreshold: quarantineThreshold,
 	}
 
 	if err := s.store.SaveRuntimeSettings(r.Context(), settings); err != nil {
@@ -276,6 +331,11 @@ func (s *Server) handleUIEvents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "streaming not supported")
 		return
+	}
+
+	// Clear per-request write deadline for long-lived SSE stream while keeping finite server WriteTimeout.
+	if controller := http.NewResponseController(w); controller != nil {
+		_ = controller.SetWriteDeadline(time.Time{})
 	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -316,8 +376,13 @@ func (s *Server) pushLiveEvent(w http.ResponseWriter, r *http.Request) {
 		ErrorRateTotal:     stats.ErrorRateTotal,
 		ErrorRateAverage:   stats.ErrorRateAverage,
 		Pools:              stats.Pools,
+		IncidentCount:      stats.IncidentCount,
+		ProbeUnknownRate:   stats.ProbeUnknownRate,
+		ProbeTempfailRate:  stats.ProbeTempfailRate,
+		ProbeRejectRate:    stats.ProbeRejectRate,
 		AlertsEnabled:      stats.Settings.AlertsEnabled,
 		AutoActionsEnabled: stats.Settings.AutoActionsEnabled,
+		AutoscaleEnabled:   stats.Settings.AutoscaleEnabled,
 	}
 
 	data, err := json.Marshal(payload)
@@ -337,6 +402,28 @@ func (s *Server) handleUISetDesired(state string) http.HandlerFunc {
 		}
 
 		if err := s.store.SetDesiredState(r.Context(), workerID, state); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		http.Redirect(w, r, "/verifier-engine-room/workers", http.StatusSeeOther)
+	}
+}
+
+func (s *Server) handleUIQuarantine(enabled bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		workerID := chi.URLParam(r, "workerID")
+		if workerID == "" {
+			writeError(w, http.StatusBadRequest, "workerID is required")
+			return
+		}
+
+		reason := ""
+		if enabled {
+			reason = "manual_ui_action"
+		}
+
+		if err := s.store.SetWorkerQuarantined(r.Context(), workerID, enabled, reason); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}

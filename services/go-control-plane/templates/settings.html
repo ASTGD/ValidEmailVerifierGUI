@@ -1,9 +1,9 @@
 {{ define "settings" }}
 <section class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-    <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between">
         <div>
-            <h2 class="text-lg font-semibold">Runtime Alert Settings</h2>
-            <p class="text-sm text-slate-400">Saved in Redis. No .env updates required.</p>
+            <h2 class="text-lg font-semibold">Runtime Safety Settings</h2>
+            <p class="text-sm text-slate-400">Saved in Redis. Alerting, quarantine, and autoscale controls are hot-reloaded.</p>
         </div>
     </div>
 
@@ -30,9 +30,17 @@
                     <span class="block text-xs text-slate-400">Drains workers that exceed the error-rate threshold.</span>
                 </span>
             </label>
+
+            <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                <input type="checkbox" name="autoscale_enabled" {{ if .Settings.AutoscaleEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
+                <span>
+                    <span class="block text-sm font-medium">Enable autoscaling</span>
+                    <span class="block text-xs text-slate-400">Allows control plane to adjust pool desired counts within safe limits.</span>
+                </span>
+            </label>
         </div>
 
-        <div class="grid gap-4 md:grid-cols-3">
+        <div class="grid gap-4 md:grid-cols-5">
             <label class="space-y-2">
                 <span class="text-xs uppercase tracking-wider text-slate-400">Error threshold (errors/min)</span>
                 <input name="alert_error_rate_threshold" type="number" min="0" step="0.1" value="{{ .Settings.AlertErrorRateThreshold }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
@@ -46,6 +54,16 @@
             <label class="space-y-2">
                 <span class="text-xs uppercase tracking-wider text-slate-400">Alert cooldown (seconds)</span>
                 <input name="alert_cooldown_seconds" type="number" min="1" value="{{ .Settings.AlertCooldownSecond }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+            </label>
+
+            <label class="space-y-2">
+                <span class="text-xs uppercase tracking-wider text-slate-400">Quarantine threshold</span>
+                <input name="quarantine_error_rate_threshold" type="number" min="0" step="0.1" value="{{ .Settings.QuarantineErrorRateThreshold }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+            </label>
+
+            <label class="space-y-2">
+                <span class="text-xs uppercase tracking-wider text-slate-400">Autoscale canary (%)</span>
+                <input name="autoscale_canary_percent" type="number" min="1" max="100" value="{{ .Settings.AutoscaleCanaryPercent }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
             </label>
         </div>
 

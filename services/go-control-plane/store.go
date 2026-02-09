@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -15,14 +16,21 @@ type Store struct {
 	heartbeatTTL time.Duration
 }
 
-const runtimeSettingsKey = "control_plane:runtime_settings"
+const (
+	runtimeSettingsKey = "control_plane:runtime_settings"
+	incidentsIndexKey  = "control_plane:incidents:index"
+	incidentsActiveKey = "control_plane:incidents:active"
+)
 
 type RuntimeSettings struct {
-	AlertsEnabled             bool    `json:"alerts_enabled"`
-	AutoActionsEnabled        bool    `json:"auto_actions_enabled"`
-	AlertErrorRateThreshold   float64 `json:"alert_error_rate_threshold"`
-	AlertHeartbeatGraceSecond int     `json:"alert_heartbeat_grace_seconds"`
-	AlertCooldownSecond       int     `json:"alert_cooldown_seconds"`
+	AlertsEnabled                bool    `json:"alerts_enabled"`
+	AutoActionsEnabled           bool    `json:"auto_actions_enabled"`
+	AlertErrorRateThreshold      float64 `json:"alert_error_rate_threshold"`
+	AlertHeartbeatGraceSecond    int     `json:"alert_heartbeat_grace_seconds"`
+	AlertCooldownSecond          int     `json:"alert_cooldown_seconds"`
+	AutoscaleEnabled             bool    `json:"autoscale_enabled"`
+	AutoscaleCanaryPercent       int     `json:"autoscale_canary_percent"`
+	QuarantineErrorRateThreshold float64 `json:"quarantine_error_rate_threshold"`
 }
 
 func NewStore(rdb *redis.Client, ttl time.Duration) *Store {
@@ -30,6 +38,61 @@ func NewStore(rdb *redis.Client, ttl time.Duration) *Store {
 		rdb:          rdb,
 		heartbeatTTL: ttl,
 	}
+}
+
+func (s *Store) Ping(ctx context.Context) error {
+	if s == nil || s.rdb == nil {
+		return errors.New("redis store is not configured")
+	}
+
+	return s.rdb.Ping(ctx).Err()
+}
+
+func (s *Store) HoldLeaderLease(ctx context.Context, leaseName, owner string, ttl time.Duration) (bool, error) {
+	if leaseName == "" || owner == "" {
+		return false, fmt.Errorf("leaseName and owner are required")
+	}
+	if ttl <= 0 {
+		ttl = 45 * time.Second
+	}
+
+	key := fmt.Sprintf("control_plane:leader:%s", leaseName)
+	ttlMs := ttl.Milliseconds()
+	script := redis.NewScript(`
+		local current = redis.call('GET', KEYS[1])
+		if current == ARGV[1] then
+			redis.call('PEXPIRE', KEYS[1], ARGV[2])
+			return 1
+		end
+		if redis.call('SET', KEYS[1], ARGV[1], 'NX', 'PX', ARGV[2]) then
+			return 1
+		end
+		return 0
+	`)
+
+	result, err := script.Run(ctx, s.rdb, []string{key}, owner, ttlMs).Int()
+	if err != nil {
+		return false, err
+	}
+
+	return result == 1, nil
+}
+
+func (s *Store) ReleaseLeaderLease(ctx context.Context, leaseName, owner string) error {
+	if leaseName == "" || owner == "" {
+		return nil
+	}
+
+	key := fmt.Sprintf("control_plane:leader:%s", leaseName)
+	script := redis.NewScript(`
+		if redis.call('GET', KEYS[1]) == ARGV[1] then
+			return redis.call('DEL', KEYS[1])
+		end
+		return 0
+	`)
+
+	_, err := script.Run(ctx, s.rdb, []string{key}, owner).Result()
+	return err
 }
 
 func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (string, error) {
@@ -49,6 +112,14 @@ func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (stri
 		return "", err
 	}
 
+	isQuarantined, quarantineErr := s.isWorkerQuarantined(ctx, req.WorkerID)
+	if quarantineErr != nil {
+		return "", quarantineErr
+	}
+	if isQuarantined {
+		desiredState = "draining"
+	}
+
 	meta := workerMeta{
 		WorkerID:       req.WorkerID,
 		Host:           req.Host,
@@ -58,11 +129,13 @@ func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (stri
 		Tags:           req.Tags,
 		CurrentJobID:   req.CurrentJobID,
 		CurrentChunkID: req.CurrentChunkID,
+		CorrelationID:  req.CorrelationID,
 	}
 	metaJSON, err := json.Marshal(meta)
 	if err != nil {
 		return "", err
 	}
+
 	metricsJSON := []byte("{}")
 	if req.Metrics != nil {
 		payload, marshalErr := json.Marshal(req.Metrics)
@@ -70,6 +143,24 @@ func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (stri
 			return "", marshalErr
 		}
 		metricsJSON = payload
+	}
+
+	stageMetricsJSON := []byte("{}")
+	if req.StageMetrics != nil {
+		payload, marshalErr := json.Marshal(req.StageMetrics)
+		if marshalErr != nil {
+			return "", marshalErr
+		}
+		stageMetricsJSON = payload
+	}
+
+	smtpMetricsJSON := []byte("{}")
+	if req.SMTPMetrics != nil {
+		payload, marshalErr := json.Marshal(req.SMTPMetrics)
+		if marshalErr != nil {
+			return "", marshalErr
+		}
+		smtpMetricsJSON = payload
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -82,13 +173,27 @@ func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (stri
 	pipe.Set(ctx, workerKey(req.WorkerID, "last_seen"), now, 0)
 	pipe.Set(ctx, workerKey(req.WorkerID, "meta"), metaJSON, s.heartbeatTTL)
 	pipe.Set(ctx, workerKey(req.WorkerID, "metrics"), metricsJSON, s.heartbeatTTL)
+	pipe.Set(ctx, workerKey(req.WorkerID, "stage_metrics"), stageMetricsJSON, s.heartbeatTTL)
+	pipe.Set(ctx, workerKey(req.WorkerID, "smtp_metrics"), smtpMetricsJSON, s.heartbeatTTL)
+	if req.PoolHealthHint != nil {
+		pipe.Set(ctx, workerKey(req.WorkerID, "pool_health_hint"), *req.PoolHealthHint, s.heartbeatTTL)
+	}
 	if req.Pool != "" {
 		pipe.Set(ctx, workerKey(req.WorkerID, "pool"), req.Pool, s.heartbeatTTL)
 		pipe.SAdd(ctx, "pools:known", req.Pool)
 	}
+	if status == desiredState {
+		pipe.Del(ctx, workerKey(req.WorkerID, "desired_state_updated"))
+	} else {
+		pipe.SetNX(ctx, workerKey(req.WorkerID, "desired_state_updated"), now, 0)
+	}
 	_, err = pipe.Exec(ctx)
 	if err != nil {
 		return "", err
+	}
+
+	if isQuarantined {
+		_ = s.rdb.Set(ctx, desiredKey, "draining", 0).Err()
 	}
 
 	return desiredState, nil
@@ -145,11 +250,14 @@ func defaultRuntimeSettings(cfg Config) RuntimeSettings {
 	}
 
 	return RuntimeSettings{
-		AlertsEnabled:             cfg.AlertsEnabled,
-		AutoActionsEnabled:        cfg.AutoActionsEnabled,
-		AlertErrorRateThreshold:   cfg.AlertErrorRateThreshold,
-		AlertHeartbeatGraceSecond: grace,
-		AlertCooldownSecond:       cooldown,
+		AlertsEnabled:                cfg.AlertsEnabled,
+		AutoActionsEnabled:           cfg.AutoActionsEnabled,
+		AlertErrorRateThreshold:      cfg.AlertErrorRateThreshold,
+		AlertHeartbeatGraceSecond:    grace,
+		AlertCooldownSecond:          cooldown,
+		AutoscaleEnabled:             cfg.AutoScaleEnabled,
+		AutoscaleCanaryPercent:       cfg.AutoScaleCanaryPercent,
+		QuarantineErrorRateThreshold: cfg.QuarantineErrorRate,
 	}
 }
 
@@ -166,6 +274,22 @@ func normalizeRuntimeSettings(in RuntimeSettings, defaults RuntimeSettings) Runt
 
 	if out.AlertErrorRateThreshold < 0 {
 		out.AlertErrorRateThreshold = defaults.AlertErrorRateThreshold
+	}
+
+	defaultCanary := defaults.AutoscaleCanaryPercent
+	if defaultCanary <= 0 {
+		defaultCanary = 100
+	}
+
+	if out.AutoscaleCanaryPercent <= 0 {
+		out.AutoscaleCanaryPercent = defaultCanary
+	}
+	if out.AutoscaleCanaryPercent > 100 {
+		out.AutoscaleCanaryPercent = 100
+	}
+
+	if out.QuarantineErrorRateThreshold < 0 {
+		out.QuarantineErrorRateThreshold = defaults.QuarantineErrorRateThreshold
 	}
 
 	return out
@@ -205,7 +329,111 @@ func (s *Store) SetDesiredState(ctx context.Context, workerID string, state stri
 	if normalized == "" {
 		return fmt.Errorf("invalid desired state")
 	}
-	return s.rdb.Set(ctx, workerKey(workerID, "desired_state"), normalized, 0).Err()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	pipe := s.rdb.Pipeline()
+	pipe.Set(ctx, workerKey(workerID, "desired_state"), normalized, 0)
+	pipe.Set(ctx, workerKey(workerID, "desired_state_updated"), now, 0)
+	if normalized == "running" {
+		pipe.Del(ctx, workerKey(workerID, "quarantined"))
+	}
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+func (s *Store) SetWorkerQuarantined(ctx context.Context, workerID string, enabled bool, reason string) error {
+	if workerID == "" {
+		return fmt.Errorf("worker id is required")
+	}
+
+	if enabled {
+		payload := map[string]string{
+			"reason":     reason,
+			"updated_at": time.Now().UTC().Format(time.RFC3339),
+		}
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+
+		pipe := s.rdb.Pipeline()
+		pipe.Set(ctx, workerKey(workerID, "quarantined"), data, 0)
+		pipe.Set(ctx, workerKey(workerID, "desired_state"), "draining", 0)
+		pipe.Set(ctx, workerKey(workerID, "desired_state_updated"), time.Now().UTC().Format(time.RFC3339), 0)
+		_, err = pipe.Exec(ctx)
+		return err
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	pipe := s.rdb.Pipeline()
+	pipe.Del(ctx, workerKey(workerID, "quarantined"))
+	pipe.Set(ctx, workerKey(workerID, "desired_state"), "running", 0)
+	pipe.Set(ctx, workerKey(workerID, "desired_state_updated"), now, 0)
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+func (s *Store) isWorkerQuarantined(ctx context.Context, workerID string) (bool, error) {
+	value, err := s.rdb.Get(ctx, workerKey(workerID, "quarantined")).Result()
+	if err == redis.Nil || value == "" {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *Store) GetDesiredStateUpdatedAt(ctx context.Context, workerID string) (time.Time, bool, error) {
+	value, err := s.rdb.Get(ctx, workerKey(workerID, "desired_state_updated")).Result()
+	if err == redis.Nil || value == "" {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return parsed, true, nil
+}
+
+func (s *Store) CleanupStaleKnownWorkers(ctx context.Context, cutoff time.Time) ([]string, error) {
+	knownWorkers, err := s.GetKnownWorkerIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	stale := make([]string, 0)
+	for _, workerID := range knownWorkers {
+		lastSeen, ok, seenErr := s.GetWorkerLastSeen(ctx, workerID)
+		if seenErr != nil {
+			continue
+		}
+		if !ok || lastSeen.IsZero() || lastSeen.After(cutoff) {
+			continue
+		}
+
+		stale = append(stale, workerID)
+	}
+
+	if len(stale) == 0 {
+		return stale, nil
+	}
+
+	pipe := s.rdb.Pipeline()
+	for _, workerID := range stale {
+		pipe.SRem(ctx, "workers:known", workerID)
+		pipe.SRem(ctx, "workers:active", workerID)
+		pipe.Del(ctx, staleWorkerDeleteKeys(workerID)...)
+	}
+	_, err = pipe.Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return stale, nil
 }
 
 func (s *Store) GetWorkers(ctx context.Context) ([]WorkerSummary, error) {
@@ -242,6 +470,31 @@ func (s *Store) GetWorkers(ctx context.Context) ([]WorkerSummary, error) {
 			pool, _ = s.rdb.Get(ctx, workerKey(id, "pool")).Result()
 		}
 
+		quarantined, _ := s.isWorkerQuarantined(ctx, id)
+
+		var stageMetrics *StageMetrics
+		if payload, payloadErr := s.rdb.Get(ctx, workerKey(id, "stage_metrics")).Result(); payloadErr == nil && payload != "" {
+			parsed := StageMetrics{}
+			if unmarshalErr := json.Unmarshal([]byte(payload), &parsed); unmarshalErr == nil {
+				stageMetrics = &parsed
+			}
+		}
+
+		var smtpMetrics *SMTPMetrics
+		if payload, payloadErr := s.rdb.Get(ctx, workerKey(id, "smtp_metrics")).Result(); payloadErr == nil && payload != "" {
+			parsed := SMTPMetrics{}
+			if unmarshalErr := json.Unmarshal([]byte(payload), &parsed); unmarshalErr == nil {
+				smtpMetrics = &parsed
+			}
+		}
+
+		poolHealthHint := 0.0
+		if payload, payloadErr := s.rdb.Get(ctx, workerKey(id, "pool_health_hint")).Result(); payloadErr == nil && payload != "" {
+			if parsed, parseErr := strconv.ParseFloat(payload, 64); parseErr == nil {
+				poolHealthHint = parsed
+			}
+		}
+
 		results = append(results, WorkerSummary{
 			WorkerID:       id,
 			Host:           meta.Host,
@@ -250,9 +503,14 @@ func (s *Store) GetWorkers(ctx context.Context) ([]WorkerSummary, error) {
 			Pool:           pool,
 			Status:         defaultString(status, "unknown"),
 			DesiredState:   desired,
+			Quarantined:    quarantined,
 			LastHeartbeat:  heartbeat,
 			CurrentJobID:   meta.CurrentJobID,
 			CurrentChunkID: meta.CurrentChunkID,
+			CorrelationID:  meta.CorrelationID,
+			StageMetrics:   stageMetrics,
+			SMTPMetrics:    smtpMetrics,
+			PoolHealthHint: poolHealthHint,
 		})
 	}
 
@@ -271,11 +529,17 @@ func (s *Store) GetPools(ctx context.Context) ([]PoolSummary, error) {
 	}
 
 	onlineCounts := make(map[string]int)
+	healthScoreTotals := make(map[string]float64)
+	healthScoreCounts := make(map[string]int)
 	for _, worker := range workers {
 		if worker.Pool == "" {
 			continue
 		}
 		onlineCounts[worker.Pool]++
+		if worker.PoolHealthHint > 0 {
+			healthScoreTotals[worker.Pool] += worker.PoolHealthHint
+			healthScoreCounts[worker.Pool]++
+		}
 	}
 
 	results := make([]PoolSummary, 0, len(pools))
@@ -287,10 +551,17 @@ func (s *Store) GetPools(ctx context.Context) ([]PoolSummary, error) {
 				desired = parsed
 			}
 		}
+
+		healthScore := 0.0
+		if healthScoreCounts[pool] > 0 {
+			healthScore = healthScoreTotals[pool] / float64(healthScoreCounts[pool])
+		}
+
 		results = append(results, PoolSummary{
-			Pool:    pool,
-			Online:  onlineCounts[pool],
-			Desired: desired,
+			Pool:        pool,
+			Online:      onlineCounts[pool],
+			Desired:     desired,
+			HealthScore: healthScore,
 		})
 	}
 
@@ -309,6 +580,156 @@ func (s *Store) SetPoolDesiredCount(ctx context.Context, pool string, desired in
 	pipe.SAdd(ctx, "pools:known", pool)
 	_, err := pipe.Exec(ctx)
 	return err
+}
+
+func (s *Store) ActivateIncident(ctx context.Context, key, incidentType, severity, message string, contextData map[string]interface{}) (IncidentRecord, bool, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	existing, ok, err := s.GetIncident(ctx, key)
+	if err != nil {
+		return IncidentRecord{}, false, err
+	}
+
+	if ok && existing.Status == "active" {
+		existing.Message = message
+		existing.Context = contextData
+		existing.Severity = severity
+		existing.Type = incidentType
+		existing.UpdatedAt = now
+		if err := s.saveIncident(ctx, existing); err != nil {
+			return IncidentRecord{}, false, err
+		}
+		return existing, false, nil
+	}
+
+	record := IncidentRecord{
+		Key:       key,
+		Type:      incidentType,
+		Severity:  severity,
+		Status:    "active",
+		Message:   message,
+		Context:   contextData,
+		OpenedAt:  now,
+		UpdatedAt: now,
+	}
+	if ok && existing.OpenedAt != "" {
+		record.OpenedAt = existing.OpenedAt
+	}
+
+	if err := s.saveIncident(ctx, record); err != nil {
+		return IncidentRecord{}, false, err
+	}
+
+	return record, true, nil
+}
+
+func (s *Store) ResolveIncident(ctx context.Context, key, message string, contextData map[string]interface{}) (IncidentRecord, bool, error) {
+	existing, ok, err := s.GetIncident(ctx, key)
+	if err != nil {
+		return IncidentRecord{}, false, err
+	}
+	if !ok || existing.Status != "active" {
+		return IncidentRecord{}, false, nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	existing.Status = "resolved"
+	if message != "" {
+		existing.Message = message
+	}
+	existing.Context = contextData
+	existing.UpdatedAt = now
+	existing.ResolvedAt = now
+
+	if err := s.saveIncident(ctx, existing); err != nil {
+		return IncidentRecord{}, false, err
+	}
+
+	return existing, true, nil
+}
+
+func (s *Store) GetIncident(ctx context.Context, key string) (IncidentRecord, bool, error) {
+	if key == "" {
+		return IncidentRecord{}, false, nil
+	}
+
+	value, err := s.rdb.Get(ctx, incidentKey(key)).Result()
+	if err == redis.Nil || value == "" {
+		return IncidentRecord{}, false, nil
+	}
+	if err != nil {
+		return IncidentRecord{}, false, err
+	}
+
+	var record IncidentRecord
+	if err := json.Unmarshal([]byte(value), &record); err != nil {
+		return IncidentRecord{}, false, err
+	}
+	return record, true, nil
+}
+
+func (s *Store) ListIncidents(ctx context.Context, limit int, includeResolved bool) ([]IncidentRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+
+	keys, err := s.rdb.ZRevRange(ctx, incidentsIndexKey, 0, int64(limit-1)).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	incidents := make([]IncidentRecord, 0, len(keys))
+	for _, key := range keys {
+		record, ok, getErr := s.GetIncident(ctx, key)
+		if getErr != nil || !ok {
+			continue
+		}
+		if !includeResolved && record.Status != "active" {
+			continue
+		}
+		incidents = append(incidents, record)
+	}
+
+	return incidents, nil
+}
+
+func (s *Store) saveIncident(ctx context.Context, record IncidentRecord) error {
+	payload, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+
+	score := float64(time.Now().UTC().Unix())
+	pipe := s.rdb.Pipeline()
+	pipe.Set(ctx, incidentKey(record.Key), payload, 0)
+	pipe.ZAdd(ctx, incidentsIndexKey, redis.Z{Score: score, Member: record.Key})
+	if record.Status == "active" {
+		pipe.SAdd(ctx, incidentsActiveKey, record.Key)
+	} else {
+		pipe.SRem(ctx, incidentsActiveKey, record.Key)
+	}
+	_, err = pipe.Exec(ctx)
+	return err
+}
+
+func incidentKey(key string) string {
+	return fmt.Sprintf("control_plane:incident:%s", key)
+}
+
+func staleWorkerDeleteKeys(workerID string) []string {
+	return []string{
+		workerKey(workerID, "status"),
+		workerKey(workerID, "heartbeat"),
+		workerKey(workerID, "last_seen"),
+		workerKey(workerID, "meta"),
+		workerKey(workerID, "metrics"),
+		workerKey(workerID, "stage_metrics"),
+		workerKey(workerID, "smtp_metrics"),
+		workerKey(workerID, "pool_health_hint"),
+		workerKey(workerID, "pool"),
+		workerKey(workerID, "desired_state"),
+		workerKey(workerID, "desired_state_updated"),
+		workerKey(workerID, "quarantined"),
+	}
 }
 
 func workerKey(workerID string, field string) string {
