@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -17,9 +18,11 @@ type Store struct {
 }
 
 const (
-	runtimeSettingsKey = "control_plane:runtime_settings"
-	incidentsIndexKey  = "control_plane:incidents:index"
-	incidentsActiveKey = "control_plane:incidents:active"
+	runtimeSettingsKey     = "control_plane:runtime_settings"
+	incidentsIndexKey      = "control_plane:incidents:index"
+	incidentsActiveKey     = "control_plane:incidents:active"
+	providerModesKey       = "control_plane:provider_modes"
+	providerPolicyStateKey = "control_plane:provider_policy_state"
 )
 
 type RuntimeSettings struct {
@@ -31,6 +34,10 @@ type RuntimeSettings struct {
 	AutoscaleEnabled             bool    `json:"autoscale_enabled"`
 	AutoscaleCanaryPercent       int     `json:"autoscale_canary_percent"`
 	QuarantineErrorRateThreshold float64 `json:"quarantine_error_rate_threshold"`
+	UIOverviewLiveIntervalSecond int     `json:"ui_overview_live_interval_seconds"`
+	UIWorkersRefreshSecond       int     `json:"ui_workers_refresh_seconds"`
+	UIPoolsRefreshSecond         int     `json:"ui_pools_refresh_seconds"`
+	UIAlertsRefreshSecond        int     `json:"ui_alerts_refresh_seconds"`
 }
 
 func NewStore(rdb *redis.Client, ttl time.Duration) *Store {
@@ -163,6 +170,15 @@ func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (stri
 		smtpMetricsJSON = payload
 	}
 
+	providerMetricsJSON := []byte("[]")
+	if len(req.ProviderMetrics) > 0 {
+		payload, marshalErr := json.Marshal(req.ProviderMetrics)
+		if marshalErr != nil {
+			return "", marshalErr
+		}
+		providerMetricsJSON = payload
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	pipe := s.rdb.Pipeline()
@@ -175,6 +191,7 @@ func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (stri
 	pipe.Set(ctx, workerKey(req.WorkerID, "metrics"), metricsJSON, s.heartbeatTTL)
 	pipe.Set(ctx, workerKey(req.WorkerID, "stage_metrics"), stageMetricsJSON, s.heartbeatTTL)
 	pipe.Set(ctx, workerKey(req.WorkerID, "smtp_metrics"), smtpMetricsJSON, s.heartbeatTTL)
+	pipe.Set(ctx, workerKey(req.WorkerID, "provider_metrics"), providerMetricsJSON, s.heartbeatTTL)
 	if req.PoolHealthHint != nil {
 		pipe.Set(ctx, workerKey(req.WorkerID, "pool_health_hint"), *req.PoolHealthHint, s.heartbeatTTL)
 	}
@@ -258,6 +275,10 @@ func defaultRuntimeSettings(cfg Config) RuntimeSettings {
 		AutoscaleEnabled:             cfg.AutoScaleEnabled,
 		AutoscaleCanaryPercent:       cfg.AutoScaleCanaryPercent,
 		QuarantineErrorRateThreshold: cfg.QuarantineErrorRate,
+		UIOverviewLiveIntervalSecond: 5,
+		UIWorkersRefreshSecond:       10,
+		UIPoolsRefreshSecond:         10,
+		UIAlertsRefreshSecond:        30,
 	}
 }
 
@@ -290,6 +311,22 @@ func normalizeRuntimeSettings(in RuntimeSettings, defaults RuntimeSettings) Runt
 
 	if out.QuarantineErrorRateThreshold < 0 {
 		out.QuarantineErrorRateThreshold = defaults.QuarantineErrorRateThreshold
+	}
+
+	if out.UIOverviewLiveIntervalSecond <= 0 {
+		out.UIOverviewLiveIntervalSecond = defaults.UIOverviewLiveIntervalSecond
+	}
+
+	if out.UIWorkersRefreshSecond <= 0 {
+		out.UIWorkersRefreshSecond = defaults.UIWorkersRefreshSecond
+	}
+
+	if out.UIPoolsRefreshSecond <= 0 {
+		out.UIPoolsRefreshSecond = defaults.UIPoolsRefreshSecond
+	}
+
+	if out.UIAlertsRefreshSecond <= 0 {
+		out.UIAlertsRefreshSecond = defaults.UIAlertsRefreshSecond
 	}
 
 	return out
@@ -488,6 +525,14 @@ func (s *Store) GetWorkers(ctx context.Context) ([]WorkerSummary, error) {
 			}
 		}
 
+		var providerMetrics []ProviderMetric
+		if payload, payloadErr := s.rdb.Get(ctx, workerKey(id, "provider_metrics")).Result(); payloadErr == nil && payload != "" {
+			parsed := make([]ProviderMetric, 0)
+			if unmarshalErr := json.Unmarshal([]byte(payload), &parsed); unmarshalErr == nil {
+				providerMetrics = parsed
+			}
+		}
+
 		poolHealthHint := 0.0
 		if payload, payloadErr := s.rdb.Get(ctx, workerKey(id, "pool_health_hint")).Result(); payloadErr == nil && payload != "" {
 			if parsed, parseErr := strconv.ParseFloat(payload, 64); parseErr == nil {
@@ -496,21 +541,22 @@ func (s *Store) GetWorkers(ctx context.Context) ([]WorkerSummary, error) {
 		}
 
 		results = append(results, WorkerSummary{
-			WorkerID:       id,
-			Host:           meta.Host,
-			IPAddress:      meta.IPAddress,
-			Version:        meta.Version,
-			Pool:           pool,
-			Status:         defaultString(status, "unknown"),
-			DesiredState:   desired,
-			Quarantined:    quarantined,
-			LastHeartbeat:  heartbeat,
-			CurrentJobID:   meta.CurrentJobID,
-			CurrentChunkID: meta.CurrentChunkID,
-			CorrelationID:  meta.CorrelationID,
-			StageMetrics:   stageMetrics,
-			SMTPMetrics:    smtpMetrics,
-			PoolHealthHint: poolHealthHint,
+			WorkerID:        id,
+			Host:            meta.Host,
+			IPAddress:       meta.IPAddress,
+			Version:         meta.Version,
+			Pool:            pool,
+			Status:          defaultString(status, "unknown"),
+			DesiredState:    desired,
+			Quarantined:     quarantined,
+			LastHeartbeat:   heartbeat,
+			CurrentJobID:    meta.CurrentJobID,
+			CurrentChunkID:  meta.CurrentChunkID,
+			CorrelationID:   meta.CorrelationID,
+			StageMetrics:    stageMetrics,
+			SMTPMetrics:     smtpMetrics,
+			ProviderMetrics: providerMetrics,
+			PoolHealthHint:  poolHealthHint,
 		})
 	}
 
@@ -711,8 +757,170 @@ func (s *Store) saveIncident(ctx context.Context, record IncidentRecord) error {
 	return err
 }
 
+func (s *Store) SetProviderMode(ctx context.Context, provider, mode, source string) (ProviderModeState, error) {
+	rawProvider := strings.TrimSpace(provider)
+	if rawProvider == "" {
+		return ProviderModeState{}, fmt.Errorf("provider is required")
+	}
+	provider = normalizeProviderName(rawProvider)
+	if provider == "" {
+		return ProviderModeState{}, fmt.Errorf("unsupported provider")
+	}
+
+	mode = normalizeProviderMode(mode)
+	if mode == "" {
+		return ProviderModeState{}, fmt.Errorf("invalid provider mode")
+	}
+
+	source = strings.TrimSpace(strings.ToLower(source))
+	if source == "" {
+		source = "manual"
+	}
+
+	state := ProviderModeState{
+		Provider:  provider,
+		Mode:      mode,
+		Source:    source,
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+
+	payload, err := json.Marshal(state)
+	if err != nil {
+		return ProviderModeState{}, err
+	}
+
+	if err := s.rdb.HSet(ctx, providerModesKey, provider, payload).Err(); err != nil {
+		return ProviderModeState{}, err
+	}
+
+	return state, nil
+}
+
+func (s *Store) GetProviderModes(ctx context.Context) (map[string]ProviderModeState, error) {
+	values, err := s.rdb.HGetAll(ctx, providerModesKey).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	return buildProviderModes(values), nil
+}
+
+func buildProviderModes(values map[string]string) map[string]ProviderModeState {
+	modes := make(map[string]ProviderModeState, len(values))
+	for provider, payload := range values {
+		normalizedKey := normalizeProviderName(provider)
+
+		parsed := ProviderModeState{}
+		if unmarshalErr := json.Unmarshal([]byte(payload), &parsed); unmarshalErr != nil {
+			continue
+		}
+
+		normalizedProvider := normalizeProviderName(parsed.Provider)
+		if normalizedProvider == "" {
+			normalizedProvider = normalizedKey
+		}
+		if normalizedProvider == "" {
+			continue
+		}
+
+		parsed.Provider = normalizedProvider
+		if normalizeProviderMode(parsed.Mode) == "" {
+			parsed.Mode = "normal"
+		}
+		modes[normalizedProvider] = parsed
+	}
+
+	return modes
+}
+
+func (s *Store) GetProviderMode(ctx context.Context, provider string) (ProviderModeState, bool, error) {
+	provider = normalizeProviderName(provider)
+	if provider == "" {
+		return ProviderModeState{}, false, nil
+	}
+
+	payload, err := s.rdb.HGet(ctx, providerModesKey, provider).Result()
+	if err == redis.Nil || payload == "" {
+		return ProviderModeState{}, false, nil
+	}
+	if err != nil {
+		return ProviderModeState{}, false, err
+	}
+
+	parsed := ProviderModeState{}
+	if unmarshalErr := json.Unmarshal([]byte(payload), &parsed); unmarshalErr != nil {
+		return ProviderModeState{}, false, unmarshalErr
+	}
+	if parsed.Provider == "" {
+		parsed.Provider = provider
+	}
+	if normalizeProviderMode(parsed.Mode) == "" {
+		parsed.Mode = "normal"
+	}
+
+	return parsed, true, nil
+}
+
+func (s *Store) GetProviderPolicyState(ctx context.Context) (ProviderPolicyState, error) {
+	value, err := s.rdb.Get(ctx, providerPolicyStateKey).Result()
+	if err == redis.Nil || value == "" {
+		return ProviderPolicyState{}, nil
+	}
+	if err != nil {
+		return ProviderPolicyState{}, err
+	}
+
+	state := ProviderPolicyState{}
+	if unmarshalErr := json.Unmarshal([]byte(value), &state); unmarshalErr != nil {
+		return ProviderPolicyState{}, unmarshalErr
+	}
+	return state, nil
+}
+
+func (s *Store) MarkProviderPoliciesReloaded(ctx context.Context) (ProviderPolicyState, error) {
+	current, err := s.GetProviderPolicyState(ctx)
+	if err != nil {
+		return ProviderPolicyState{}, err
+	}
+
+	current.ReloadCount++
+	current.LastReloadAt = time.Now().UTC().Format(time.RFC3339)
+	current.UpdatedAt = current.LastReloadAt
+
+	payload, marshalErr := json.Marshal(current)
+	if marshalErr != nil {
+		return ProviderPolicyState{}, marshalErr
+	}
+
+	if setErr := s.rdb.Set(ctx, providerPolicyStateKey, payload, 0).Err(); setErr != nil {
+		return ProviderPolicyState{}, setErr
+	}
+
+	return current, nil
+}
+
 func incidentKey(key string) string {
 	return fmt.Sprintf("control_plane:incident:%s", key)
+}
+
+func normalizeProviderName(provider string) string {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	switch provider {
+	case "gmail", "microsoft", "yahoo", "generic":
+		return provider
+	default:
+		return ""
+	}
+}
+
+func normalizeProviderMode(mode string) string {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	switch mode {
+	case "normal", "cautious", "drain":
+		return mode
+	default:
+		return ""
+	}
 }
 
 func staleWorkerDeleteKeys(workerID string) []string {
@@ -724,6 +932,7 @@ func staleWorkerDeleteKeys(workerID string) []string {
 		workerKey(workerID, "metrics"),
 		workerKey(workerID, "stage_metrics"),
 		workerKey(workerID, "smtp_metrics"),
+		workerKey(workerID, "provider_metrics"),
 		workerKey(workerID, "pool_health_hint"),
 		workerKey(workerID, "pool"),
 		workerKey(workerID, "desired_state"),

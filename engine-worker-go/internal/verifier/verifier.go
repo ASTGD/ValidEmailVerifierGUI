@@ -23,6 +23,7 @@ type Result struct {
 	EnhancedCode     string
 	ProviderProfile  string
 	RetryAfterSecond int
+	Evidence         *ReplyEvidence
 }
 
 type Verifier interface {
@@ -30,20 +31,23 @@ type Verifier interface {
 }
 
 type Config struct {
-	DNSTimeout               int
-	SMTPConnectTimeout       int
-	SMTPReadTimeout          int
-	SMTPEhloTimeout          int
-	MaxMXAttempts            int
-	RetryableNetworkRetries  int
-	BackoffBaseMs            int
-	HeloName                 string
-	MailFromAddress          string
-	PerDomainConcurrency     int
-	SMTPRateLimitPerMinute   int
-	DisposableDomains        map[string]struct{}
-	RoleAccounts             map[string]struct{}
-	RoleAccountsBehavior     string
-	CatchAllDetectionEnabled bool
-	DomainTypos              map[string]string
+	DNSTimeout                  int
+	SMTPConnectTimeout          int
+	SMTPReadTimeout             int
+	SMTPEhloTimeout             int
+	MaxMXAttempts               int
+	RetryableNetworkRetries     int
+	BackoffBaseMs               int
+	HeloName                    string
+	MailFromAddress             string
+	PerDomainConcurrency        int
+	SMTPRateLimitPerMinute      int
+	DisposableDomains           map[string]struct{}
+	RoleAccounts                map[string]struct{}
+	RoleAccountsBehavior        string
+	CatchAllDetectionEnabled    bool
+	DomainTypos                 map[string]string
+	ProviderPolicyEngineEnabled bool
+	AdaptiveRetryEnabled        bool
+	ProviderReplyPolicyEngine   *ProviderReplyPolicyEngine
 }

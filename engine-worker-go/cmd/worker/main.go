@@ -41,11 +41,28 @@ func main() {
 	backoffMs := envInt("BACKOFF_MS_BASE", 200)
 	perDomainConcurrency := envInt("PER_DOMAIN_CONCURRENCY", 2)
 	smtpRateLimit := envInt("SMTP_RATE_LIMIT_PER_MINUTE", 0)
+	providerPolicyEngineEnabled := envBool("PROVIDER_POLICY_ENGINE_ENABLED", false)
+	adaptiveRetryEnabled := envBool("ADAPTIVE_RETRY_ENABLED", false)
 	roleAccounts := parseRoleAccounts(os.Getenv("ROLE_ACCOUNTS"))
 	roleAccountsBehavior := parseRoleAccountsBehavior(os.Getenv("ROLE_ACCOUNTS_BEHAVIOR"))
 	domainTypos := parseDomainTypos(os.Getenv("DOMAIN_TYPOS"))
 	disposableDomains := parseDisposableDomains(workerdata.DisposableDomains)
 	mailFromAddress := strings.TrimSpace(os.Getenv("MAIL_FROM_ADDRESS"))
+	policyJSON := strings.TrimSpace(os.Getenv("PROVIDER_REPLY_POLICY_JSON"))
+
+	var replyPolicyEngine *verifier.ProviderReplyPolicyEngine
+	if providerPolicyEngineEnabled {
+		replyPolicyEngine = verifier.DefaultProviderReplyPolicyEngine()
+		if policyJSON != "" {
+			parsed, parseErr := verifier.ParseProviderReplyPolicyEngineJSON(policyJSON)
+			if parseErr != nil {
+				fmt.Printf("invalid PROVIDER_REPLY_POLICY_JSON: %v\n", parseErr)
+				os.Exit(1)
+			}
+			replyPolicyEngine = parsed
+		}
+		replyPolicyEngine.Enabled = true
+	}
 
 	var leaseSeconds *int
 	if val := os.Getenv("LEASE_SECONDS"); val != "" {
@@ -60,21 +77,24 @@ func main() {
 	client := api.NewClient(baseURL, token)
 
 	verifierConfig := verifier.Config{
-		DNSTimeout:              dnsTimeout,
-		SMTPConnectTimeout:      smtpConnectTimeout,
-		SMTPReadTimeout:         smtpReadTimeout,
-		SMTPEhloTimeout:         smtpEhloTimeout,
-		MaxMXAttempts:           maxMxAttempts,
-		RetryableNetworkRetries: retryableNetworkRetries,
-		BackoffBaseMs:           backoffMs,
-		HeloName:                heloName,
-		MailFromAddress:         mailFromAddress,
-		PerDomainConcurrency:    perDomainConcurrency,
-		SMTPRateLimitPerMinute:  smtpRateLimit,
-		DisposableDomains:       disposableDomains,
-		RoleAccounts:            roleAccounts,
-		RoleAccountsBehavior:    roleAccountsBehavior,
-		DomainTypos:             domainTypos,
+		DNSTimeout:                  dnsTimeout,
+		SMTPConnectTimeout:          smtpConnectTimeout,
+		SMTPReadTimeout:             smtpReadTimeout,
+		SMTPEhloTimeout:             smtpEhloTimeout,
+		MaxMXAttempts:               maxMxAttempts,
+		RetryableNetworkRetries:     retryableNetworkRetries,
+		BackoffBaseMs:               backoffMs,
+		HeloName:                    heloName,
+		MailFromAddress:             mailFromAddress,
+		PerDomainConcurrency:        perDomainConcurrency,
+		SMTPRateLimitPerMinute:      smtpRateLimit,
+		DisposableDomains:           disposableDomains,
+		RoleAccounts:                roleAccounts,
+		RoleAccountsBehavior:        roleAccountsBehavior,
+		DomainTypos:                 domainTypos,
+		ProviderPolicyEngineEnabled: providerPolicyEngineEnabled,
+		AdaptiveRetryEnabled:        adaptiveRetryEnabled,
+		ProviderReplyPolicyEngine:   replyPolicyEngine,
 	}
 
 	cfg := worker.Config{
@@ -139,6 +159,20 @@ func envInt(key string, fallback int) int {
 	}
 
 	return fallback
+}
+
+func envBool(key string, fallback bool) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	switch value {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	case "":
+		return fallback
+	default:
+		return fallback
+	}
 }
 
 func hostname() string {

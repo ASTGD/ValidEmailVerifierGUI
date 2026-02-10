@@ -36,6 +36,9 @@ Never paste tokens into chat or commit them to git. Use environment variables or
 - `PER_DOMAIN_CONCURRENCY` (default 2)
 - `SMTP_RATE_LIMIT_PER_MINUTE` (default 0, disabled)
 - `HELO_NAME` (optional; defaults to hostname)
+- `PROVIDER_POLICY_ENGINE_ENABLED` (default `false`)
+- `ADAPTIVE_RETRY_ENABLED` (default `false`)
+- `PROVIDER_REPLY_POLICY_JSON` (optional JSON override for provider reply rules/retry windows)
 
 ## Run
 ```bash

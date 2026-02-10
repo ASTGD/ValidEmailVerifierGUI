@@ -22,6 +22,8 @@ type ControlPlaneStats struct {
 	ScreeningProcessedTotal int64
 	ProbeProcessedTotal     int64
 	Settings                RuntimeSettings
+	ProviderHealth          []ProviderHealthSummary
+	ProviderPolicies        ProviderPoliciesData
 }
 
 func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStats, error) {
@@ -105,6 +107,25 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 		settings = defaults
 	}
 
+	providerModesMap, providerModesErr := s.store.GetProviderModes(ctx)
+	if providerModesErr != nil {
+		providerModesMap = map[string]ProviderModeState{}
+	}
+
+	providerPolicyState, providerPolicyErr := s.store.GetProviderPolicyState(ctx)
+	if providerPolicyErr != nil {
+		providerPolicyState = ProviderPolicyState{}
+	}
+
+	providerHealth := aggregateProviderHealth(workers, providerModesMap, thresholdsFromConfig(s.cfg))
+	providerModes := make([]ProviderModeState, 0, len(providerModesMap))
+	for _, mode := range providerModesMap {
+		providerModes = append(providerModes, mode)
+	}
+	sort.Slice(providerModes, func(i, j int) bool {
+		return providerModes[i].Provider < providerModes[j].Provider
+	})
+
 	incidents, incidentsErr := s.store.ListIncidents(ctx, 200, false)
 	if incidentsErr != nil {
 		incidents = nil
@@ -127,5 +148,14 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 		ScreeningProcessedTotal: screeningProcessed,
 		ProbeProcessedTotal:     probeProcessed,
 		Settings:                settings,
+		ProviderHealth:          providerHealth,
+		ProviderPolicies: ProviderPoliciesData{
+			PolicyEngineEnabled:  s.cfg.ProviderPolicyEngineEnabled,
+			AdaptiveRetryEnabled: s.cfg.AdaptiveRetryEnabled,
+			AutoProtectEnabled:   s.cfg.ProviderAutoprotectEnabled,
+			LastReloadAt:         providerPolicyState.LastReloadAt,
+			ReloadCount:          providerPolicyState.ReloadCount,
+			Modes:                providerModes,
+		},
 	}, nil
 }

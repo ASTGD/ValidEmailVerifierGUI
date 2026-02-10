@@ -81,6 +81,7 @@ func (s *AlertService) runChecks() {
 	s.checkPoolCapacity(ctx, settings)
 	s.checkWorkerErrorRate(ctx, settings)
 	s.checkStuckDesiredState(ctx, settings)
+	s.checkProviderHealth(ctx, settings)
 }
 
 func (s *AlertService) shouldRun(ctx context.Context) bool {
@@ -309,6 +310,69 @@ func (s *AlertService) checkStuckDesiredState(ctx context.Context, settings Runt
 	}
 }
 
+func (s *AlertService) checkProviderHealth(ctx context.Context, settings RuntimeSettings) {
+	workers, err := s.store.GetWorkers(ctx)
+	if err != nil {
+		log.Printf("alert: failed to load workers for provider health: %v", err)
+		return
+	}
+
+	modes, modesErr := s.store.GetProviderModes(ctx)
+	if modesErr != nil {
+		modes = map[string]ProviderModeState{}
+	}
+
+	health := aggregateProviderHealth(workers, modes, thresholdsFromConfig(s.cfg))
+	for _, provider := range health {
+		active := provider.Status != "healthy"
+		contextData := map[string]interface{}{
+			"provider":        provider.Provider,
+			"status":          provider.Status,
+			"mode":            provider.Mode,
+			"tempfail_rate":   provider.TempfailRate,
+			"reject_rate":     provider.RejectRate,
+			"unknown_rate":    provider.UnknownRate,
+			"avg_retry_after": provider.AvgRetryAfter,
+			"workers":         provider.Workers,
+		}
+
+		s.syncIncident(
+			ctx,
+			settings,
+			incidentStateKey("provider_health", provider.Provider),
+			"provider_health",
+			map[string]string{"critical": "critical", "warning": "warning", "healthy": "info"}[provider.Status],
+			"Provider health degraded",
+			active,
+			contextData,
+		)
+
+		if !s.cfg.ProviderAutoprotectEnabled || !settings.AutoActionsEnabled {
+			continue
+		}
+
+		override, hasOverride := modes[provider.Provider]
+		if hasOverride && strings.ToLower(strings.TrimSpace(override.Source)) == "manual" {
+			continue
+		}
+
+		targetMode := "normal"
+		if provider.Status == "warning" {
+			targetMode = "cautious"
+		}
+		if provider.Status == "critical" {
+			targetMode = "drain"
+		}
+		if provider.Mode == targetMode {
+			continue
+		}
+
+		if _, setErr := s.store.SetProviderMode(ctx, provider.Provider, targetMode, "autoprotect"); setErr != nil {
+			log.Printf("alert: failed to apply provider auto-protect mode provider=%s mode=%s err=%v", provider.Provider, targetMode, setErr)
+		}
+	}
+}
+
 func incidentStateKey(incidentType, subject string) string {
 	return incidentType + ":" + subject
 }
@@ -406,20 +470,41 @@ type MultiNotifier struct {
 func NewMultiNotifier(notifiers ...Notifier) *MultiNotifier {
 	filtered := make([]Notifier, 0, len(notifiers))
 	for _, notifier := range notifiers {
-		if notifier != nil {
-			filtered = append(filtered, notifier)
+		if notifierIsNil(notifier) {
+			continue
 		}
+		filtered = append(filtered, notifier)
 	}
 	return &MultiNotifier{notifiers: filtered}
 }
 
 func (m *MultiNotifier) Notify(ctx context.Context, alert AlertEvent) error {
 	for _, notifier := range m.notifiers {
+		if notifierIsNil(notifier) {
+			continue
+		}
 		if err := notifier.Notify(ctx, alert); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func notifierIsNil(notifier Notifier) bool {
+	if notifier == nil {
+		return true
+	}
+
+	switch typed := notifier.(type) {
+	case *SlackNotifier:
+		return typed == nil
+	case *EmailNotifier:
+		return typed == nil
+	case *MultiNotifier:
+		return typed == nil
+	default:
+		return false
+	}
 }
 
 func alertSummary(alert AlertEvent) string {

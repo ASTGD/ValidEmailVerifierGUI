@@ -20,13 +20,15 @@ type SMTPDialer interface {
 }
 
 type NetSMTPChecker struct {
-	Dialer          SMTPDialer
-	ConnectTimeout  time.Duration
-	ReadTimeout     time.Duration
-	EhloTimeout     time.Duration
-	HeloName        string
-	ProviderProfile string
-	RateLimiter     *RateLimiter
+	Dialer              SMTPDialer
+	ConnectTimeout      time.Duration
+	ReadTimeout         time.Duration
+	EhloTimeout         time.Duration
+	HeloName            string
+	ProviderProfile     string
+	RateLimiter         *RateLimiter
+	ReplyPolicyEngine   *ProviderReplyPolicyEngine
+	AdaptiveRetryEnable bool
 }
 
 func (c NetSMTPChecker) Check(ctx context.Context, host, email string) Result {
@@ -58,7 +60,14 @@ func (c NetSMTPChecker) Check(ctx context.Context, host, email string) Result {
 
 	if reply, res := readSMTPReply(conn, c.ReadTimeout); res != nil {
 		return *res
-	} else if result, stop := classifySMTPSessionReply("banner", reply, c.ProviderProfile, host); stop {
+	} else if result, stop := classifySMTPSessionReply(
+		"banner",
+		reply,
+		c.ProviderProfile,
+		host,
+		c.ReplyPolicyEngine,
+		c.AdaptiveRetryEnable,
+	); stop {
 		return result
 	}
 
@@ -71,7 +80,14 @@ func (c NetSMTPChecker) Check(ctx context.Context, host, email string) Result {
 
 	if reply, res := readSMTPReply(conn, c.EhloTimeout); res != nil {
 		return *res
-	} else if result, stop := classifySMTPSessionReply("ehlo", reply, c.ProviderProfile, host); stop {
+	} else if result, stop := classifySMTPSessionReply(
+		"ehlo",
+		reply,
+		c.ProviderProfile,
+		host,
+		c.ReplyPolicyEngine,
+		c.AdaptiveRetryEnable,
+	); stop {
 		return result
 	}
 
@@ -97,6 +113,8 @@ type NetSMTPProber struct {
 	RateLimiter              *RateLimiter
 	CatchAllDetectionEnabled bool
 	RandomLocalPart          func() string
+	ReplyPolicyEngine        *ProviderReplyPolicyEngine
+	AdaptiveRetryEnable      bool
 }
 
 func (p NetSMTPProber) Check(ctx context.Context, host, email string) Result {
@@ -134,7 +152,14 @@ func (p NetSMTPProber) Check(ctx context.Context, host, email string) Result {
 
 	if reply, res := readSMTPReply(conn, p.ReadTimeout); res != nil {
 		return *res
-	} else if result, stop := classifySMTPSessionReply("banner", reply, p.ProviderProfile, host); stop {
+	} else if result, stop := classifySMTPSessionReply(
+		"banner",
+		reply,
+		p.ProviderProfile,
+		host,
+		p.ReplyPolicyEngine,
+		p.AdaptiveRetryEnable,
+	); stop {
 		return result
 	}
 
@@ -151,7 +176,14 @@ func (p NetSMTPProber) Check(ctx context.Context, host, email string) Result {
 
 	if reply, res := readSMTPReply(conn, p.ReadTimeout); res != nil {
 		return *res
-	} else if result, stop := classifySMTPSessionReply("mail_from", reply, p.ProviderProfile, host); stop {
+	} else if result, stop := classifySMTPSessionReply(
+		"mail_from",
+		reply,
+		p.ProviderProfile,
+		host,
+		p.ReplyPolicyEngine,
+		p.AdaptiveRetryEnable,
+	); stop {
 		return result
 	}
 
@@ -198,10 +230,24 @@ func (p NetSMTPProber) sayHello(conn net.Conn, host string) Result {
 		}
 		if heloReply, res := readSMTPReply(conn, p.EhloTimeout); res != nil {
 			return *res
-		} else if result, stop := classifySMTPSessionReply("helo", heloReply, p.ProviderProfile, host); stop {
+		} else if result, stop := classifySMTPSessionReply(
+			"helo",
+			heloReply,
+			p.ProviderProfile,
+			host,
+			p.ReplyPolicyEngine,
+			p.AdaptiveRetryEnable,
+		); stop {
 			return result
 		}
-	} else if result, stop := classifySMTPSessionReply("ehlo", reply, p.ProviderProfile, host); stop {
+	} else if result, stop := classifySMTPSessionReply(
+		"ehlo",
+		reply,
+		p.ProviderProfile,
+		host,
+		p.ReplyPolicyEngine,
+		p.AdaptiveRetryEnable,
+	); stop {
 		return result
 	}
 
@@ -221,7 +267,14 @@ func (p NetSMTPProber) checkRcpt(conn net.Conn, host, email string, allowValid b
 		return *res
 	}
 
-	return classifySMTPRcptReply(reply, p.ProviderProfile, host, allowValid)
+	return classifySMTPRcptReply(
+		reply,
+		p.ProviderProfile,
+		host,
+		allowValid,
+		p.ReplyPolicyEngine,
+		p.AdaptiveRetryEnable,
+	)
 }
 
 func (p NetSMTPProber) checkCatchAll(conn net.Conn, host, email string) Result {

@@ -627,6 +627,21 @@ func (w *Worker) verifierForMode(mode string, policy policyConfig, hasPolicy boo
 				MailFromAddress:          cfg.MailFromAddress,
 				RateLimiter:              verifier.NewRateLimiter(cfg.SMTPRateLimitPerMinute),
 				CatchAllDetectionEnabled: cfg.CatchAllDetectionEnabled,
+				ReplyPolicyEngine:        cfg.ProviderReplyPolicyEngine,
+				AdaptiveRetryEnable:      cfg.AdaptiveRetryEnabled,
+			}
+		}
+	} else {
+		smtpFactory = func(cfg verifier.Config) verifier.SMTPChecker {
+			return verifier.NetSMTPChecker{
+				Dialer:              nil,
+				ConnectTimeout:      time.Duration(cfg.SMTPConnectTimeout) * time.Millisecond,
+				ReadTimeout:         time.Duration(cfg.SMTPReadTimeout) * time.Millisecond,
+				EhloTimeout:         time.Duration(cfg.SMTPEhloTimeout) * time.Millisecond,
+				HeloName:            cfg.HeloName,
+				RateLimiter:         verifier.NewRateLimiter(cfg.SMTPRateLimitPerMinute),
+				ReplyPolicyEngine:   cfg.ProviderReplyPolicyEngine,
+				AdaptiveRetryEnable: cfg.AdaptiveRetryEnabled,
 			}
 		}
 	}

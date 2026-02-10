@@ -45,22 +45,25 @@
     <script>
         (() => {
             const source = new EventSource('{{ .LiveStreamPath }}');
-            let lastReload = 0;
+            const close = () => {
+                try {
+                    source.close();
+                } catch (_) {}
+            };
 
             source.addEventListener('stats', (event) => {
                 try {
                     const payload = JSON.parse(event.data);
                     window.dispatchEvent(new CustomEvent('cp:live', { detail: payload }));
                 } catch (_) {}
-
-                {{ if .AutoReloadOnLive }}
-                const now = Date.now();
-                if (now - lastReload > 12000) {
-                    lastReload = now;
-                    window.location.reload();
-                }
-                {{ end }}
             });
+
+            source.addEventListener('error', () => {
+                // Keep page stable on stream interruptions; browser reconnects automatically.
+            });
+
+            window.addEventListener('pagehide', close);
+            window.addEventListener('beforeunload', close);
         })();
     </script>
     {{ end }}
