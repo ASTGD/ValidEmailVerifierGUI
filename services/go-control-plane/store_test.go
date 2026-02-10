@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -161,6 +162,139 @@ func TestNormalizeCanaryPercent(t *testing.T) {
 	}
 	if value := normalizeCanaryPercent(25); value != 25 {
 		t.Fatalf("expected canary 25 to pass through, got %d", value)
+	}
+}
+
+func TestApplySMTPPolicyPromoteStateActivatesTargetAndDeactivatesCurrent(t *testing.T) {
+	now := "2026-01-02T03:04:05Z"
+	records := map[string]SMTPPolicyVersionRecord{
+		"v1": {
+			Version:       "v1",
+			Status:        "active",
+			Active:        true,
+			CanaryPercent: 100,
+		},
+	}
+
+	updated, target, activeVersion := applySMTPPolicyPromoteState(records, "v1", "v2", 25, "ops", now)
+	if activeVersion != "v2" {
+		t.Fatalf("expected active version v2, got %q", activeVersion)
+	}
+	if target.Version != "v2" || !target.Active || target.Status != "active" {
+		t.Fatalf("expected target v2 active record, got %+v", target)
+	}
+	if target.CanaryPercent != 25 {
+		t.Fatalf("expected target canary 25, got %d", target.CanaryPercent)
+	}
+
+	previous := updated["v1"]
+	if previous.Active {
+		t.Fatalf("expected previous version to be inactive, got %+v", previous)
+	}
+	if previous.Status != "inactive" {
+		t.Fatalf("expected previous version status inactive, got %q", previous.Status)
+	}
+}
+
+func TestSelectSMTPRollbackTargetSelectsPreviousPromotedVersion(t *testing.T) {
+	records := map[string]SMTPPolicyVersionRecord{
+		"v1": {Version: "v1", Status: "inactive"},
+		"v2": {Version: "v2", Status: "active", Active: true},
+	}
+	history := []SMTPPolicyRolloutRecord{
+		{Action: "rollback", Version: "v1", CanaryPercent: 100},
+		{Action: "promote", Version: "v2", CanaryPercent: 40},
+		{Action: "promote", Version: "v1", CanaryPercent: 100},
+	}
+
+	version, canary, err := selectSMTPRollbackTarget(records, "v2", history)
+	if err != nil {
+		t.Fatalf("expected rollback target, got error: %v", err)
+	}
+	if version != "v1" {
+		t.Fatalf("expected rollback target v1, got %q", version)
+	}
+	if canary != 100 {
+		t.Fatalf("expected rollback canary 100, got %d", canary)
+	}
+
+	now := "2026-01-04T03:04:05Z"
+	updated, target, activeVersion := applySMTPPolicyPromoteState(records, "v2", version, canary, "ops", now)
+	if activeVersion != "v1" {
+		t.Fatalf("expected active version to switch to v1, got %q", activeVersion)
+	}
+	if !target.Active || target.Status != "active" {
+		t.Fatalf("expected rollback target record active, got %+v", target)
+	}
+	if updated["v2"].Active {
+		t.Fatalf("expected previous active version v2 to be inactive after rollback promote, got %+v", updated["v2"])
+	}
+}
+
+func TestSelectSMTPRollbackTargetErrorsWhenNoCandidateExists(t *testing.T) {
+	records := map[string]SMTPPolicyVersionRecord{
+		"v2": {Version: "v2", Status: "active", Active: true},
+	}
+	history := []SMTPPolicyRolloutRecord{
+		{Action: "promote", Version: "v2", CanaryPercent: 100},
+	}
+
+	_, _, err := selectSMTPRollbackTarget(records, "v2", history)
+	if err == nil || !strings.Contains(err.Error(), "no rollback target available") {
+		t.Fatalf("expected no rollback target error, got %v", err)
+	}
+}
+
+func TestBuildSMTPPolicyVersionListMarksActiveVersion(t *testing.T) {
+	v1Payload, err := json.Marshal(SMTPPolicyVersionRecord{
+		Version:       "v1",
+		Status:        "inactive",
+		CanaryPercent: 10,
+	})
+	if err != nil {
+		t.Fatalf("failed to marshal v1 payload: %v", err)
+	}
+	v2Payload, err := json.Marshal(SMTPPolicyVersionRecord{
+		Version:       "v2",
+		Status:        "active",
+		CanaryPercent: 60,
+	})
+	if err != nil {
+		t.Fatalf("failed to marshal v2 payload: %v", err)
+	}
+
+	items := buildSMTPPolicyVersionList(map[string]string{
+		"v1": string(v1Payload),
+		"v2": string(v2Payload),
+	}, "v2")
+
+	if len(items) != 2 {
+		t.Fatalf("expected 2 policy version items, got %d", len(items))
+	}
+
+	activeCount := 0
+	for _, item := range items {
+		if item.Active {
+			activeCount++
+			if item.Version != "v2" {
+				t.Fatalf("expected only v2 to be active, got %q", item.Version)
+			}
+		}
+	}
+	if activeCount != 1 {
+		t.Fatalf("expected exactly one active version, got %d", activeCount)
+	}
+}
+
+func TestBuildSMTPPolicyRolloutRecordSupportsPromoteAndRollbackActions(t *testing.T) {
+	promote := buildSMTPPolicyRolloutRecord("promote", "v3", 20, "ops", "canary start", "2026-01-02T03:04:05Z")
+	if promote.Action != "promote" || promote.Version != "v3" {
+		t.Fatalf("unexpected promote rollout entry: %+v", promote)
+	}
+
+	rollback := buildSMTPPolicyRolloutRecord("rollback", "v2", 100, "ops", "restore previous", "2026-01-03T03:04:05Z")
+	if rollback.Action != "rollback" || rollback.Version != "v2" {
+		t.Fatalf("unexpected rollback rollout entry: %+v", rollback)
 	}
 }
 

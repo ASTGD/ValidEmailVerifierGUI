@@ -916,28 +916,7 @@ func (s *Store) ListSMTPPolicyVersions(ctx context.Context) ([]SMTPPolicyVersion
 		return nil, "", err
 	}
 
-	items := make([]SMTPPolicyVersionRecord, 0, len(values))
-	for version, payload := range values {
-		normalizedVersion := normalizePolicyVersion(version)
-		if normalizedVersion == "" {
-			continue
-		}
-
-		record := SMTPPolicyVersionRecord{}
-		if unmarshalErr := json.Unmarshal([]byte(payload), &record); unmarshalErr != nil {
-			continue
-		}
-
-		record.Version = normalizePolicyVersion(record.Version)
-		if record.Version == "" {
-			record.Version = normalizedVersion
-		}
-		record.Status = normalizePolicyVersionStatus(record.Status)
-		record.CanaryPercent = normalizeCanaryPercent(record.CanaryPercent)
-		record.Active = strings.EqualFold(record.Version, activeVersion)
-
-		items = append(items, record)
-	}
+	items := buildSMTPPolicyVersionList(values, activeVersion)
 
 	sort.Slice(items, func(i, j int) bool {
 		if items[i].UpdatedAt == items[j].UpdatedAt {
@@ -972,39 +951,19 @@ func (s *Store) PromoteSMTPPolicyVersion(
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	if activeVersion != "" && activeVersion != version {
-		current := records[activeVersion]
-		current.Version = activeVersion
-		current.Active = false
-		current.Status = "inactive"
-		current.UpdatedAt = now
-		current.UpdatedBy = triggeredBy
-		records[activeVersion] = current
-	}
-
-	target := records[version]
-	target.Version = version
-	target.Active = true
-	target.Status = "active"
-	target.CanaryPercent = canaryPercent
-	target.UpdatedAt = now
-	target.PromotedAt = now
-	target.RolledBackAt = ""
-	target.UpdatedBy = triggeredBy
-	records[version] = target
-
-	if err := s.saveSMTPPolicyVersionMap(ctx, records, version); err != nil {
+	records, target, nextActiveVersion := applySMTPPolicyPromoteState(
+		records,
+		activeVersion,
+		version,
+		canaryPercent,
+		triggeredBy,
+		now,
+	)
+	if err := s.saveSMTPPolicyVersionMap(ctx, records, nextActiveVersion); err != nil {
 		return SMTPPolicyVersionRecord{}, err
 	}
 
-	entry := SMTPPolicyRolloutRecord{
-		Action:        "promote",
-		Version:       version,
-		CanaryPercent: canaryPercent,
-		TriggeredBy:   triggeredBy,
-		Notes:         strings.TrimSpace(notes),
-		CreatedAt:     now,
-	}
+	entry := buildSMTPPolicyRolloutRecord("promote", version, canaryPercent, triggeredBy, notes, now)
 	if historyErr := s.appendSMTPPolicyRolloutHistory(ctx, entry); historyErr != nil {
 		return SMTPPolicyVersionRecord{}, historyErr
 	}
@@ -1030,26 +989,9 @@ func (s *Store) RollbackSMTPPolicyVersion(ctx context.Context, triggeredBy strin
 		return SMTPPolicyVersionRecord{}, err
 	}
 
-	targetVersion := ""
-	targetCanary := 100
-	for _, entry := range history {
-		if entry.Action != "promote" {
-			continue
-		}
-		normalizedVersion := normalizePolicyVersion(entry.Version)
-		if normalizedVersion == "" || normalizedVersion == activeVersion {
-			continue
-		}
-		if _, ok := records[normalizedVersion]; !ok {
-			continue
-		}
-		targetVersion = normalizedVersion
-		targetCanary = normalizeCanaryPercent(entry.CanaryPercent)
-		break
-	}
-
-	if targetVersion == "" {
-		return SMTPPolicyVersionRecord{}, fmt.Errorf("no rollback target available")
+	targetVersion, targetCanary, err := selectSMTPRollbackTarget(records, activeVersion, history)
+	if err != nil {
+		return SMTPPolicyVersionRecord{}, err
 	}
 
 	record, err := s.PromoteSMTPPolicyVersion(ctx, targetVersion, targetCanary, triggeredBy, notes)
@@ -1058,20 +1000,13 @@ func (s *Store) RollbackSMTPPolicyVersion(ctx context.Context, triggeredBy strin
 	}
 
 	record.RolledBackAt = time.Now().UTC().Format(time.RFC3339)
+	record.Active = true
 	record.Status = "active"
-	records[targetVersion] = record
-	if err := s.saveSMTPPolicyVersionMap(ctx, records, targetVersion); err != nil {
+	if err := s.upsertSMTPPolicyVersionRecord(ctx, record); err != nil {
 		return SMTPPolicyVersionRecord{}, err
 	}
 
-	entry := SMTPPolicyRolloutRecord{
-		Action:        "rollback",
-		Version:       targetVersion,
-		CanaryPercent: targetCanary,
-		TriggeredBy:   triggeredBy,
-		Notes:         strings.TrimSpace(notes),
-		CreatedAt:     record.RolledBackAt,
-	}
+	entry := buildSMTPPolicyRolloutRecord("rollback", targetVersion, targetCanary, triggeredBy, notes, record.RolledBackAt)
 	if historyErr := s.appendSMTPPolicyRolloutHistory(ctx, entry); historyErr != nil {
 		return SMTPPolicyVersionRecord{}, historyErr
 	}
@@ -1142,6 +1077,112 @@ func (s *Store) loadSMTPPolicyVersionMap(ctx context.Context) (map[string]SMTPPo
 	return records, activeVersion, nil
 }
 
+func buildSMTPPolicyVersionList(values map[string]string, activeVersion string) []SMTPPolicyVersionRecord {
+	normalizedActiveVersion := normalizePolicyVersion(activeVersion)
+	items := make([]SMTPPolicyVersionRecord, 0, len(values))
+	for version, payload := range values {
+		normalizedVersion := normalizePolicyVersion(version)
+		if normalizedVersion == "" {
+			continue
+		}
+
+		record := SMTPPolicyVersionRecord{}
+		if unmarshalErr := json.Unmarshal([]byte(payload), &record); unmarshalErr != nil {
+			continue
+		}
+
+		record.Version = normalizePolicyVersion(record.Version)
+		if record.Version == "" {
+			record.Version = normalizedVersion
+		}
+		record.Status = normalizePolicyVersionStatus(record.Status)
+		record.CanaryPercent = normalizeCanaryPercent(record.CanaryPercent)
+		record.Active = strings.EqualFold(record.Version, normalizedActiveVersion)
+
+		items = append(items, record)
+	}
+
+	return items
+}
+
+func applySMTPPolicyPromoteState(
+	records map[string]SMTPPolicyVersionRecord,
+	activeVersion string,
+	version string,
+	canaryPercent int,
+	triggeredBy string,
+	now string,
+) (map[string]SMTPPolicyVersionRecord, SMTPPolicyVersionRecord, string) {
+	updated := make(map[string]SMTPPolicyVersionRecord, len(records))
+	for key, value := range records {
+		updated[key] = value
+	}
+
+	if activeVersion != "" && activeVersion != version {
+		current := updated[activeVersion]
+		current.Version = activeVersion
+		current.Active = false
+		current.Status = "inactive"
+		current.UpdatedAt = now
+		current.UpdatedBy = triggeredBy
+		updated[activeVersion] = current
+	}
+
+	target := updated[version]
+	target.Version = version
+	target.Active = true
+	target.Status = "active"
+	target.CanaryPercent = canaryPercent
+	target.UpdatedAt = now
+	target.PromotedAt = now
+	target.RolledBackAt = ""
+	target.UpdatedBy = triggeredBy
+	updated[version] = target
+
+	return updated, target, version
+}
+
+func selectSMTPRollbackTarget(
+	records map[string]SMTPPolicyVersionRecord,
+	activeVersion string,
+	history []SMTPPolicyRolloutRecord,
+) (string, int, error) {
+	for _, entry := range history {
+		if entry.Action != "promote" {
+			continue
+		}
+		normalizedVersion := normalizePolicyVersion(entry.Version)
+		if normalizedVersion == "" || normalizedVersion == activeVersion {
+			continue
+		}
+		if _, ok := records[normalizedVersion]; !ok {
+			continue
+		}
+
+		return normalizedVersion, normalizeCanaryPercent(entry.CanaryPercent), nil
+	}
+
+	return "", 0, fmt.Errorf("no rollback target available")
+}
+
+func buildSMTPPolicyRolloutRecord(
+	action string,
+	version string,
+	canaryPercent int,
+	triggeredBy string,
+	notes string,
+	createdAt string,
+) SMTPPolicyRolloutRecord {
+	return SMTPPolicyRolloutRecord{
+		Action:        normalizePolicyAction(action),
+		Version:       normalizePolicyVersion(version),
+		CanaryPercent: normalizeCanaryPercent(canaryPercent),
+		TriggeredBy:   strings.TrimSpace(triggeredBy),
+		Notes:         strings.TrimSpace(notes),
+		CreatedAt:     createdAt,
+	}
+}
+
 func (s *Store) saveSMTPPolicyVersionMap(ctx context.Context, records map[string]SMTPPolicyVersionRecord, activeVersion string) error {
 	pipe := s.rdb.Pipeline()
 	for version, record := range records {
@@ -1167,6 +1208,22 @@ func (s *Store) saveSMTPPolicyVersionMap(ctx context.Context, records map[string
 
 	_, err := pipe.Exec(ctx)
 	return err
+}
+
+func (s *Store) upsertSMTPPolicyVersionRecord(ctx context.Context, record SMTPPolicyVersionRecord) error {
+	record.Version = normalizePolicyVersion(record.Version)
+	if record.Version == "" {
+		return fmt.Errorf("version is required")
+	}
+
+	record.Status = normalizePolicyVersionStatus(record.Status)
+	record.CanaryPercent = normalizeCanaryPercent(record.CanaryPercent)
+	payload, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+
+	return s.rdb.HSet(ctx, smtpPolicyVersionsKey, record.Version, payload).Err()
 }
 
 func (s *Store) appendSMTPPolicyRolloutHistory(ctx context.Context, entry SMTPPolicyRolloutRecord) error {
