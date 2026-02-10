@@ -22,6 +22,9 @@ class VerifierChunkDetailsController
                 'verification_mode' => $chunk->job?->verification_mode?->value ?? VerificationMode::Enhanced->value,
                 'processing_stage' => $processingStage,
                 'worker_capability_required' => $processingStage === 'smtp_probe' ? 'smtp_probe' : 'screening',
+                'routing_provider' => $chunk->routing_provider,
+                'preferred_pool' => $chunk->preferred_pool,
+                'max_probe_attempts' => $chunk->max_probe_attempts,
                 'input' => [
                     'disk' => $chunk->input_disk,
                     'key' => $chunk->input_key,

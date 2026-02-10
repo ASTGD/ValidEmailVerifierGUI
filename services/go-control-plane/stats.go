@@ -117,6 +117,11 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 		providerPolicyState = ProviderPolicyState{}
 	}
 
+	_, activePolicyVersion, policyVersionsErr := s.store.ListSMTPPolicyVersions(ctx)
+	if policyVersionsErr != nil {
+		activePolicyVersion = ""
+	}
+
 	providerHealth := aggregateProviderHealth(workers, providerModesMap, thresholdsFromConfig(s.cfg))
 	providerModes := make([]ProviderModeState, 0, len(providerModesMap))
 	for _, mode := range providerModesMap {
@@ -153,6 +158,7 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 			PolicyEngineEnabled:  s.cfg.ProviderPolicyEngineEnabled,
 			AdaptiveRetryEnabled: s.cfg.AdaptiveRetryEnabled,
 			AutoProtectEnabled:   s.cfg.ProviderAutoprotectEnabled,
+			ActiveVersion:        activePolicyVersion,
 			LastReloadAt:         providerPolicyState.LastReloadAt,
 			ReloadCount:          providerPolicyState.ReloadCount,
 			Modes:                providerModes,

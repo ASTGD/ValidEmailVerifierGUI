@@ -291,14 +291,59 @@ func (p NetSMTPProber) checkCatchAll(conn net.Conn, host, email string) Result {
 
 	result := p.checkRcpt(conn, host, randomEmail, true)
 	if result.Category == CategoryValid {
-		return Result{Category: CategoryRisky, Reason: "catch_all"}
+		return Result{
+			Category:           CategoryRisky,
+			Reason:             "catch_all_high_confidence",
+			ReasonCode:         "catch_all_high_confidence",
+			DecisionClass:      DecisionUnknown,
+			DecisionConfidence: "high",
+			RetryStrategy:      "none",
+			ProviderProfile:    result.ProviderProfile,
+			SMTPCode:           result.SMTPCode,
+			EnhancedCode:       result.EnhancedCode,
+		}
 	}
 
 	if result.Category == CategoryInvalid {
-		return Result{Category: CategoryValid, Reason: "rcpt_ok"}
+		return Result{
+			Category:           CategoryValid,
+			Reason:             "rcpt_ok",
+			ReasonCode:         "rcpt_ok",
+			DecisionClass:      DecisionDeliverable,
+			DecisionConfidence: "high",
+			RetryStrategy:      "none",
+			ProviderProfile:    result.ProviderProfile,
+		}
 	}
 
-	return result
+	if result.DecisionClass == DecisionRetryable || result.DecisionClass == DecisionPolicyBlocked || result.DecisionClass == DecisionUnknown {
+		return Result{
+			Category:           CategoryRisky,
+			Reason:             "catch_all_medium_confidence",
+			ReasonCode:         "catch_all_medium_confidence",
+			DecisionClass:      DecisionUnknown,
+			DecisionConfidence: "medium",
+			RetryStrategy:      result.RetryStrategy,
+			ProviderProfile:    result.ProviderProfile,
+			SMTPCode:           result.SMTPCode,
+			EnhancedCode:       result.EnhancedCode,
+			RetryAfterSecond:   result.RetryAfterSecond,
+			Evidence:           result.Evidence,
+		}
+	}
+
+	return Result{
+		Category:           CategoryRisky,
+		Reason:             "catch_all_low_confidence",
+		ReasonCode:         "catch_all_low_confidence",
+		DecisionClass:      DecisionUnknown,
+		DecisionConfidence: "low",
+		RetryStrategy:      "none",
+		ProviderProfile:    result.ProviderProfile,
+		SMTPCode:           result.SMTPCode,
+		EnhancedCode:       result.EnhancedCode,
+		Evidence:           result.Evidence,
+	}
 }
 
 func (p NetSMTPProber) randomLocalPart() string {

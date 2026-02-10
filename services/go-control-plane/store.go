@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +24,9 @@ const (
 	incidentsActiveKey     = "control_plane:incidents:active"
 	providerModesKey       = "control_plane:provider_modes"
 	providerPolicyStateKey = "control_plane:provider_policy_state"
+	smtpPolicyVersionsKey  = "control_plane:smtp_policy_versions"
+	smtpPolicyActiveKey    = "control_plane:smtp_policy_active"
+	smtpPolicyHistoryKey   = "control_plane:smtp_policy_rollout_history"
 )
 
 type RuntimeSettings struct {
@@ -899,6 +903,285 @@ func (s *Store) MarkProviderPoliciesReloaded(ctx context.Context) (ProviderPolic
 	return current, nil
 }
 
+func (s *Store) ListSMTPPolicyVersions(ctx context.Context) ([]SMTPPolicyVersionRecord, string, error) {
+	values, err := s.rdb.HGetAll(ctx, smtpPolicyVersionsKey).Result()
+	if err != nil {
+		return nil, "", err
+	}
+
+	activeVersion, err := s.rdb.Get(ctx, smtpPolicyActiveKey).Result()
+	if err == redis.Nil {
+		activeVersion = ""
+	} else if err != nil {
+		return nil, "", err
+	}
+
+	items := make([]SMTPPolicyVersionRecord, 0, len(values))
+	for version, payload := range values {
+		normalizedVersion := normalizePolicyVersion(version)
+		if normalizedVersion == "" {
+			continue
+		}
+
+		record := SMTPPolicyVersionRecord{}
+		if unmarshalErr := json.Unmarshal([]byte(payload), &record); unmarshalErr != nil {
+			continue
+		}
+
+		record.Version = normalizePolicyVersion(record.Version)
+		if record.Version == "" {
+			record.Version = normalizedVersion
+		}
+		record.Status = normalizePolicyVersionStatus(record.Status)
+		record.CanaryPercent = normalizeCanaryPercent(record.CanaryPercent)
+		record.Active = strings.EqualFold(record.Version, activeVersion)
+
+		items = append(items, record)
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].UpdatedAt == items[j].UpdatedAt {
+			return items[i].Version < items[j].Version
+		}
+		return items[i].UpdatedAt > items[j].UpdatedAt
+	})
+
+	return items, normalizePolicyVersion(activeVersion), nil
+}
+
+func (s *Store) PromoteSMTPPolicyVersion(
+	ctx context.Context,
+	version string,
+	canaryPercent int,
+	triggeredBy string,
+	notes string,
+) (SMTPPolicyVersionRecord, error) {
+	version = normalizePolicyVersion(version)
+	if version == "" {
+		return SMTPPolicyVersionRecord{}, fmt.Errorf("version is required")
+	}
+
+	canaryPercent = normalizeCanaryPercent(canaryPercent)
+	if triggeredBy == "" {
+		triggeredBy = "manual"
+	}
+
+	records, activeVersion, err := s.loadSMTPPolicyVersionMap(ctx)
+	if err != nil {
+		return SMTPPolicyVersionRecord{}, err
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	if activeVersion != "" && activeVersion != version {
+		current := records[activeVersion]
+		current.Version = activeVersion
+		current.Active = false
+		current.Status = "inactive"
+		current.UpdatedAt = now
+		current.UpdatedBy = triggeredBy
+		records[activeVersion] = current
+	}
+
+	target := records[version]
+	target.Version = version
+	target.Active = true
+	target.Status = "active"
+	target.CanaryPercent = canaryPercent
+	target.UpdatedAt = now
+	target.PromotedAt = now
+	target.RolledBackAt = ""
+	target.UpdatedBy = triggeredBy
+	records[version] = target
+
+	if err := s.saveSMTPPolicyVersionMap(ctx, records, version); err != nil {
+		return SMTPPolicyVersionRecord{}, err
+	}
+
+	entry := SMTPPolicyRolloutRecord{
+		Action:        "promote",
+		Version:       version,
+		CanaryPercent: canaryPercent,
+		TriggeredBy:   triggeredBy,
+		Notes:         strings.TrimSpace(notes),
+		CreatedAt:     now,
+	}
+	if historyErr := s.appendSMTPPolicyRolloutHistory(ctx, entry); historyErr != nil {
+		return SMTPPolicyVersionRecord{}, historyErr
+	}
+
+	return target, nil
+}
+
+func (s *Store) RollbackSMTPPolicyVersion(ctx context.Context, triggeredBy string, notes string) (SMTPPolicyVersionRecord, error) {
+	if triggeredBy == "" {
+		triggeredBy = "manual"
+	}
+
+	records, activeVersion, err := s.loadSMTPPolicyVersionMap(ctx)
+	if err != nil {
+		return SMTPPolicyVersionRecord{}, err
+	}
+	if activeVersion == "" {
+		return SMTPPolicyVersionRecord{}, fmt.Errorf("no active policy version")
+	}
+
+	history, err := s.GetSMTPPolicyRolloutHistory(ctx, 50)
+	if err != nil {
+		return SMTPPolicyVersionRecord{}, err
+	}
+
+	targetVersion := ""
+	targetCanary := 100
+	for _, entry := range history {
+		if entry.Action != "promote" {
+			continue
+		}
+		normalizedVersion := normalizePolicyVersion(entry.Version)
+		if normalizedVersion == "" || normalizedVersion == activeVersion {
+			continue
+		}
+		if _, ok := records[normalizedVersion]; !ok {
+			continue
+		}
+		targetVersion = normalizedVersion
+		targetCanary = normalizeCanaryPercent(entry.CanaryPercent)
+		break
+	}
+
+	if targetVersion == "" {
+		return SMTPPolicyVersionRecord{}, fmt.Errorf("no rollback target available")
+	}
+
+	record, err := s.PromoteSMTPPolicyVersion(ctx, targetVersion, targetCanary, triggeredBy, notes)
+	if err != nil {
+		return SMTPPolicyVersionRecord{}, err
+	}
+
+	record.RolledBackAt = time.Now().UTC().Format(time.RFC3339)
+	record.Status = "active"
+	records[targetVersion] = record
+	if err := s.saveSMTPPolicyVersionMap(ctx, records, targetVersion); err != nil {
+		return SMTPPolicyVersionRecord{}, err
+	}
+
+	entry := SMTPPolicyRolloutRecord{
+		Action:        "rollback",
+		Version:       targetVersion,
+		CanaryPercent: targetCanary,
+		TriggeredBy:   triggeredBy,
+		Notes:         strings.TrimSpace(notes),
+		CreatedAt:     record.RolledBackAt,
+	}
+	if historyErr := s.appendSMTPPolicyRolloutHistory(ctx, entry); historyErr != nil {
+		return SMTPPolicyVersionRecord{}, historyErr
+	}
+
+	return record, nil
+}
+
+func (s *Store) GetSMTPPolicyRolloutHistory(ctx context.Context, limit int) ([]SMTPPolicyRolloutRecord, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	values, err := s.rdb.LRange(ctx, smtpPolicyHistoryKey, 0, int64(limit-1)).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	history := make([]SMTPPolicyRolloutRecord, 0, len(values))
+	for _, payload := range values {
+		entry := SMTPPolicyRolloutRecord{}
+		if unmarshalErr := json.Unmarshal([]byte(payload), &entry); unmarshalErr != nil {
+			continue
+		}
+		entry.Version = normalizePolicyVersion(entry.Version)
+		if entry.Version == "" {
+			continue
+		}
+		entry.Action = normalizePolicyAction(entry.Action)
+		entry.CanaryPercent = normalizeCanaryPercent(entry.CanaryPercent)
+		history = append(history, entry)
+	}
+
+	return history, nil
+}
+
+func (s *Store) loadSMTPPolicyVersionMap(ctx context.Context) (map[string]SMTPPolicyVersionRecord, string, error) {
+	values, err := s.rdb.HGetAll(ctx, smtpPolicyVersionsKey).Result()
+	if err != nil {
+		return nil, "", err
+	}
+
+	activeVersion, err := s.rdb.Get(ctx, smtpPolicyActiveKey).Result()
+	if err == redis.Nil {
+		activeVersion = ""
+	} else if err != nil {
+		return nil, "", err
+	}
+	activeVersion = normalizePolicyVersion(activeVersion)
+
+	records := make(map[string]SMTPPolicyVersionRecord, len(values))
+	for version, payload := range values {
+		normalizedVersion := normalizePolicyVersion(version)
+		if normalizedVersion == "" {
+			continue
+		}
+
+		record := SMTPPolicyVersionRecord{}
+		if unmarshalErr := json.Unmarshal([]byte(payload), &record); unmarshalErr != nil {
+			continue
+		}
+
+		record.Version = normalizedVersion
+		record.Status = normalizePolicyVersionStatus(record.Status)
+		record.CanaryPercent = normalizeCanaryPercent(record.CanaryPercent)
+		record.Active = normalizedVersion == activeVersion
+		records[normalizedVersion] = record
+	}
+
+	return records, activeVersion, nil
+}
+
+func (s *Store) saveSMTPPolicyVersionMap(ctx context.Context, records map[string]SMTPPolicyVersionRecord, activeVersion string) error {
+	pipe := s.rdb.Pipeline()
+	for version, record := range records {
+		record.Version = normalizePolicyVersion(version)
+		if record.Version == "" {
+			continue
+		}
+		record.Status = normalizePolicyVersionStatus(record.Status)
+		record.CanaryPercent = normalizeCanaryPercent(record.CanaryPercent)
+		record.Active = record.Version == activeVersion
+		payload, err := json.Marshal(record)
+		if err != nil {
+			return err
+		}
+		pipe.HSet(ctx, smtpPolicyVersionsKey, record.Version, payload)
+	}
+
+	if activeVersion == "" {
+		pipe.Del(ctx, smtpPolicyActiveKey)
+	} else {
+		pipe.Set(ctx, smtpPolicyActiveKey, activeVersion, 0)
+	}
+
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+func (s *Store) appendSMTPPolicyRolloutHistory(ctx context.Context, entry SMTPPolicyRolloutRecord) error {
+	payload, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+
+	pipe := s.rdb.Pipeline()
+	pipe.LPush(ctx, smtpPolicyHistoryKey, payload)
+	pipe.LTrim(ctx, smtpPolicyHistoryKey, 0, 199)
+	_, err = pipe.Exec(ctx)
+	return err
+}
+
 func incidentKey(key string) string {
 	return fmt.Sprintf("control_plane:incident:%s", key)
 }
@@ -921,6 +1204,38 @@ func normalizeProviderMode(mode string) string {
 	default:
 		return ""
 	}
+}
+
+func normalizePolicyVersion(version string) string {
+	return strings.TrimSpace(version)
+}
+
+func normalizePolicyVersionStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "active", "inactive", "draft":
+		return strings.ToLower(strings.TrimSpace(status))
+	default:
+		return "draft"
+	}
+}
+
+func normalizePolicyAction(action string) string {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "promote", "rollback":
+		return strings.ToLower(strings.TrimSpace(action))
+	default:
+		return "promote"
+	}
+}
+
+func normalizeCanaryPercent(value int) int {
+	if value <= 0 {
+		return 100
+	}
+	if value > 100 {
+		return 100
+	}
+	return value
 }
 
 func staleWorkerDeleteKeys(workerID string) []string {

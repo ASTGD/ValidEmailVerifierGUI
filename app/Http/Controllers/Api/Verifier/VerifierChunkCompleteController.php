@@ -28,6 +28,18 @@ class VerifierChunkCompleteController
         $engineServerId = (int) ($chunk->engine_server_id ?? 0);
         $totalCount = (int) ($payload['email_count'] ?? $chunk->email_count ?? 0);
         $processingStage = $this->normalizeProcessingStage((string) ($chunk->processing_stage ?? ''));
+        $completedByWorkerId = trim((string) ($chunk->assigned_worker_id ?? ''));
+        $lastWorkerIds = array_values(array_unique(array_filter(array_map(
+            static fn ($value): string => trim((string) $value),
+            is_array($chunk->last_worker_ids) ? $chunk->last_worker_ids : []
+        ))));
+        if ($completedByWorkerId !== '') {
+            $lastWorkerIds[] = $completedByWorkerId;
+            $lastWorkerIds = array_values(array_unique($lastWorkerIds));
+            if (count($lastWorkerIds) > 5) {
+                $lastWorkerIds = array_slice($lastWorkerIds, -5);
+            }
+        }
 
         if ($chunk->status === 'completed') {
             if (! $this->payloadMatches($chunk, $payload, $outputDisk)) {
@@ -54,6 +66,8 @@ class VerifierChunkCompleteController
             'candidate_count' => 0,
             'hard_invalid_count' => 0,
             'probe_chunk_id' => null,
+            'probe_chunk_ids' => [],
+            'probe_chunk_count' => 0,
         ];
         $probeStage = ['enabled' => false, 'reason' => null];
 
@@ -110,6 +124,7 @@ class VerifierChunkCompleteController
             'claim_token' => null,
             'engine_server_id' => null,
             'assigned_worker_id' => null,
+            'last_worker_ids' => $lastWorkerIds,
         ]);
 
         if ($chunk->job) {
@@ -119,6 +134,8 @@ class VerifierChunkCompleteController
                     'probe_candidate_count' => $screeningPlan['candidate_count'],
                     'hard_invalid_count' => $screeningPlan['hard_invalid_count'],
                     'probe_chunk_id' => $screeningPlan['probe_chunk_id'],
+                    'probe_chunk_ids' => $screeningPlan['probe_chunk_ids'] ?? [],
+                    'probe_chunk_count' => $screeningPlan['probe_chunk_count'] ?? 0,
                     'probe_handoff_enabled' => (bool) $probeStage['enabled'],
                 ], $request->user()?->id);
 

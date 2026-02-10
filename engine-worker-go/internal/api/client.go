@@ -40,6 +40,9 @@ type ClaimNextResponse struct {
 		VerificationMode         string `json:"verification_mode"`
 		ProcessingStage          string `json:"processing_stage"`
 		WorkerCapabilityRequired string `json:"worker_capability_required"`
+		RoutingProvider          string `json:"routing_provider"`
+		PreferredPool            string `json:"preferred_pool"`
+		MaxProbeAttempts         int    `json:"max_probe_attempts"`
 		LeaseExpiresAt           string `json:"lease_expires_at"`
 		Input                    struct {
 			Disk string `json:"disk"`

@@ -30,9 +30,13 @@ Lightweight Go service that tracks worker heartbeats, desired state, and pool sc
 - `GET /api/alerts`
 - `GET /api/slo`
 - `GET /api/providers/health`
+- `GET /api/providers/quality`
 - `GET /api/providers/policies`
 - `POST /api/providers/{provider}/mode`
 - `POST /api/providers/policies/reload`
+- `GET /api/policies/versions`
+- `POST /api/policies/promote`
+- `POST /api/policies/rollback`
 - `GET /metrics` (Prometheus format; auth required)
 
 All endpoints require `Authorization: Bearer <CONTROL_PLANE_TOKEN>`.
@@ -44,6 +48,7 @@ All endpoints require `Authorization: Bearer <CONTROL_PLANE_TOKEN>`.
 - Alerts page: `/verifier-engine-room/alerts`
 - Runtime settings page: `/verifier-engine-room/settings`
 - Provider controls are available under Settings (mode override + policy reload).
+- Policy rollout controls are available under Settings (promote/rollback with canary tracking).
 - Poll refresh intervals for Workers/Pools/Alerts and Overview SSE cadence are configurable in Settings (stored in Redis).
 
 ## Snapshots (Phase 3)
@@ -128,3 +133,6 @@ SMTP_TO=ceo@domain.com,ops@domain.com
 - `control_plane:leader:*`
 - `control_plane:provider_modes`
 - `control_plane:provider_policy_state`
+- `control_plane:smtp_policy_versions`
+- `control_plane:smtp_policy_active`
+- `control_plane:smtp_policy_rollout_history`

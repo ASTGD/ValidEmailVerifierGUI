@@ -177,6 +177,9 @@ func TestClassifySMTPPolicyEngineTreats451Enhanced47AsRetryable(t *testing.T) {
 	if result.RetryAfterSecond <= 0 {
 		t.Fatalf("expected retry delay to be set, got %d", result.RetryAfterSecond)
 	}
+	if result.RetryStrategy == "none" {
+		t.Fatalf("expected retry strategy for retryable decision, got %q", result.RetryStrategy)
+	}
 }
 
 func TestClassifySMTPPolicyEngineKeeps57AsPolicyBlocked(t *testing.T) {
@@ -193,5 +196,14 @@ func TestClassifySMTPPolicyEngineKeeps57AsPolicyBlocked(t *testing.T) {
 	}
 	if isRetryableSMTPResult(result) {
 		t.Fatal("expected policy_blocked decision to be non-retryable")
+	}
+	if result.RetryStrategy != "policy_delay" {
+		t.Fatalf("expected policy_delay retry strategy, got %q", result.RetryStrategy)
+	}
+	if result.PolicyVersion == "" {
+		t.Fatal("expected policy version metadata to be populated")
+	}
+	if result.MatchedRuleID == "" {
+		t.Fatal("expected matched rule id metadata to be populated")
 	}
 }

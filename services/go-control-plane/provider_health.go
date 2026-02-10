@@ -15,11 +15,12 @@ type providerHealthThresholds struct {
 }
 
 type providerAggregate struct {
-	workers     int
-	tempfailSum float64
-	rejectSum   float64
-	unknownSum  float64
-	retrySum    float64
+	workers        int
+	tempfailSum    float64
+	rejectSum      float64
+	unknownSum     float64
+	policyBlockSum float64
+	retrySum       float64
 }
 
 func thresholdsFromConfig(cfg Config) providerHealthThresholds {
@@ -52,6 +53,7 @@ func aggregateProviderHealth(
 			entry.tempfailSum += metric.TempfailRate
 			entry.rejectSum += metric.RejectRate
 			entry.unknownSum += metric.UnknownRate
+			entry.policyBlockSum += metric.PolicyBlockRate
 			entry.retrySum += metric.AvgRetryAfter
 			aggregates[provider] = entry
 		}
@@ -87,6 +89,7 @@ func aggregateProviderHealth(
 		tempfail := averageOrZero(aggregate.tempfailSum, aggregate.workers)
 		reject := averageOrZero(aggregate.rejectSum, aggregate.workers)
 		unknown := averageOrZero(aggregate.unknownSum, aggregate.workers)
+		policyBlocked := averageOrZero(aggregate.policyBlockSum, aggregate.workers)
 		retry := averageOrZero(aggregate.retrySum, aggregate.workers)
 
 		mode := "normal"
@@ -97,14 +100,15 @@ func aggregateProviderHealth(
 		}
 
 		results = append(results, ProviderHealthSummary{
-			Provider:      provider,
-			Mode:          mode,
-			Status:        classifyProviderStatus(tempfail, reject, unknown, thresholds),
-			TempfailRate:  tempfail,
-			RejectRate:    reject,
-			UnknownRate:   unknown,
-			AvgRetryAfter: retry,
-			Workers:       workersCount,
+			Provider:          provider,
+			Mode:              mode,
+			Status:            classifyProviderStatus(tempfail, reject, unknown, thresholds),
+			TempfailRate:      tempfail,
+			RejectRate:        reject,
+			UnknownRate:       unknown,
+			PolicyBlockedRate: policyBlocked,
+			AvgRetryAfter:     retry,
+			Workers:           workersCount,
 		})
 	}
 

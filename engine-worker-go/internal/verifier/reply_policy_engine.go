@@ -16,6 +16,7 @@ type ReplyEvidence struct {
 
 type ProviderReplyPolicyEngine struct {
 	Enabled  bool                            `json:"enabled"`
+	Version  string                          `json:"version,omitempty"`
 	Profiles map[string]ProviderReplyProfile `json:"profiles"`
 }
 
@@ -28,6 +29,7 @@ type ProviderReplyProfile struct {
 }
 
 type ProviderReplyRule struct {
+	RuleID           string   `json:"rule_id,omitempty"`
 	EnhancedPrefixes []string `json:"enhanced_prefixes,omitempty"`
 	SMTPCodes        []int    `json:"smtp_codes,omitempty"`
 	MessageContains  []string `json:"message_contains,omitempty"`
@@ -49,6 +51,7 @@ type ProviderRetryPolicy struct {
 func DefaultProviderReplyPolicyEngine() *ProviderReplyPolicyEngine {
 	engine := ProviderReplyPolicyEngine{
 		Enabled:  true,
+		Version:  "v2",
 		Profiles: defaultProviderReplyProfiles(),
 	}
 
@@ -72,7 +75,7 @@ func ParseProviderReplyPolicyEngineJSON(raw string) (*ProviderReplyPolicyEngine,
 }
 
 func normalizeProviderReplyPolicyEngine(engine ProviderReplyPolicyEngine) ProviderReplyPolicyEngine {
-	defaults := ProviderReplyPolicyEngine{Profiles: defaultProviderReplyProfiles()}
+	defaults := ProviderReplyPolicyEngine{Version: "v2", Profiles: defaultProviderReplyProfiles()}
 	genericDefaults := defaults.Profiles["generic"]
 	out := engine
 	if out.Profiles == nil {
@@ -116,6 +119,10 @@ func normalizeProviderReplyPolicyEngine(engine ProviderReplyPolicyEngine) Provid
 		out.Profiles["generic"] = defaults.Profiles["generic"]
 	}
 
+	if strings.TrimSpace(out.Version) == "" {
+		out.Version = defaults.Version
+	}
+
 	return out
 }
 
@@ -125,6 +132,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 			Name: "generic",
 			EnhancedRules: []ProviderReplyRule{
 				{
+					RuleID:           "generic-enhanced-511-mailbox-not-found",
 					EnhancedPrefixes: []string{"5.1.1", "5.1.10", "5.2."},
 					DecisionClass:    DecisionUndeliverable,
 					Category:         CategoryInvalid,
@@ -132,6 +140,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					ReasonCode:       "mailbox_not_found",
 				},
 				{
+					RuleID:           "generic-enhanced-57-policy-blocked",
 					EnhancedPrefixes: []string{"5.7."},
 					DecisionClass:    DecisionPolicyBlocked,
 					Category:         CategoryRisky,
@@ -139,6 +148,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					ReasonCode:       "smtp_policy_blocked",
 				},
 				{
+					RuleID:           "generic-enhanced-42-44-retry",
 					EnhancedPrefixes: []string{"4.2.", "4.4."},
 					DecisionClass:    DecisionRetryable,
 					Category:         CategoryRisky,
@@ -148,6 +158,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 			},
 			SMTPCodeRules: []ProviderReplyRule{
 				{
+					RuleID:        "generic-smtp-421-452-retry",
 					SMTPCodes:     []int{421, 450, 451, 452},
 					DecisionClass: DecisionRetryable,
 					Category:      CategoryRisky,
@@ -155,6 +166,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					ReasonCode:    "smtp_tempfail",
 				},
 				{
+					RuleID:        "generic-smtp-550-553-undeliverable",
 					SMTPCodes:     []int{550, 551, 553},
 					DecisionClass: DecisionUndeliverable,
 					Category:      CategoryInvalid,
@@ -164,6 +176,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 			},
 			MessageRules: []ProviderReplyRule{
 				{
+					RuleID:           "generic-msg-greylist-retry",
 					MessageContains:  []string{"greylist", "try again later", "temporarily deferred"},
 					DecisionClass:    DecisionRetryable,
 					Category:         CategoryRisky,
@@ -172,6 +185,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					RetryAfterSecond: 180,
 				},
 				{
+					RuleID:          "generic-msg-policy-blocked",
 					MessageContains: []string{"policy", "blocked", "denied", "forbidden", "authentication", "auth"},
 					DecisionClass:   DecisionPolicyBlocked,
 					Category:        CategoryRisky,
@@ -179,6 +193,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					ReasonCode:      "smtp_policy_blocked",
 				},
 				{
+					RuleID:          "generic-msg-mailbox-not-found",
 					MessageContains: []string{"user unknown", "no such user", "mailbox unavailable", "recipient address rejected"},
 					DecisionClass:   DecisionUndeliverable,
 					Category:        CategoryInvalid,

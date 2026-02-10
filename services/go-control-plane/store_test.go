@@ -143,6 +143,27 @@ func TestBuildProviderModesFiltersUnknownProviders(t *testing.T) {
 	}
 }
 
+func TestNormalizePolicyVersionStatus(t *testing.T) {
+	if status := normalizePolicyVersionStatus("active"); status != "active" {
+		t.Fatalf("expected active, got %q", status)
+	}
+	if status := normalizePolicyVersionStatus("invalid"); status != "draft" {
+		t.Fatalf("expected invalid status fallback to draft, got %q", status)
+	}
+}
+
+func TestNormalizeCanaryPercent(t *testing.T) {
+	if value := normalizeCanaryPercent(0); value != 100 {
+		t.Fatalf("expected zero canary fallback to 100, got %d", value)
+	}
+	if value := normalizeCanaryPercent(101); value != 100 {
+		t.Fatalf("expected canary >100 clamp to 100, got %d", value)
+	}
+	if value := normalizeCanaryPercent(25); value != 25 {
+		t.Fatalf("expected canary 25 to pass through, got %d", value)
+	}
+}
+
 func containsString(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {

@@ -26,6 +26,9 @@ func main() {
 	serverIP := mustEnv("ENGINE_SERVER_IP")
 	serverEnv := os.Getenv("ENGINE_SERVER_ENV")
 	serverRegion := os.Getenv("ENGINE_SERVER_REGION")
+	workerPool := strings.TrimSpace(os.Getenv("WORKER_POOL"))
+	providerAffinity := parseProviderAffinity(os.Getenv("WORKER_PROVIDER_AFFINITY"))
+	trustTier := parseTrustTier(os.Getenv("WORKER_TRUST_TIER"))
 
 	pollInterval := time.Duration(envInt("POLL_INTERVAL_SECONDS", 5)) * time.Second
 	heartbeatInterval := time.Duration(envInt("HEARTBEAT_INTERVAL_SECONDS", 30)) * time.Second
@@ -97,6 +100,17 @@ func main() {
 		ProviderReplyPolicyEngine:   replyPolicyEngine,
 	}
 
+	serverMeta := map[string]interface{}{}
+	if workerPool != "" {
+		serverMeta["pool"] = workerPool
+	}
+	if providerAffinity != "" {
+		serverMeta["provider_affinity"] = providerAffinity
+	}
+	if trustTier != "" {
+		serverMeta["trust_tier"] = trustTier
+	}
+
 	cfg := worker.Config{
 		PollInterval:       pollInterval,
 		HeartbeatInterval:  heartbeatInterval,
@@ -111,6 +125,7 @@ func main() {
 			IPAddress:   serverIP,
 			Environment: serverEnv,
 			Region:      serverRegion,
+			Meta:        serverMeta,
 		},
 	}
 
@@ -241,6 +256,26 @@ func parseWorkerCapability(value string) string {
 	}
 
 	return "all"
+}
+
+func parseProviderAffinity(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "gmail", "microsoft", "yahoo", "generic":
+		return value
+	default:
+		return ""
+	}
+}
+
+func parseTrustTier(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "bronze", "silver", "gold", "platinum":
+		return value
+	default:
+		return ""
+	}
 }
 
 func parseDisposableDomains(data string) map[string]struct{} {

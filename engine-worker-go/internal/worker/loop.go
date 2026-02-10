@@ -166,10 +166,13 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 		"event":   "chunk_claimed",
 		"message": "Chunk claimed by worker.",
 		"context": map[string]interface{}{
-			"worker_id":        w.cfg.WorkerID,
-			"chunk_no":         claim.Data.ChunkNo,
-			"processing_stage": claim.Data.ProcessingStage,
-			"correlation_id":   correlationID,
+			"worker_id":          w.cfg.WorkerID,
+			"chunk_no":           claim.Data.ChunkNo,
+			"processing_stage":   claim.Data.ProcessingStage,
+			"routing_provider":   claim.Data.RoutingProvider,
+			"preferred_pool":     claim.Data.PreferredPool,
+			"max_probe_attempts": claim.Data.MaxProbeAttempts,
+			"correlation_id":     correlationID,
 		},
 	})
 
@@ -275,6 +278,8 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 			"invalid_count":    outputs.InvalidCount,
 			"risky_count":      outputs.RiskyCount,
 			"processing_stage": processingStage,
+			"routing_provider": claim.Data.RoutingProvider,
+			"preferred_pool":   claim.Data.PreferredPool,
 			"correlation_id":   correlationID,
 		},
 	})
@@ -375,23 +380,20 @@ func buildOutputs(ctx context.Context, reader io.Reader, engineVerifier verifier
 
 		output.EmailCount++
 		result := engineVerifier.Verify(ctx, line)
+		reason := reasonWithEvidence(result)
 
 		switch result.Category {
 		case verifier.CategoryInvalid:
 			output.InvalidCount++
-			_ = invalidWriter.Write([]string{line, result.Reason})
+			_ = invalidWriter.Write([]string{line, reason})
 		case verifier.CategoryRisky:
 			output.RiskyCount++
-			_ = riskyWriter.Write([]string{line, result.Reason})
+			_ = riskyWriter.Write([]string{line, reason})
 		case verifier.CategoryValid:
 			output.ValidCount++
-			_ = validWriter.Write([]string{line, result.Reason})
+			_ = validWriter.Write([]string{line, reason})
 		default:
 			output.RiskyCount++
-			reason := result.Reason
-			if reason == "" {
-				reason = "unknown"
-			}
 			_ = riskyWriter.Write([]string{line, reason})
 		}
 	}
@@ -428,6 +430,39 @@ func isHeaderLine(line string) bool {
 	}
 
 	return !strings.Contains(line, "@")
+}
+
+func reasonWithEvidence(result verifier.Result) string {
+	reason := strings.TrimSpace(result.Reason)
+	if reason == "" {
+		reason = "unknown"
+	}
+
+	segments := make([]string, 0, 6)
+	if decisionClass := strings.TrimSpace(result.DecisionClass); decisionClass != "" {
+		segments = append(segments, "decision="+decisionClass)
+	}
+	if decisionConfidence := strings.TrimSpace(result.DecisionConfidence); decisionConfidence != "" {
+		segments = append(segments, "confidence="+decisionConfidence)
+	}
+	if retryStrategy := strings.TrimSpace(result.RetryStrategy); retryStrategy != "" {
+		segments = append(segments, "retry="+retryStrategy)
+	}
+	if policyVersion := strings.TrimSpace(result.PolicyVersion); policyVersion != "" {
+		segments = append(segments, "policy="+policyVersion)
+	}
+	if rule := strings.TrimSpace(result.MatchedRuleID); rule != "" {
+		segments = append(segments, "rule="+rule)
+	}
+	if provider := strings.TrimSpace(result.ProviderProfile); provider != "" {
+		segments = append(segments, "provider="+provider)
+	}
+
+	if len(segments) == 0 {
+		return reason
+	}
+
+	return reason + ":" + strings.Join(segments, ";")
 }
 
 func firstError(errors ...error) error {

@@ -54,9 +54,13 @@ func (s *Server) Router() http.Handler {
 		router.Get("/api/alerts", s.handleAlertsRecords)
 		router.Get("/api/slo", s.handleSLO)
 		router.Get("/api/providers/health", s.handleProvidersHealth)
+		router.Get("/api/providers/quality", s.handleProvidersQuality)
 		router.Get("/api/providers/policies", s.handleProviderPolicies)
 		router.Post("/api/providers/{provider}/mode", s.handleProviderMode)
 		router.Post("/api/providers/policies/reload", s.handleProviderPoliciesReload)
+		router.Get("/api/policies/versions", s.handlePolicyVersions)
+		router.Post("/api/policies/promote", s.handlePolicyPromote)
+		router.Post("/api/policies/rollback", s.handlePolicyRollback)
 		router.Get("/metrics", s.handleMetrics)
 
 		router.Get("/ui", s.handleUIRedirect)
@@ -76,6 +80,8 @@ func (s *Server) Router() http.Handler {
 		router.Post("/ui/settings", s.requireSameOriginUI(s.handleUIUpdateSettings))
 		router.Post("/ui/providers/{provider}/mode", s.requireSameOriginUI(s.handleUIProviderMode))
 		router.Post("/ui/providers/policies/reload", s.requireSameOriginUI(s.handleUIProviderPoliciesReload))
+		router.Post("/ui/policies/promote", s.requireSameOriginUI(s.handleUIPolicyPromote))
+		router.Post("/ui/policies/rollback", s.requireSameOriginUI(s.handleUIPolicyRollback))
 
 		router.Get("/verifier-engine-room/overview", s.handleUIOverview)
 		router.Get("/verifier-engine-room/workers", s.handleUIWorkers)
@@ -93,6 +99,8 @@ func (s *Server) Router() http.Handler {
 		router.Post("/verifier-engine-room/pools/{pool}/scale", s.requireSameOriginUI(s.handleUIScalePool))
 		router.Post("/verifier-engine-room/providers/{provider}/mode", s.requireSameOriginUI(s.handleUIProviderMode))
 		router.Post("/verifier-engine-room/providers/policies/reload", s.requireSameOriginUI(s.handleUIProviderPoliciesReload))
+		router.Post("/verifier-engine-room/policies/promote", s.requireSameOriginUI(s.handleUIPolicyPromote))
+		router.Post("/verifier-engine-room/policies/rollback", s.requireSameOriginUI(s.handleUIPolicyRollback))
 
 		router.Handle("/assets/*", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
 	})

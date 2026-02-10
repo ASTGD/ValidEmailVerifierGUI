@@ -18,6 +18,9 @@ Never paste tokens into chat or commit them to git. Use environment variables or
 - `ENGINE_API_TOKEN` (required) — Sanctum token for verifier-service
 - `WORKER_ID` (optional) — defaults to hostname
 - `WORKER_CAPABILITY` (optional) — `screening`, `smtp_probe`, or `all` (default `all`)
+- `WORKER_POOL` (optional) — routing hint for probe chunk affinity (example: `smtp-gmail`)
+- `WORKER_PROVIDER_AFFINITY` (optional) — `gmail`, `microsoft`, `yahoo`, `generic`
+- `WORKER_TRUST_TIER` (optional) — `bronze`, `silver`, `gold`, `platinum`
 - `ENGINE_SERVER_NAME` (optional) — defaults to worker id
 - `ENGINE_SERVER_IP` (required) — IP address to register/heartbeat
 - `ENGINE_SERVER_ENV` (optional) — e.g. `local`
@@ -92,8 +95,9 @@ $token = $user->createToken('engine-worker')->plainTextToken;
 - SMTP probe lane adds mailbox-level reasons:
   - valid: `rcpt_ok`
   - invalid: `rcpt_rejected`
-  - risky: `catch_all`, `smtp_tempfail`, `smtp_probe_disabled`, `smtp_probe_identity_missing`
+  - risky: `catch_all_high_confidence`, `catch_all_medium_confidence`, `catch_all_low_confidence`, `smtp_tempfail`, `smtp_probe_disabled`, `smtp_probe_identity_missing`
 - SMTP reply intelligence is provider-aware and conservative:
   - parses multiline SMTP replies and enhanced status codes (`X.Y.Z`)
   - applies deterministic decision classes internally (`deliverable`, `undeliverable`, `retryable`, `policy_blocked`, `unknown`)
   - keeps uncertain evidence in risky paths (never silently promotes unknown signals to valid)
+  - writes structured reason metadata suffixes (decision, confidence, retry strategy, rule/policy version when available) for auditability

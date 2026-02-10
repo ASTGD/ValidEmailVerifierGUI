@@ -22,6 +22,12 @@ class VerificationJobChunk extends Model
         'processing_stage',
         'parent_chunk_id',
         'source_stage',
+        'routing_provider',
+        'routing_domain',
+        'preferred_pool',
+        'rotation_group_id',
+        'last_worker_ids',
+        'max_probe_attempts',
         'input_disk',
         'input_key',
         'output_disk',
@@ -53,6 +59,8 @@ class VerificationJobChunk extends Model
         'claim_expires_at' => 'datetime',
         'available_at' => 'datetime',
         'retry_attempt' => 'integer',
+        'last_worker_ids' => 'array',
+        'max_probe_attempts' => 'integer',
     ];
 
     public function job(): BelongsTo
