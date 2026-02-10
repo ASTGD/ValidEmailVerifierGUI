@@ -351,19 +351,22 @@ func classifySMTPWithPolicyEngine(
 		reply,
 		profile,
 		retryAfter,
+		withPolicyContext(engine, rule),
 	), true
 }
 
-func smtpResult(category, reason, reasonCode, decisionClass string, reply smtpReply, profile string, retryAfter int) Result {
-	return Result{
-		Category:         category,
-		Reason:           reason,
-		ReasonCode:       reasonCode,
-		DecisionClass:    decisionClass,
-		SMTPCode:         reply.Code,
-		EnhancedCode:     reply.EnhancedCode,
-		ProviderProfile:  profile,
-		RetryAfterSecond: retryAfter,
+func smtpResult(category, reason, reasonCode, decisionClass string, reply smtpReply, profile string, retryAfter int, options ...func(*Result)) Result {
+	result := Result{
+		Category:           category,
+		Reason:             reason,
+		ReasonCode:         reasonCode,
+		DecisionClass:      decisionClass,
+		SMTPCode:           reply.Code,
+		EnhancedCode:       reply.EnhancedCode,
+		ProviderProfile:    profile,
+		RetryAfterSecond:   retryAfter,
+		DecisionConfidence: decisionConfidenceFor(decisionClass, category, reply),
+		RetryStrategy:      retryStrategyForDecision(decisionClass, reasonCode, reply),
 		Evidence: &ReplyEvidence{
 			ReasonCode:      reasonCode,
 			SMTPCode:        reply.Code,
@@ -371,6 +374,85 @@ func smtpResult(category, reason, reasonCode, decisionClass string, reply smtpRe
 			ProviderProfile: profile,
 			DecisionClass:   decisionClass,
 		},
+	}
+
+	for _, applyOption := range options {
+		if applyOption == nil {
+			continue
+		}
+
+		applyOption(&result)
+	}
+
+	return result
+}
+
+func withPolicyContext(engine *ProviderReplyPolicyEngine, rule ProviderReplyRule) func(*Result) {
+	return func(result *Result) {
+		if result == nil {
+			return
+		}
+
+		if engine != nil {
+			result.PolicyVersion = strings.TrimSpace(engine.Version)
+		}
+
+		ruleID := strings.TrimSpace(rule.RuleID)
+		if ruleID == "" {
+			ruleID = strings.TrimSpace(rule.ReasonCode)
+		}
+		if ruleID == "" {
+			ruleID = strings.TrimSpace(rule.DecisionClass)
+		}
+		result.MatchedRuleID = ruleID
+	}
+}
+
+func retryStrategyForDecision(decisionClass string, reasonCode string, reply smtpReply) string {
+	switch decisionClass {
+	case DecisionDeliverable, DecisionUndeliverable:
+		return "none"
+	case DecisionPolicyBlocked:
+		return "policy_delay"
+	case DecisionRetryable, DecisionUnknown:
+		message := strings.ToLower(strings.TrimSpace(reply.Message))
+		enhanced := strings.ToLower(strings.TrimSpace(reply.EnhancedCode))
+		reason := strings.ToLower(strings.TrimSpace(reasonCode))
+		if strings.Contains(message, "greylist") || strings.HasPrefix(enhanced, "4.7.") || strings.Contains(reason, "greylist") {
+			return "greylist"
+		}
+		return "tempfail"
+	default:
+		return "none"
+	}
+}
+
+func decisionConfidenceFor(decisionClass string, category string, reply smtpReply) string {
+	switch decisionClass {
+	case DecisionDeliverable:
+		if reply.Code >= 200 && reply.Code < 300 {
+			return "high"
+		}
+		return "medium"
+	case DecisionUndeliverable:
+		if reply.Code >= 500 {
+			return "high"
+		}
+		return "medium"
+	case DecisionPolicyBlocked:
+		return "medium"
+	case DecisionRetryable:
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(reply.EnhancedCode)), "4.7.") {
+			return "medium"
+		}
+		return "low"
+	case DecisionUnknown:
+		return "low"
+	default:
+		if category == CategoryValid || category == CategoryInvalid {
+			return "medium"
+		}
+		return "low"
 	}
 }
 
@@ -415,8 +497,21 @@ func extractEnhancedStatus(lines []string) string {
 
 func isPolicyBlockedReply(reply smtpReply) bool {
 	enhanced := strings.ToLower(strings.TrimSpace(reply.EnhancedCode))
-	if strings.HasPrefix(enhanced, "5.7.") || strings.HasPrefix(enhanced, "4.7.") {
+	if strings.HasPrefix(enhanced, "5.7.") {
 		return true
+	}
+
+	if strings.HasPrefix(enhanced, "4.7.") {
+		// 4.7.x is usually greylist/tempfail; only treat as policy-blocked when message confirms policy enforcement.
+		message := strings.ToLower(reply.Message)
+		keywords := []string{"policy", "blocked", "blocklist", "spam", "denied", "forbidden", "authentication", "auth"}
+		for _, keyword := range keywords {
+			if strings.Contains(message, keyword) {
+				return true
+			}
+		}
+
+		return false
 	}
 
 	message := strings.ToLower(reply.Message)

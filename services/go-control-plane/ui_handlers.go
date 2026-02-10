@@ -65,6 +65,8 @@ type SettingsPageData struct {
 	Settings         RuntimeSettings
 	ProviderHealth   []ProviderHealthSummary
 	ProviderPolicies ProviderPoliciesData
+	PolicyVersions   []SMTPPolicyVersionRecord
+	PolicyRollouts   []SMTPPolicyRolloutRecord
 }
 
 type LivePayload struct {
@@ -284,6 +286,15 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 		Settings:         settings,
 		ProviderHealth:   providerHealth,
 		ProviderPolicies: providerPolicies,
+		PolicyVersions:   []SMTPPolicyVersionRecord{},
+		PolicyRollouts:   []SMTPPolicyRolloutRecord{},
+	}
+
+	if versions, _, versionsErr := s.store.ListSMTPPolicyVersions(r.Context()); versionsErr == nil {
+		data.PolicyVersions = versions
+	}
+	if history, historyErr := s.store.GetSMTPPolicyRolloutHistory(r.Context(), 20); historyErr == nil {
+		data.PolicyRollouts = history
 	}
 
 	s.views.Render(w, data)
@@ -405,6 +416,52 @@ func (s *Server) handleUIProviderMode(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUIProviderPoliciesReload(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.store.MarkProviderPoliciesReloaded(r.Context()); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	http.Redirect(w, r, "/verifier-engine-room/settings?saved=1", http.StatusSeeOther)
+}
+
+func (s *Server) handleUIPolicyPromote(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid form")
+		return
+	}
+
+	version := strings.TrimSpace(r.FormValue("policy_version"))
+	if version == "" {
+		writeError(w, http.StatusBadRequest, "policy_version is required")
+		return
+	}
+
+	canaryPercent := 100
+	if value := strings.TrimSpace(r.FormValue("canary_percent")); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 1 || parsed > 100 {
+			writeError(w, http.StatusBadRequest, "canary_percent must be between 1 and 100")
+			return
+		}
+		canaryPercent = parsed
+	}
+
+	notes := strings.TrimSpace(r.FormValue("notes"))
+	if _, err := s.store.PromoteSMTPPolicyVersion(r.Context(), version, canaryPercent, "ui", notes); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	http.Redirect(w, r, "/verifier-engine-room/settings?saved=1", http.StatusSeeOther)
+}
+
+func (s *Server) handleUIPolicyRollback(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid form")
+		return
+	}
+
+	notes := strings.TrimSpace(r.FormValue("notes"))
+	if _, err := s.store.RollbackSMTPPolicyVersion(r.Context(), "ui", notes); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

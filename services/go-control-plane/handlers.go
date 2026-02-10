@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -202,6 +203,16 @@ func (s *Server) handleProvidersHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ProviderHealthResponse{Data: stats.ProviderHealth})
 }
 
+func (s *Server) handleProvidersQuality(w http.ResponseWriter, r *http.Request) {
+	stats, err := s.collectControlPlaneStats(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, ProviderQualityResponse{Data: providerQualityFromHealth(stats.ProviderHealth)})
+}
+
 func (s *Server) handleProviderMode(w http.ResponseWriter, r *http.Request) {
 	provider := chi.URLParam(r, "provider")
 	if provider == "" {
@@ -253,6 +264,79 @@ func (s *Server) handleProviderPoliciesReload(w http.ResponseWriter, r *http.Req
 	})
 }
 
+func (s *Server) handlePolicyVersions(w http.ResponseWriter, r *http.Request) {
+	versions, activeVersion, err := s.store.ListSMTPPolicyVersions(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, SMTPPolicyVersionsResponse{
+		Data:          versions,
+		ActiveVersion: activeVersion,
+	})
+}
+
+func (s *Server) handlePolicyPromote(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		Version       string `json:"version"`
+		CanaryPercent int    `json:"canary_percent"`
+		TriggeredBy   string `json:"triggered_by"`
+		Notes         string `json:"notes"`
+	}
+
+	if err := decodeJSON(r, &payload); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if strings.TrimSpace(payload.TriggeredBy) == "" {
+		payload.TriggeredBy = "api"
+	}
+
+	record, err := s.store.PromoteSMTPPolicyVersion(
+		r.Context(),
+		payload.Version,
+		payload.CanaryPercent,
+		payload.TriggeredBy,
+		payload.Notes,
+	)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": record,
+	})
+}
+
+func (s *Server) handlePolicyRollback(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		TriggeredBy string `json:"triggered_by"`
+		Notes       string `json:"notes"`
+	}
+
+	if err := decodeJSON(r, &payload); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if strings.TrimSpace(payload.TriggeredBy) == "" {
+		payload.TriggeredBy = "api"
+	}
+
+	record, err := s.store.RollbackSMTPPolicyVersion(r.Context(), payload.TriggeredBy, payload.Notes)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": record,
+	})
+}
+
 func (s *Server) handleQuarantineWorker(enabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		workerID := chi.URLParam(r, "workerID")
@@ -288,4 +372,41 @@ func decodeJSON(r *http.Request, target interface{}) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	return decoder.Decode(target)
+}
+
+func providerQualityFromHealth(health []ProviderHealthSummary) []ProviderQualitySummary {
+	quality := make([]ProviderQualitySummary, 0, len(health))
+
+	for _, provider := range health {
+		tempfailRecovery := 1.0 - provider.UnknownRate
+		if tempfailRecovery < 0 {
+			tempfailRecovery = 0
+		}
+		if tempfailRecovery > 1 {
+			tempfailRecovery = 1
+		}
+
+		retryWaste := provider.UnknownRate
+		if retryWaste < 0 {
+			retryWaste = 0
+		}
+		if retryWaste > 1 {
+			retryWaste = 1
+		}
+
+		quality = append(quality, ProviderQualitySummary{
+			Provider:            provider.Provider,
+			Mode:                provider.Mode,
+			Status:              provider.Status,
+			TempfailRate:        provider.TempfailRate,
+			RejectRate:          provider.RejectRate,
+			UnknownRate:         provider.UnknownRate,
+			PolicyBlockedRate:   provider.PolicyBlockedRate,
+			TempfailRecoveryPct: tempfailRecovery * 100,
+			RetryWastePct:       retryWaste * 100,
+			Workers:             provider.Workers,
+		})
+	}
+
+	return quality
 }

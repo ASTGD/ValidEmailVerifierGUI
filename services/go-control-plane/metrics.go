@@ -93,6 +93,8 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("# TYPE go_control_plane_provider_reject_rate gauge\n")
 	b.WriteString("# HELP go_control_plane_provider_unknown_rate Provider unknown rate.\n")
 	b.WriteString("# TYPE go_control_plane_provider_unknown_rate gauge\n")
+	b.WriteString("# HELP go_control_plane_provider_policy_blocked_rate Provider policy blocked rate.\n")
+	b.WriteString("# TYPE go_control_plane_provider_policy_blocked_rate gauge\n")
 	b.WriteString("# HELP go_control_plane_provider_avg_retry_after_seconds Provider average retry-after seconds.\n")
 	b.WriteString("# TYPE go_control_plane_provider_avg_retry_after_seconds gauge\n")
 	b.WriteString("# HELP go_control_plane_provider_workers Provider worker count reporting telemetry.\n")
@@ -104,6 +106,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(&b, "go_control_plane_provider_tempfail_rate{provider=\"%s\",mode=\"%s\",status=\"%s\"} %s\n", providerLabel, modeLabel, statusLabel, formatPromFloat(provider.TempfailRate))
 		fmt.Fprintf(&b, "go_control_plane_provider_reject_rate{provider=\"%s\",mode=\"%s\",status=\"%s\"} %s\n", providerLabel, modeLabel, statusLabel, formatPromFloat(provider.RejectRate))
 		fmt.Fprintf(&b, "go_control_plane_provider_unknown_rate{provider=\"%s\",mode=\"%s\",status=\"%s\"} %s\n", providerLabel, modeLabel, statusLabel, formatPromFloat(provider.UnknownRate))
+		fmt.Fprintf(&b, "go_control_plane_provider_policy_blocked_rate{provider=\"%s\",mode=\"%s\",status=\"%s\"} %s\n", providerLabel, modeLabel, statusLabel, formatPromFloat(provider.PolicyBlockedRate))
 		fmt.Fprintf(&b, "go_control_plane_provider_avg_retry_after_seconds{provider=\"%s\",mode=\"%s\",status=\"%s\"} %s\n", providerLabel, modeLabel, statusLabel, formatPromFloat(provider.AvgRetryAfter))
 		fmt.Fprintf(&b, "go_control_plane_provider_workers{provider=\"%s\",mode=\"%s\",status=\"%s\"} %d\n", providerLabel, modeLabel, statusLabel, provider.Workers)
 	}

@@ -137,14 +137,15 @@ type ProviderModeState struct {
 }
 
 type ProviderHealthSummary struct {
-	Provider      string  `json:"provider"`
-	Mode          string  `json:"mode"`
-	Status        string  `json:"status"`
-	TempfailRate  float64 `json:"tempfail_rate"`
-	RejectRate    float64 `json:"reject_rate"`
-	UnknownRate   float64 `json:"unknown_rate"`
-	AvgRetryAfter float64 `json:"avg_retry_after"`
-	Workers       int     `json:"workers"`
+	Provider          string  `json:"provider"`
+	Mode              string  `json:"mode"`
+	Status            string  `json:"status"`
+	TempfailRate      float64 `json:"tempfail_rate"`
+	RejectRate        float64 `json:"reject_rate"`
+	UnknownRate       float64 `json:"unknown_rate"`
+	PolicyBlockedRate float64 `json:"policy_blocked_rate"`
+	AvgRetryAfter     float64 `json:"avg_retry_after"`
+	Workers           int     `json:"workers"`
 }
 
 type ProviderHealthResponse struct {
@@ -161,6 +162,7 @@ type ProviderPoliciesData struct {
 	PolicyEngineEnabled  bool                `json:"policy_engine_enabled"`
 	AdaptiveRetryEnabled bool                `json:"adaptive_retry_enabled"`
 	AutoProtectEnabled   bool                `json:"auto_protect_enabled"`
+	ActiveVersion        string              `json:"active_version,omitempty"`
 	LastReloadAt         string              `json:"last_reload_at,omitempty"`
 	ReloadCount          int                 `json:"reload_count"`
 	Modes                []ProviderModeState `json:"modes"`
@@ -168,4 +170,46 @@ type ProviderPoliciesData struct {
 
 type ProviderPoliciesResponse struct {
 	Data ProviderPoliciesData `json:"data"`
+}
+
+type ProviderQualitySummary struct {
+	Provider            string  `json:"provider"`
+	Mode                string  `json:"mode"`
+	Status              string  `json:"status"`
+	TempfailRate        float64 `json:"tempfail_rate"`
+	RejectRate          float64 `json:"reject_rate"`
+	UnknownRate         float64 `json:"unknown_rate"`
+	PolicyBlockedRate   float64 `json:"policy_blocked_rate"`
+	TempfailRecoveryPct float64 `json:"tempfail_recovery_pct"`
+	RetryWastePct       float64 `json:"retry_waste_pct"`
+	Workers             int     `json:"workers"`
+}
+
+type ProviderQualityResponse struct {
+	Data []ProviderQualitySummary `json:"data"`
+}
+
+type SMTPPolicyVersionRecord struct {
+	Version       string `json:"version"`
+	Status        string `json:"status"`
+	Active        bool   `json:"active"`
+	CanaryPercent int    `json:"canary_percent"`
+	UpdatedAt     string `json:"updated_at,omitempty"`
+	PromotedAt    string `json:"promoted_at,omitempty"`
+	RolledBackAt  string `json:"rolled_back_at,omitempty"`
+	UpdatedBy     string `json:"updated_by,omitempty"`
+}
+
+type SMTPPolicyVersionsResponse struct {
+	Data          []SMTPPolicyVersionRecord `json:"data"`
+	ActiveVersion string                    `json:"active_version,omitempty"`
+}
+
+type SMTPPolicyRolloutRecord struct {
+	Action        string `json:"action"`
+	Version       string `json:"version"`
+	CanaryPercent int    `json:"canary_percent"`
+	TriggeredBy   string `json:"triggered_by,omitempty"`
+	Notes         string `json:"notes,omitempty"`
+	CreatedAt     string `json:"created_at"`
 }

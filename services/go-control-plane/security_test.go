@@ -77,6 +77,8 @@ func TestUIRoutesRejectCrossOriginPosts(t *testing.T) {
 		"/ui/settings",
 		"/ui/providers/gmail/mode",
 		"/ui/providers/policies/reload",
+		"/ui/policies/promote",
+		"/ui/policies/rollback",
 		"/verifier-engine-room/workers/worker-1/pause",
 		"/verifier-engine-room/workers/worker-1/resume",
 		"/verifier-engine-room/workers/worker-1/drain",
@@ -87,6 +89,8 @@ func TestUIRoutesRejectCrossOriginPosts(t *testing.T) {
 		"/verifier-engine-room/settings",
 		"/verifier-engine-room/providers/gmail/mode",
 		"/verifier-engine-room/providers/policies/reload",
+		"/verifier-engine-room/policies/promote",
+		"/verifier-engine-room/policies/rollback",
 	}
 
 	for _, route := range routes {

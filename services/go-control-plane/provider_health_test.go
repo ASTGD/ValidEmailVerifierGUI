@@ -148,6 +148,37 @@ func TestAggregateProviderHealthSkipsUnknownProviders(t *testing.T) {
 	}
 }
 
+func TestProviderQualityFromHealth(t *testing.T) {
+	health := []ProviderHealthSummary{
+		{
+			Provider:          "gmail",
+			Mode:              "normal",
+			Status:            "warning",
+			TempfailRate:      0.30,
+			RejectRate:        0.10,
+			UnknownRate:       0.20,
+			PolicyBlockedRate: 0.05,
+			Workers:           3,
+		},
+	}
+
+	quality := providerQualityFromHealth(health)
+	if len(quality) != 1 {
+		t.Fatalf("expected 1 quality record, got %d", len(quality))
+	}
+
+	record := quality[0]
+	if record.Provider != "gmail" {
+		t.Fatalf("expected gmail provider, got %q", record.Provider)
+	}
+	if record.PolicyBlockedRate != 0.05 {
+		t.Fatalf("expected policy blocked rate 0.05, got %.2f", record.PolicyBlockedRate)
+	}
+	if record.TempfailRecoveryPct <= 0 {
+		t.Fatalf("expected positive tempfail recovery percent, got %.2f", record.TempfailRecoveryPct)
+	}
+}
+
 func findProvider(items []ProviderHealthSummary, provider string) *ProviderHealthSummary {
 	for i := range items {
 		if items[i].Provider == provider {

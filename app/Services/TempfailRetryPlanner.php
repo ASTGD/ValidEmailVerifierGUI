@@ -25,7 +25,9 @@ class TempfailRetryPlanner
             return ['retry_count' => 0, 'tempfail_count' => 0, 'retry_chunk_id' => null];
         }
 
-        $maxAttempts = EngineSettings::tempfailRetryMaxAttempts();
+        $configuredMaxAttempts = EngineSettings::tempfailRetryMaxAttempts();
+        $chunkMaxAttempts = max(0, (int) ($chunk->max_probe_attempts ?? 0));
+        $maxAttempts = $chunkMaxAttempts > 0 ? $chunkMaxAttempts : $configuredMaxAttempts;
         if ($chunk->retry_attempt >= $maxAttempts) {
             return ['retry_count' => 0, 'tempfail_count' => 0, 'retry_chunk_id' => null];
         }
@@ -201,6 +203,12 @@ class TempfailRetryPlanner
                 'processing_stage' => 'smtp_probe',
                 'source_stage' => 'smtp_probe',
                 'parent_chunk_id' => $chunk->id,
+                'routing_provider' => $chunk->routing_provider,
+                'routing_domain' => $chunk->routing_domain,
+                'preferred_pool' => $chunk->preferred_pool,
+                'rotation_group_id' => $chunk->rotation_group_id,
+                'last_worker_ids' => is_array($chunk->last_worker_ids) ? $chunk->last_worker_ids : [],
+                'max_probe_attempts' => (int) ($chunk->max_probe_attempts ?? max(1, (int) config('engine.probe_max_attempts', 3))),
                 'input_disk' => $inputDisk,
                 'input_key' => $inputKey,
                 'email_count' => $retryCount,
