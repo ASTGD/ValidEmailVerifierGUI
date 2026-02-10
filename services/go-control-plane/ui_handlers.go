@@ -37,14 +37,16 @@ type OverviewData struct {
 
 type WorkersPageData struct {
 	BasePageData
-	WorkerCount int
-	Workers     []WorkerSummary
+	WorkerCount         int
+	Workers             []WorkerSummary
+	PollIntervalSeconds int
 }
 
 type PoolsPageData struct {
 	BasePageData
-	PoolCount int
-	Pools     []PoolSummary
+	PoolCount           int
+	Pools               []PoolSummary
+	PollIntervalSeconds int
 }
 
 type AlertsPageData struct {
@@ -54,6 +56,7 @@ type AlertsPageData struct {
 	Alerts              []AlertRecord
 	Incidents           []IncidentRecord
 	ActiveIncidentCount int
+	PollIntervalSeconds int
 }
 
 type SettingsPageData struct {
@@ -84,6 +87,20 @@ type LivePayload struct {
 
 func (s *Server) handleUIRedirect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/verifier-engine-room/overview", http.StatusFound)
+}
+
+func (s *Server) runtimeSettings(ctx context.Context) RuntimeSettings {
+	defaults := defaultRuntimeSettings(s.cfg)
+	if s.store == nil {
+		return defaults
+	}
+
+	settings, err := s.store.GetRuntimeSettings(ctx, defaults)
+	if err != nil {
+		return defaults
+	}
+
+	return settings
 }
 
 func (s *Server) handleUILegacyRedirect(path string) http.HandlerFunc {
@@ -160,19 +177,19 @@ func (s *Server) handleUIWorkers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	settings := s.runtimeSettings(r.Context())
 
 	data := WorkersPageData{
 		BasePageData: BasePageData{
-			Title:            "Verifier Engine Room · Workers",
-			Subtitle:         "Live worker status",
-			ActiveNav:        "workers",
-			ContentTemplate:  "workers",
-			BasePath:         "/verifier-engine-room",
-			LiveStreamPath:   "/verifier-engine-room/events",
-			AutoReloadOnLive: true,
+			Title:           "Verifier Engine Room · Workers",
+			Subtitle:        "Live worker status",
+			ActiveNav:       "workers",
+			ContentTemplate: "workers",
+			BasePath:        "/verifier-engine-room",
 		},
-		WorkerCount: stats.WorkerCount,
-		Workers:     stats.Workers,
+		WorkerCount:         stats.WorkerCount,
+		Workers:             stats.Workers,
+		PollIntervalSeconds: settings.UIWorkersRefreshSecond,
 	}
 
 	s.views.Render(w, data)
@@ -184,36 +201,36 @@ func (s *Server) handleUIPools(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	settings := s.runtimeSettings(r.Context())
 
 	data := PoolsPageData{
 		BasePageData: BasePageData{
-			Title:            "Verifier Engine Room · Pools",
-			Subtitle:         "Scale worker pools",
-			ActiveNav:        "pools",
-			ContentTemplate:  "pools",
-			BasePath:         "/verifier-engine-room",
-			LiveStreamPath:   "/verifier-engine-room/events",
-			AutoReloadOnLive: true,
+			Title:           "Verifier Engine Room · Pools",
+			Subtitle:        "Scale worker pools",
+			ActiveNav:       "pools",
+			ContentTemplate: "pools",
+			BasePath:        "/verifier-engine-room",
 		},
-		PoolCount: stats.PoolCount,
-		Pools:     stats.Pools,
+		PoolCount:           stats.PoolCount,
+		Pools:               stats.Pools,
+		PollIntervalSeconds: settings.UIPoolsRefreshSecond,
 	}
 
 	s.views.Render(w, data)
 }
 
 func (s *Server) handleUIAlerts(w http.ResponseWriter, r *http.Request) {
+	settings := s.runtimeSettings(r.Context())
 	data := AlertsPageData{
 		BasePageData: BasePageData{
-			Title:            "Verifier Engine Room · Alerts",
-			Subtitle:         "Recent control plane alerts",
-			ActiveNav:        "alerts",
-			ContentTemplate:  "alerts",
-			BasePath:         "/verifier-engine-room",
-			LiveStreamPath:   "/verifier-engine-room/events",
-			AutoReloadOnLive: true,
+			Title:           "Verifier Engine Room · Alerts",
+			Subtitle:        "Recent control plane alerts",
+			ActiveNav:       "alerts",
+			ContentTemplate: "alerts",
+			BasePath:        "/verifier-engine-room",
 		},
-		HasStorage: s.snapshots != nil,
+		HasStorage:          s.snapshots != nil,
+		PollIntervalSeconds: settings.UIAlertsRefreshSecond,
 	}
 
 	if s.snapshots != nil {
@@ -240,11 +257,7 @@ func (s *Server) handleUIAlerts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
-	defaults := defaultRuntimeSettings(s.cfg)
-	settings, err := s.store.GetRuntimeSettings(r.Context(), defaults)
-	if err != nil {
-		settings = defaults
-	}
+	settings := s.runtimeSettings(r.Context())
 
 	stats, statsErr := s.collectControlPlaneStats(r.Context())
 	providerHealth := make([]ProviderHealthSummary, 0)
@@ -266,7 +279,6 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 			ActiveNav:       "settings",
 			ContentTemplate: "settings",
 			BasePath:        "/verifier-engine-room",
-			LiveStreamPath:  "/verifier-engine-room/events",
 		},
 		Saved:            r.URL.Query().Get("saved") == "1",
 		Settings:         settings,
@@ -327,6 +339,30 @@ func (s *Server) handleUIUpdateSettings(w http.ResponseWriter, r *http.Request) 
 		quarantineThreshold = parsed
 	}
 
+	overviewLiveInterval, err := strconv.Atoi(r.FormValue("ui_overview_live_interval_seconds"))
+	if err != nil || overviewLiveInterval < 2 || overviewLiveInterval > 60 {
+		writeError(w, http.StatusBadRequest, "ui_overview_live_interval_seconds must be between 2 and 60")
+		return
+	}
+
+	workersRefreshInterval, err := strconv.Atoi(r.FormValue("ui_workers_refresh_seconds"))
+	if err != nil || workersRefreshInterval < 2 || workersRefreshInterval > 120 {
+		writeError(w, http.StatusBadRequest, "ui_workers_refresh_seconds must be between 2 and 120")
+		return
+	}
+
+	poolsRefreshInterval, err := strconv.Atoi(r.FormValue("ui_pools_refresh_seconds"))
+	if err != nil || poolsRefreshInterval < 2 || poolsRefreshInterval > 120 {
+		writeError(w, http.StatusBadRequest, "ui_pools_refresh_seconds must be between 2 and 120")
+		return
+	}
+
+	alertsRefreshInterval, err := strconv.Atoi(r.FormValue("ui_alerts_refresh_seconds"))
+	if err != nil || alertsRefreshInterval < 5 || alertsRefreshInterval > 300 {
+		writeError(w, http.StatusBadRequest, "ui_alerts_refresh_seconds must be between 5 and 300")
+		return
+	}
+
 	settings := RuntimeSettings{
 		AlertsEnabled:                r.FormValue("alerts_enabled") != "",
 		AutoActionsEnabled:           r.FormValue("auto_actions_enabled") != "",
@@ -336,6 +372,10 @@ func (s *Server) handleUIUpdateSettings(w http.ResponseWriter, r *http.Request) 
 		AutoscaleEnabled:             r.FormValue("autoscale_enabled") != "",
 		AutoscaleCanaryPercent:       autoscaleCanary,
 		QuarantineErrorRateThreshold: quarantineThreshold,
+		UIOverviewLiveIntervalSecond: overviewLiveInterval,
+		UIWorkersRefreshSecond:       workersRefreshInterval,
+		UIPoolsRefreshSecond:         poolsRefreshInterval,
+		UIAlertsRefreshSecond:        alertsRefreshInterval,
 	}
 
 	if err := s.store.SaveRuntimeSettings(r.Context(), settings); err != nil {
@@ -390,7 +430,13 @@ func (s *Server) handleUIEvents(w http.ResponseWriter, r *http.Request) {
 	s.pushLiveEvent(w, r)
 	flusher.Flush()
 
-	ticker := time.NewTicker(5 * time.Second)
+	settings := s.runtimeSettings(r.Context())
+	interval := settings.UIOverviewLiveIntervalSecond
+	if interval <= 0 {
+		interval = 5
+	}
+
+	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
 
 	for {

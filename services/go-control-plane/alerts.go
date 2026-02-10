@@ -470,20 +470,41 @@ type MultiNotifier struct {
 func NewMultiNotifier(notifiers ...Notifier) *MultiNotifier {
 	filtered := make([]Notifier, 0, len(notifiers))
 	for _, notifier := range notifiers {
-		if notifier != nil {
-			filtered = append(filtered, notifier)
+		if notifierIsNil(notifier) {
+			continue
 		}
+		filtered = append(filtered, notifier)
 	}
 	return &MultiNotifier{notifiers: filtered}
 }
 
 func (m *MultiNotifier) Notify(ctx context.Context, alert AlertEvent) error {
 	for _, notifier := range m.notifiers {
+		if notifierIsNil(notifier) {
+			continue
+		}
 		if err := notifier.Notify(ctx, alert); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func notifierIsNil(notifier Notifier) bool {
+	if notifier == nil {
+		return true
+	}
+
+	switch typed := notifier.(type) {
+	case *SlackNotifier:
+		return typed == nil
+	case *EmailNotifier:
+		return typed == nil
+	case *MultiNotifier:
+		return typed == nil
+	default:
+		return false
+	}
 }
 
 func alertSummary(alert AlertEvent) string {

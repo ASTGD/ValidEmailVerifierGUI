@@ -6,7 +6,7 @@
             <p class="text-sm text-slate-400">Latest records from MySQL `go_alerts`.</p>
         </div>
         {{ if .HasStorage }}
-        <span class="text-xs text-slate-400">{{ .AlertCount }} records</span>
+        <span id="alerts-record-count" class="text-xs text-slate-400">{{ .AlertCount }} records</span>
         {{ end }}
     </div>
 
@@ -26,7 +26,7 @@
                     <th class="py-2">Context</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-slate-800">
+            <tbody id="alerts-table-body" class="divide-y divide-slate-800">
                 {{ range .Alerts }}
                 <tr>
                     <td class="py-3 text-slate-300">{{ formatTimestamp .CreatedAt }}</td>
@@ -52,7 +52,7 @@
             <h2 class="text-lg font-semibold">Incident Timeline</h2>
             <p class="text-sm text-slate-400">Lifecycle view (active + recovered incidents).</p>
         </div>
-        <span class="text-xs text-slate-400">{{ .ActiveIncidentCount }} active</span>
+        <span id="incidents-active-count" class="text-xs text-slate-400">{{ .ActiveIncidentCount }} active</span>
     </div>
 
     <div class="mt-6 overflow-x-auto">
@@ -67,7 +67,7 @@
                     <th class="py-2">Context</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-slate-800">
+            <tbody id="incidents-table-body" class="divide-y divide-slate-800">
                 {{ range .Incidents }}
                 <tr>
                     <td class="py-3 text-slate-300">{{ .UpdatedAt }}</td>
@@ -88,4 +88,118 @@
         </table>
     </div>
 </section>
+
+<script defer>
+    window.addEventListener('DOMContentLoaded', () => {
+        const alertsBody = document.getElementById('alerts-table-body');
+        const incidentsBody = document.getElementById('incidents-table-body');
+        const alertsCount = document.getElementById('alerts-record-count');
+        const activeIncidentsCount = document.getElementById('incidents-active-count');
+        const hasStorage = {{ if .HasStorage }}true{{ else }}false{{ end }};
+        const pollIntervalSeconds = Math.max(5, Number({{ .PollIntervalSeconds }}) || 30);
+        const pollIntervalMs = pollIntervalSeconds * 1000;
+
+        const escapeHtml = (value) => String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+
+        const severityClass = (severity) => {
+            const normalized = String(severity || '').toLowerCase();
+            if (normalized === 'critical') return 'bg-red-500/20 text-red-300';
+            if (normalized === 'warning') return 'bg-amber-500/20 text-amber-300';
+            return 'bg-slate-800 text-slate-200';
+        };
+
+        const statusClass = (status) => {
+            const normalized = String(status || '').toLowerCase();
+            if (normalized === 'active') return 'bg-red-500/20 text-red-300';
+            return 'bg-emerald-500/20 text-emerald-300';
+        };
+
+        const formatTimestamp = (value) => {
+            if (!value) return '-';
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) return escapeHtml(value);
+            return parsed.toLocaleString();
+        };
+
+        const renderAlerts = (records) => {
+            if (!alertsBody) return;
+            if (!Array.isArray(records) || records.length === 0) {
+                alertsBody.innerHTML = '<tr><td class="py-6 text-center text-slate-400" colspan="5">No alerts recorded yet.</td></tr>';
+                if (alertsCount) alertsCount.textContent = '0 records';
+                return;
+            }
+
+            const rows = records.map((record) => `
+                <tr>
+                    <td class="py-3 text-slate-300">${formatTimestamp(record.created_at)}</td>
+                    <td class="py-3 font-medium">${escapeHtml(record.type || '')}</td>
+                    <td class="py-3"><span class="rounded-full px-3 py-1 text-xs ${severityClass(record.severity)}">${escapeHtml(record.severity || '')}</span></td>
+                    <td class="py-3 text-slate-200">${escapeHtml(record.message || '')}</td>
+                    <td class="py-3 text-xs text-slate-400">${escapeHtml(record.context || '-')}</td>
+                </tr>
+            `);
+            alertsBody.innerHTML = rows.join('');
+            if (alertsCount) alertsCount.textContent = `${records.length} records`;
+        };
+
+        const renderIncidents = (records) => {
+            if (!incidentsBody) return;
+            if (!Array.isArray(records) || records.length === 0) {
+                incidentsBody.innerHTML = '<tr><td class="py-6 text-center text-slate-400" colspan="6">No incidents tracked yet.</td></tr>';
+                if (activeIncidentsCount) activeIncidentsCount.textContent = '0 active';
+                return;
+            }
+
+            const activeCount = records.filter((record) => String(record.status || '').toLowerCase() === 'active').length;
+            const rows = records.map((record) => {
+                const context = record.context ? JSON.stringify(record.context) : '-';
+                return `
+                    <tr>
+                        <td class="py-3 text-slate-300">${escapeHtml(record.updated_at || '-')}</td>
+                        <td class="py-3 font-medium">${escapeHtml(record.type || '')}</td>
+                        <td class="py-3"><span class="rounded-full px-3 py-1 text-xs ${severityClass(record.severity)}">${escapeHtml(record.severity || '')}</span></td>
+                        <td class="py-3"><span class="rounded-full px-3 py-1 text-xs ${statusClass(record.status)}">${escapeHtml(record.status || '')}</span></td>
+                        <td class="py-3 text-slate-200">${escapeHtml(record.message || '')}</td>
+                        <td class="py-3 text-xs text-slate-400">${escapeHtml(context)}</td>
+                    </tr>
+                `;
+            });
+            incidentsBody.innerHTML = rows.join('');
+            if (activeIncidentsCount) activeIncidentsCount.textContent = `${activeCount} active`;
+        };
+
+        const refreshAlertsAndIncidents = async () => {
+            try {
+                const incidentsResponse = await fetch('/api/incidents?include_resolved=1&limit=100', { headers: { 'Accept': 'application/json' } });
+                if (incidentsResponse.ok) {
+                    const incidentsPayload = await incidentsResponse.json();
+                    renderIncidents(incidentsPayload.data);
+                }
+            } catch (_) {}
+
+            if (!hasStorage) {
+                return;
+            }
+
+            try {
+                const alertsResponse = await fetch('/api/alerts?limit=200', { headers: { 'Accept': 'application/json' } });
+                if (!alertsResponse.ok) {
+                    return;
+                }
+
+                const alertsPayload = await alertsResponse.json();
+                renderAlerts(alertsPayload.data);
+            } catch (_) {}
+        };
+
+        refreshAlertsAndIncidents();
+        const intervalId = window.setInterval(refreshAlertsAndIncidents, pollIntervalMs);
+        window.addEventListener('beforeunload', () => window.clearInterval(intervalId));
+    });
+</script>
 {{ end }}

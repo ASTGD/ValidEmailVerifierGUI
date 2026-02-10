@@ -25,11 +25,11 @@ type WorkerSnapshotPoint struct {
 }
 
 type AlertRecord struct {
-	Type      string
-	Severity  string
-	Message   string
-	Context   string
-	CreatedAt time.Time
+	Type      string    `json:"type"`
+	Severity  string    `json:"severity"`
+	Message   string    `json:"message"`
+	Context   string    `json:"context"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func NewSnapshotStore(db *sql.DB) *SnapshotStore {

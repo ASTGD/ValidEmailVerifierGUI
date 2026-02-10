@@ -27,6 +27,7 @@ Lightweight Go service that tracks worker heartbeats, desired state, and pool sc
 - `POST /api/pools/{pool}/scale`
 - `GET /api/health/ready`
 - `GET /api/incidents`
+- `GET /api/alerts`
 - `GET /api/slo`
 - `GET /api/providers/health`
 - `GET /api/providers/policies`
@@ -39,10 +40,11 @@ All endpoints require `Authorization: Bearer <CONTROL_PLANE_TOKEN>`.
 ## UI
 - Open `http://<host>:<port>/verifier-engine-room/overview`
 - Use HTTP Basic Auth (any username, password = `CONTROL_PLANE_TOKEN`)
-- Live updates stream from `/verifier-engine-room/events` (SSE)
+- Overview live updates stream from `/verifier-engine-room/events` (SSE)
 - Alerts page: `/verifier-engine-room/alerts`
 - Runtime settings page: `/verifier-engine-room/settings`
 - Provider controls are available under Settings (mode override + policy reload).
+- Poll refresh intervals for Workers/Pools/Alerts and Overview SSE cadence are configurable in Settings (stored in Redis).
 
 ## Snapshots (Phase 3)
 Set `MYSQL_DSN` to enable MySQL snapshots. Example:

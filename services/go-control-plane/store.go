@@ -34,6 +34,10 @@ type RuntimeSettings struct {
 	AutoscaleEnabled             bool    `json:"autoscale_enabled"`
 	AutoscaleCanaryPercent       int     `json:"autoscale_canary_percent"`
 	QuarantineErrorRateThreshold float64 `json:"quarantine_error_rate_threshold"`
+	UIOverviewLiveIntervalSecond int     `json:"ui_overview_live_interval_seconds"`
+	UIWorkersRefreshSecond       int     `json:"ui_workers_refresh_seconds"`
+	UIPoolsRefreshSecond         int     `json:"ui_pools_refresh_seconds"`
+	UIAlertsRefreshSecond        int     `json:"ui_alerts_refresh_seconds"`
 }
 
 func NewStore(rdb *redis.Client, ttl time.Duration) *Store {
@@ -271,6 +275,10 @@ func defaultRuntimeSettings(cfg Config) RuntimeSettings {
 		AutoscaleEnabled:             cfg.AutoScaleEnabled,
 		AutoscaleCanaryPercent:       cfg.AutoScaleCanaryPercent,
 		QuarantineErrorRateThreshold: cfg.QuarantineErrorRate,
+		UIOverviewLiveIntervalSecond: 5,
+		UIWorkersRefreshSecond:       10,
+		UIPoolsRefreshSecond:         10,
+		UIAlertsRefreshSecond:        30,
 	}
 }
 
@@ -303,6 +311,22 @@ func normalizeRuntimeSettings(in RuntimeSettings, defaults RuntimeSettings) Runt
 
 	if out.QuarantineErrorRateThreshold < 0 {
 		out.QuarantineErrorRateThreshold = defaults.QuarantineErrorRateThreshold
+	}
+
+	if out.UIOverviewLiveIntervalSecond <= 0 {
+		out.UIOverviewLiveIntervalSecond = defaults.UIOverviewLiveIntervalSecond
+	}
+
+	if out.UIWorkersRefreshSecond <= 0 {
+		out.UIWorkersRefreshSecond = defaults.UIWorkersRefreshSecond
+	}
+
+	if out.UIPoolsRefreshSecond <= 0 {
+		out.UIPoolsRefreshSecond = defaults.UIPoolsRefreshSecond
+	}
+
+	if out.UIAlertsRefreshSecond <= 0 {
+		out.UIAlertsRefreshSecond = defaults.UIAlertsRefreshSecond
 	}
 
 	return out

@@ -51,6 +51,7 @@ func (s *Server) Router() http.Handler {
 		router.Post("/api/pools/{pool}/scale", s.handleScalePool)
 		router.Get("/api/health/ready", s.handleReadiness)
 		router.Get("/api/incidents", s.handleIncidents)
+		router.Get("/api/alerts", s.handleAlertsRecords)
 		router.Get("/api/slo", s.handleSLO)
 		router.Get("/api/providers/health", s.handleProvidersHealth)
 		router.Get("/api/providers/policies", s.handleProviderPolicies)

@@ -5,10 +5,10 @@
             <h2 class="text-lg font-semibold">Pools</h2>
             <p class="text-sm text-slate-400">Scale desired worker counts by pool.</p>
         </div>
-        <span class="text-xs text-slate-400">{{ .PoolCount }} pools</span>
+        <span id="pools-count" class="text-xs text-slate-400">{{ .PoolCount }} pools</span>
     </div>
 
-    <div class="mt-6 space-y-4">
+    <div id="pools-list" class="mt-6 space-y-4">
         {{ range .Pools }}
             <form method="POST" action="{{ $.BasePath }}/pools/{{ .Pool }}/scale" class="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
                 <div class="min-w-[160px]">
@@ -26,4 +26,77 @@
         {{ end }}
     </div>
 </section>
+
+<script defer>
+    window.addEventListener('DOMContentLoaded', () => {
+        const list = document.getElementById('pools-list');
+        const count = document.getElementById('pools-count');
+        const pollIntervalSeconds = Math.max(2, Number({{ .PollIntervalSeconds }}) || 10);
+        const pollIntervalMs = pollIntervalSeconds * 1000;
+        if (!list) {
+            return;
+        }
+
+        const basePath = '{{ .BasePath }}';
+        const escapeHtml = (value) => String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+
+        const renderPools = (pools) => {
+            if (!Array.isArray(pools) || pools.length === 0) {
+                list.innerHTML = '<p class="text-sm text-slate-400">No pools registered yet. They appear after workers send heartbeats.</p>';
+                if (count) {
+                    count.textContent = '0 pools';
+                }
+                return;
+            }
+
+            const forms = pools.map((pool) => {
+                const rawPool = String(pool.pool || '');
+                const poolName = escapeHtml(rawPool);
+                const online = Number(pool.online || 0);
+                const desired = Number(pool.desired || 0);
+                const health = Number(pool.health_score || 0).toFixed(2);
+                const poolID = `desired-${rawPool.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+                return `
+                    <form method="POST" action="${basePath}/pools/${encodeURIComponent(rawPool)}/scale" class="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                        <div class="min-w-[160px]">
+                            <p class="text-sm font-semibold">${poolName}</p>
+                            <p class="text-xs text-slate-400">Online ${online} · Health ${health}</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <label class="text-xs text-slate-400" for="${poolID}">Desired</label>
+                            <input id="${poolID}" name="desired" type="number" min="0" value="${desired}" class="w-24 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                        </div>
+                        <button class="rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-400" type="submit">Update</button>
+                    </form>
+                `;
+            });
+
+            list.innerHTML = forms.join('');
+            if (count) {
+                count.textContent = `${pools.length} pools`;
+            }
+        };
+
+        const refreshPools = async () => {
+            try {
+                const response = await fetch('/api/pools', { headers: { 'Accept': 'application/json' } });
+                if (!response.ok) {
+                    return;
+                }
+
+                const payload = await response.json();
+                renderPools(payload.data);
+            } catch (_) {}
+        };
+
+        refreshPools();
+        const intervalId = window.setInterval(refreshPools, pollIntervalMs);
+        window.addEventListener('beforeunload', () => window.clearInterval(intervalId));
+    });
+</script>
 {{ end }}

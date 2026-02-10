@@ -27,6 +27,35 @@ func TestNormalizeRuntimeSettingsFallbackCanaryUsesSafeDefaultWhenConfiguredDefa
 	}
 }
 
+func TestNormalizeRuntimeSettingsFallsBackUIRefreshIntervalsToDefaults(t *testing.T) {
+	defaults := RuntimeSettings{
+		UIOverviewLiveIntervalSecond: 7,
+		UIWorkersRefreshSecond:       11,
+		UIPoolsRefreshSecond:         13,
+		UIAlertsRefreshSecond:        17,
+	}
+	settings := RuntimeSettings{
+		UIOverviewLiveIntervalSecond: 0,
+		UIWorkersRefreshSecond:       0,
+		UIPoolsRefreshSecond:         0,
+		UIAlertsRefreshSecond:        0,
+	}
+
+	normalized := normalizeRuntimeSettings(settings, defaults)
+	if normalized.UIOverviewLiveIntervalSecond != defaults.UIOverviewLiveIntervalSecond {
+		t.Fatalf("expected overview interval fallback %d, got %d", defaults.UIOverviewLiveIntervalSecond, normalized.UIOverviewLiveIntervalSecond)
+	}
+	if normalized.UIWorkersRefreshSecond != defaults.UIWorkersRefreshSecond {
+		t.Fatalf("expected workers refresh fallback %d, got %d", defaults.UIWorkersRefreshSecond, normalized.UIWorkersRefreshSecond)
+	}
+	if normalized.UIPoolsRefreshSecond != defaults.UIPoolsRefreshSecond {
+		t.Fatalf("expected pools refresh fallback %d, got %d", defaults.UIPoolsRefreshSecond, normalized.UIPoolsRefreshSecond)
+	}
+	if normalized.UIAlertsRefreshSecond != defaults.UIAlertsRefreshSecond {
+		t.Fatalf("expected alerts refresh fallback %d, got %d", defaults.UIAlertsRefreshSecond, normalized.UIAlertsRefreshSecond)
+	}
+}
+
 func TestStaleWorkerDeleteKeysIncludePoolAndLastSeen(t *testing.T) {
 	workerID := "worker-abc"
 	keys := staleWorkerDeleteKeys(workerID)

@@ -144,6 +144,34 @@ func (s *Server) handleIncidents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, IncidentsResponse{Data: records})
 }
 
+func (s *Server) handleAlertsRecords(w http.ResponseWriter, r *http.Request) {
+	limit := 200
+	if value := r.URL.Query().Get("limit"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	if s.snapshots == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"data":        []AlertRecord{},
+			"has_storage": false,
+		})
+		return
+	}
+
+	alerts, err := s.snapshots.GetRecentAlerts(r.Context(), limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data":        alerts,
+		"has_storage": true,
+	})
+}
+
 func (s *Server) handleSLO(w http.ResponseWriter, r *http.Request) {
 	stats, err := s.collectControlPlaneStats(r.Context())
 	if err != nil {
