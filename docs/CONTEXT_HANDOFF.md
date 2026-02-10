@@ -1,6 +1,6 @@
 # Context Handoff (ValidEmailVerifierGUI)
 
-Last updated: 2026-02-05
+Last updated: 2026-02-10
 
 This document is the handoff bundle for a fresh workspace. It summarizes the current system state, key decisions, and how to resume work without losing context. Do not place secrets in this file.
 
@@ -114,6 +114,11 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Added progress bars + metrics to admin job list and job detail view; logs are collapsible.
 
 ## 15) Next planned upgrades (not yet implemented)
+- SMTP policy version wiring (control plane -> worker):
+  - Store versioned policy payloads per `smtp_policy_versions.version`.
+  - Expose active payload from control plane for workers to fetch.
+  - Worker reload/apply active policy version without redeploy.
+  - Make `Promote / Rollback` controls affect live SMTP decision behavior, not only rollout state/history.
 - Cache read metrics + dashboard widgets
 - Adaptive throttling for cache reads
 - Chunked cache lookup jobs for large uploads
