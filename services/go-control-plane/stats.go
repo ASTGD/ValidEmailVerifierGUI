@@ -155,9 +155,9 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 		Settings:                settings,
 		ProviderHealth:          providerHealth,
 		ProviderPolicies: ProviderPoliciesData{
-			PolicyEngineEnabled:  s.cfg.ProviderPolicyEngineEnabled,
-			AdaptiveRetryEnabled: s.cfg.AdaptiveRetryEnabled,
-			AutoProtectEnabled:   s.cfg.ProviderAutoprotectEnabled,
+			PolicyEngineEnabled:  settings.ProviderPolicyEngineEnabled,
+			AdaptiveRetryEnabled: settings.AdaptiveRetryEnabled,
+			AutoProtectEnabled:   settings.ProviderAutoprotectEnabled,
 			ActiveVersion:        activePolicyVersion,
 			LastReloadAt:         providerPolicyState.LastReloadAt,
 			ReloadCount:          providerPolicyState.ReloadCount,

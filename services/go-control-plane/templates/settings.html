@@ -14,7 +14,7 @@
     {{ end }}
 
     <form method="POST" action="{{ .BasePath }}/settings" class="mt-6 space-y-5">
-        <div class="grid gap-4 md:grid-cols-2">
+        <div class="grid gap-4 md:grid-cols-3">
             <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
                 <input type="checkbox" name="alerts_enabled" {{ if .Settings.AlertsEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
                 <span>
@@ -36,6 +36,30 @@
                 <span>
                     <span class="block text-sm font-medium">Enable autoscaling</span>
                     <span class="block text-xs text-slate-400">Allows control plane to adjust pool desired counts within safe limits.</span>
+                </span>
+            </label>
+
+            <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                <input type="checkbox" name="provider_policy_engine_enabled" {{ if .Settings.ProviderPolicyEngineEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
+                <span>
+                    <span class="block text-sm font-medium">Enable provider policy engine</span>
+                    <span class="block text-xs text-slate-400">Turns on provider-level policy behavior for SMTP control logic.</span>
+                </span>
+            </label>
+
+            <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                <input type="checkbox" name="adaptive_retry_enabled" {{ if .Settings.AdaptiveRetryEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
+                <span>
+                    <span class="block text-sm font-medium">Enable adaptive retry</span>
+                    <span class="block text-xs text-slate-400">Uses provider-aware retry pacing for tempfail/greylist patterns.</span>
+                </span>
+            </label>
+
+            <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                <input type="checkbox" name="provider_autoprotect_enabled" {{ if .Settings.ProviderAutoprotectEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
+                <span>
+                    <span class="block text-sm font-medium">Enable provider auto protect</span>
+                    <span class="block text-xs text-slate-400">Auto-shifts provider mode when health degrades (respects manual overrides).</span>
                 </span>
             </label>
         </div>

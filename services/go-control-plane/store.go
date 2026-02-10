@@ -32,6 +32,9 @@ const (
 type RuntimeSettings struct {
 	AlertsEnabled                bool    `json:"alerts_enabled"`
 	AutoActionsEnabled           bool    `json:"auto_actions_enabled"`
+	ProviderPolicyEngineEnabled  bool    `json:"provider_policy_engine_enabled"`
+	AdaptiveRetryEnabled         bool    `json:"adaptive_retry_enabled"`
+	ProviderAutoprotectEnabled   bool    `json:"provider_autoprotect_enabled"`
 	AlertErrorRateThreshold      float64 `json:"alert_error_rate_threshold"`
 	AlertHeartbeatGraceSecond    int     `json:"alert_heartbeat_grace_seconds"`
 	AlertCooldownSecond          int     `json:"alert_cooldown_seconds"`
@@ -273,6 +276,9 @@ func defaultRuntimeSettings(cfg Config) RuntimeSettings {
 	return RuntimeSettings{
 		AlertsEnabled:                cfg.AlertsEnabled,
 		AutoActionsEnabled:           cfg.AutoActionsEnabled,
+		ProviderPolicyEngineEnabled:  cfg.ProviderPolicyEngineEnabled,
+		AdaptiveRetryEnabled:         cfg.AdaptiveRetryEnabled,
+		ProviderAutoprotectEnabled:   cfg.ProviderAutoprotectEnabled,
 		AlertErrorRateThreshold:      cfg.AlertErrorRateThreshold,
 		AlertHeartbeatGraceSecond:    grace,
 		AlertCooldownSecond:          cooldown,
@@ -348,6 +354,20 @@ func (s *Store) GetRuntimeSettings(ctx context.Context, defaults RuntimeSettings
 	var settings RuntimeSettings
 	if err := json.Unmarshal([]byte(value), &settings); err != nil {
 		return defaults, err
+	}
+
+	// Backward-compat: older runtime settings payloads may not include these fields yet.
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(value), &raw); err == nil {
+		if _, ok := raw["provider_policy_engine_enabled"]; !ok {
+			settings.ProviderPolicyEngineEnabled = defaults.ProviderPolicyEngineEnabled
+		}
+		if _, ok := raw["adaptive_retry_enabled"]; !ok {
+			settings.AdaptiveRetryEnabled = defaults.AdaptiveRetryEnabled
+		}
+		if _, ok := raw["provider_autoprotect_enabled"]; !ok {
+			settings.ProviderAutoprotectEnabled = defaults.ProviderAutoprotectEnabled
+		}
 	}
 
 	return normalizeRuntimeSettings(settings, defaults), nil
