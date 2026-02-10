@@ -136,7 +136,7 @@ class InvoiceForm
                             ->icon('heroicon-m-credit-card')
                             ->schema([
                                 Section::make('Process Payment')
-                                    ->description('Capture or record a manual payment for this invoice.')
+                                    ->description('Capture or record a manual payment for this invoice. Use the "Add Payment" button in the header for immediate processing.')
                                     ->schema([
                                         Placeholder::make('live_balance_due')
                                             ->label('Balance Due')
@@ -159,8 +159,33 @@ class InvoiceForm
                                                             </div>
                                                         ');
                                             }),
-                                        TextInput::make('payment_amount')->numeric()->prefix('$'),
-                                        Select::make('payment_gateway')->options(['Stripe' => 'Stripe', 'PayPal' => 'PayPal', 'Manual' => 'Manual']),
+                                        TextInput::make('payment_amount')
+                                            ->label('Payment amount')
+                                            ->numeric()
+                                            ->prefix('$')
+                                            ->placeholder('0.00')
+                                            ->helperText('Enter the amount to process for this invoice'),
+                                        Select::make('payment_gateway')
+                                            ->label('Payment gateway')
+                                            ->placeholder('Select an option')
+                                            ->options([
+                                                'Stripe' => 'Stripe',
+                                                'PayPal' => 'PayPal',
+                                                'Bank Transfer' => 'Bank Transfer',
+                                                'Cash' => 'Cash',
+                                                'Check' => 'Check',
+                                                'Manual' => 'Manual',
+                                            ])
+                                            ->helperText('Select the payment method used for this transaction'),
+                                        TextInput::make('transaction_id')
+                                            ->label('Transaction ID')
+                                            ->placeholder('e.g., ch_3ABC123xyz...')
+                                            ->helperText('Optional: Gateway transaction reference number or check number'),
+                                        Textarea::make('payment_notes')
+                                            ->label('Payment Notes')
+                                            ->placeholder('Add any additional notes about this payment...')
+                                            ->rows(3)
+                                            ->helperText('Internal notes about this payment'),
                                     ]),
                             ]),
                         Tab::make('Options')

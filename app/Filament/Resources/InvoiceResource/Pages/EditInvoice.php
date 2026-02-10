@@ -9,6 +9,7 @@ use Filament\Actions;
 use Filament\Forms;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\InvoiceResource\RelationManagers;
 
 class EditInvoice extends EditRecord
 {
@@ -162,58 +163,65 @@ class EditInvoice extends EditRecord
                     }
                 }),
 
-            Actions\Action::make('process_refund')
-                ->label('Process Refund')
-                ->icon('heroicon-o-arrow-uturn-left')
-                ->color('warning')
-                ->visible(fn($record) => $record->status === 'Paid' || $record->total_paid > 0)
-                ->requiresConfirmation()
-                ->form([
-                    Forms\Components\Placeholder::make('total_paid_info')
-                        ->label('Total Paid')
-                        ->content(fn($record) => '$' . number_format($record->total_paid / 100, 2)),
-                    Forms\Components\TextInput::make('refund_amount')
-                        ->label('Refund Amount')
-                        ->numeric()
-                        ->required()
-                        ->minValue(0.01)
-                        ->prefix('$')
-                        ->maxValue(fn($record) => $record->total_paid / 100)
-                        ->helperText(fn($record) => 'Maximum refund amount: $' . number_format($record->total_paid / 100, 2)),
-                    Forms\Components\Textarea::make('refund_reason')
-                        ->label('Refund Reason')
-                        ->required()
-                        ->rows(3),
-                ])
-                ->action(function (array $data, $record) {
-                    $amountInCents = (int) ($data['refund_amount'] * 100);
+            // Actions\Action::make('process_refund')
+            //     ->label('Process Refund')
+            //     ->icon('heroicon-o-arrow-uturn-left')
+            //     ->color('warning')
+            //     ->visible(fn($record) => $record->status === 'Paid' || $record->total_paid > 0)
+            //     ->requiresConfirmation()
+            //     ->form([
+            //         Forms\Components\Placeholder::make('total_paid_info')
+            //             ->label('Total Paid')
+            //             ->content(fn($record) => '$' . number_format($record->total_paid / 100, 2)),
+            //         Forms\Components\TextInput::make('refund_amount')
+            //             ->label('Refund Amount')
+            //             ->numeric()
+            //             ->required()
+            //             ->minValue(0.01)
+            //             ->prefix('$')
+            //             ->maxValue(fn($record) => $record->total_paid / 100)
+            //             ->helperText(fn($record) => 'Maximum refund amount: $' . number_format($record->total_paid / 100, 2)),
+            //         Forms\Components\Textarea::make('refund_reason')
+            //             ->label('Refund Reason')
+            //             ->required()
+            //             ->rows(3),
+            //     ])
+            //     ->action(function (array $data, $record) {
+            //         $amountInCents = (int) ($data['refund_amount'] * 100);
 
-                    $success = $record->processRefund($amountInCents, $data['refund_reason']);
+            //         $success = $record->processRefund($amountInCents, $data['refund_reason']);
 
-                    if ($success) {
-                        Notification::make()
-                            ->title('Refund Processed')
-                            ->success()
-                            ->body("Refund of \${$data['refund_amount']} has been processed.")
-                            ->send();
+            //         if ($success) {
+            //             Notification::make()
+            //                 ->title('Refund Processed')
+            //                 ->success()
+            //                 ->body("Refund of \${$data['refund_amount']} has been processed.")
+            //                 ->send();
 
-                        $this->refreshFormData([
-                            'balance_due',
-                            'status',
-                            'notes',
-                        ]);
-                    } else {
-                        Notification::make()
-                            ->title('Refund Failed')
-                            ->danger()
-                            ->body('Unable to process refund. Please check the amount and try again.')
-                            ->send();
-                    }
-                }),
+            //             $this->refreshFormData([
+            //                 'balance_due',
+            //                 'status',
+            //                 'notes',
+            //             ]);
+            //         } else {
+            //             Notification::make()
+            //                 ->title('Refund Failed')
+            //                 ->danger()
+            //                 ->body('Unable to process refund. Please check the amount and try again.')
+            //                 ->send();
+            //         }
+            //     }),
 
             Actions\DeleteAction::make(),
         ];
     }
+
+    // public function getRelationManagers(): array
+    // {
+    //     return [
+    //         RelationManagers\TransactionsRelationManager::class,
+    //     ];
+    // }
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
