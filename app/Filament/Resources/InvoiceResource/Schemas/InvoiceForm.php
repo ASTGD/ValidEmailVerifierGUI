@@ -178,6 +178,7 @@ class InvoiceForm
                                                 Select::make('status')
                                                     ->options([
                                                         'Unpaid' => 'Unpaid',
+                                                        'Partially Paid' => 'Partially Paid',
                                                         'Paid' => 'Paid',
                                                         'Cancelled' => 'Cancelled',
                                                         'Refunded' => 'Refunded',
@@ -197,6 +198,22 @@ class InvoiceForm
                                                     ->required(),
                                                 DatePicker::make('paid_at')
                                                     ->label('Paid Date'),
+                                                TextInput::make('tax')
+                                                    ->label('Tax Amount')
+                                                    ->numeric()
+                                                    ->prefix('$')
+                                                    ->default(0)
+                                                    ->formatStateUsing(fn($state) => $state / 100)
+                                                    ->dehydrateStateUsing(fn($state) => $state * 100)
+                                                    ->helperText('Additional tax to add to subtotal'),
+                                                TextInput::make('discount')
+                                                    ->label('Discount Amount')
+                                                    ->numeric()
+                                                    ->prefix('$')
+                                                    ->default(0)
+                                                    ->formatStateUsing(fn($state) => $state / 100)
+                                                    ->dehydrateStateUsing(fn($state) => $state * 100)
+                                                    ->helperText('Discount to subtract from subtotal'),
                                             ]),
                                     ]),
                             ]),
@@ -212,15 +229,15 @@ class InvoiceForm
                                             ->prefix('$'),
                                     ]),
                             ]),
-                        Tab::make('Refund')
-                            ->icon('heroicon-m-arrow-path-rounded-square')
-                            ->schema([
-                                Section::make('Refund Management')
-                                    ->description('Process a full or partial refund back to the original funding source.')
-                                    ->schema([
-                                        TextInput::make('refund_amount')->numeric()->prefix('$'),
-                                    ]),
-                            ]),
+                        // Tab::make('Refund')
+                        //     ->icon('heroicon-m-arrow-path-rounded-square')
+                        //     ->schema([
+                        //         Section::make('Refund Management')
+                        //             ->description('Process a full or partial refund back to the original funding source.')
+                        //             ->schema([
+                        //                 TextInput::make('refund_amount')->numeric()->prefix('$'),
+                        //             ]),
+                        //     ]),
                         Tab::make('Notes')
                             ->icon('heroicon-m-chat-bubble-bottom-center-text')
                             ->schema([
