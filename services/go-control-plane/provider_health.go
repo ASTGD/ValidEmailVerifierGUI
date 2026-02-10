@@ -64,13 +64,15 @@ func aggregateProviderHealth(
 		"generic":   {},
 	}
 	for provider := range modes {
-		if provider != "" {
-			known[provider] = struct{}{}
+		normalizedProvider := normalizeProviderName(provider)
+		if normalizedProvider != "" {
+			known[normalizedProvider] = struct{}{}
 		}
 	}
 	for provider := range aggregates {
-		if provider != "" {
-			known[provider] = struct{}{}
+		normalizedProvider := normalizeProviderName(provider)
+		if normalizedProvider != "" {
+			known[normalizedProvider] = struct{}{}
 		}
 	}
 

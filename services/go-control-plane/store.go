@@ -758,9 +758,13 @@ func (s *Store) saveIncident(ctx context.Context, record IncidentRecord) error {
 }
 
 func (s *Store) SetProviderMode(ctx context.Context, provider, mode, source string) (ProviderModeState, error) {
-	provider = normalizeProviderName(provider)
-	if provider == "" {
+	rawProvider := strings.TrimSpace(provider)
+	if rawProvider == "" {
 		return ProviderModeState{}, fmt.Errorf("provider is required")
+	}
+	provider = normalizeProviderName(rawProvider)
+	if provider == "" {
+		return ProviderModeState{}, fmt.Errorf("unsupported provider")
 	}
 
 	mode = normalizeProviderMode(mode)
@@ -798,22 +802,35 @@ func (s *Store) GetProviderModes(ctx context.Context) (map[string]ProviderModeSt
 		return nil, err
 	}
 
+	return buildProviderModes(values), nil
+}
+
+func buildProviderModes(values map[string]string) map[string]ProviderModeState {
 	modes := make(map[string]ProviderModeState, len(values))
 	for provider, payload := range values {
+		normalizedKey := normalizeProviderName(provider)
+
 		parsed := ProviderModeState{}
 		if unmarshalErr := json.Unmarshal([]byte(payload), &parsed); unmarshalErr != nil {
 			continue
 		}
-		if parsed.Provider == "" {
-			parsed.Provider = provider
+
+		normalizedProvider := normalizeProviderName(parsed.Provider)
+		if normalizedProvider == "" {
+			normalizedProvider = normalizedKey
 		}
+		if normalizedProvider == "" {
+			continue
+		}
+
+		parsed.Provider = normalizedProvider
 		if normalizeProviderMode(parsed.Mode) == "" {
 			parsed.Mode = "normal"
 		}
-		modes[provider] = parsed
+		modes[normalizedProvider] = parsed
 	}
 
-	return modes, nil
+	return modes
 }
 
 func (s *Store) GetProviderMode(ctx context.Context, provider string) (ProviderModeState, bool, error) {
@@ -892,7 +909,7 @@ func normalizeProviderName(provider string) string {
 	case "gmail", "microsoft", "yahoo", "generic":
 		return provider
 	default:
-		return provider
+		return ""
 	}
 }
 

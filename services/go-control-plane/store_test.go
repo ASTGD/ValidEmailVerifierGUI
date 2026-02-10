@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"context"
+	"strings"
+	"testing"
+)
 
 func TestNormalizeRuntimeSettingsFallsBackCanaryToDefaultWhenZero(t *testing.T) {
 	defaults := RuntimeSettings{
@@ -81,6 +85,61 @@ func TestNormalizeProviderMode(t *testing.T) {
 	}
 	if mode := normalizeProviderMode("invalid"); mode != "" {
 		t.Fatalf("expected empty mode for invalid input, got %q", mode)
+	}
+}
+
+func TestNormalizeProviderNameRejectsUnknownProvider(t *testing.T) {
+	if provider := normalizeProviderName("gmail"); provider != "gmail" {
+		t.Fatalf("expected gmail provider, got %q", provider)
+	}
+	if provider := normalizeProviderName("unknown-provider"); provider != "" {
+		t.Fatalf("expected unknown provider to normalize to empty string, got %q", provider)
+	}
+}
+
+func TestSetProviderModeRejectsUnknownProvider(t *testing.T) {
+	store := &Store{}
+
+	_, err := store.SetProviderMode(context.Background(), "unknown-provider", "normal", "manual")
+	if err == nil {
+		t.Fatal("expected error for unsupported provider")
+	}
+	if !strings.Contains(err.Error(), "unsupported provider") {
+		t.Fatalf("expected unsupported provider error, got %q", err.Error())
+	}
+}
+
+func TestBuildProviderModesFiltersUnknownProviders(t *testing.T) {
+	values := map[string]string{
+		"gmail":        `{"provider":"gmail","mode":"cautious","source":"manual"}`,
+		"custom-mx":    `{"provider":"custom-mx","mode":"drain","source":"manual"}`,
+		"legacy-bad":   `{"provider":"","mode":"normal","source":"manual"}`,
+		"microsoft":    `{"provider":"microsoft","mode":"invalid","source":"manual"}`,
+		"invalid_json": `not-json`,
+	}
+
+	modes := buildProviderModes(values)
+	if _, ok := modes["custom-mx"]; ok {
+		t.Fatal("expected unknown provider mode to be filtered out")
+	}
+	if _, ok := modes["legacy-bad"]; ok {
+		t.Fatal("expected invalid legacy provider key to be filtered out")
+	}
+
+	gmail, ok := modes["gmail"]
+	if !ok {
+		t.Fatal("expected gmail mode to be retained")
+	}
+	if gmail.Mode != "cautious" {
+		t.Fatalf("expected gmail cautious mode, got %q", gmail.Mode)
+	}
+
+	microsoft, ok := modes["microsoft"]
+	if !ok {
+		t.Fatal("expected microsoft mode to be retained")
+	}
+	if microsoft.Mode != "normal" {
+		t.Fatalf("expected invalid microsoft mode to normalize to normal, got %q", microsoft.Mode)
 	}
 }
 

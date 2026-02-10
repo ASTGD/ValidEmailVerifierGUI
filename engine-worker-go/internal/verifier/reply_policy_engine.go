@@ -132,7 +132,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					ReasonCode:       "mailbox_not_found",
 				},
 				{
-					EnhancedPrefixes: []string{"5.7.", "4.7."},
+					EnhancedPrefixes: []string{"5.7."},
 					DecisionClass:    DecisionPolicyBlocked,
 					Category:         CategoryRisky,
 					Reason:           "smtp_tempfail",

@@ -158,3 +158,40 @@ func TestClassifySMTPPolicyEngineAdaptiveRetryProfile(t *testing.T) {
 		t.Fatalf("expected adaptive retry delay >= 150 for microsoft tempfail, got %d", result.RetryAfterSecond)
 	}
 }
+
+func TestClassifySMTPPolicyEngineTreats451Enhanced47AsRetryable(t *testing.T) {
+	engine := DefaultProviderReplyPolicyEngine()
+	reply := smtpReply{
+		Code:         451,
+		EnhancedCode: "4.7.1",
+		Message:      "temporarily deferred, try again later",
+	}
+
+	result := classifySMTPRcptReply(reply, "generic", "mx.example.test", true, engine, true)
+	if result.DecisionClass != DecisionRetryable {
+		t.Fatalf("expected retryable decision class, got %q", result.DecisionClass)
+	}
+	if result.Category != CategoryRisky {
+		t.Fatalf("expected risky category for retryable tempfail, got %q", result.Category)
+	}
+	if result.RetryAfterSecond <= 0 {
+		t.Fatalf("expected retry delay to be set, got %d", result.RetryAfterSecond)
+	}
+}
+
+func TestClassifySMTPPolicyEngineKeeps57AsPolicyBlocked(t *testing.T) {
+	engine := DefaultProviderReplyPolicyEngine()
+	reply := smtpReply{
+		Code:         550,
+		EnhancedCode: "5.7.1",
+		Message:      "access denied by policy",
+	}
+
+	result := classifySMTPRcptReply(reply, "generic", "mx.example.test", true, engine, true)
+	if result.DecisionClass != DecisionPolicyBlocked {
+		t.Fatalf("expected policy_blocked decision class, got %q", result.DecisionClass)
+	}
+	if isRetryableSMTPResult(result) {
+		t.Fatal("expected policy_blocked decision to be non-retryable")
+	}
+}
