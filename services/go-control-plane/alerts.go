@@ -347,7 +347,7 @@ func (s *AlertService) checkProviderHealth(ctx context.Context, settings Runtime
 			contextData,
 		)
 
-		if !s.cfg.ProviderAutoprotectEnabled || !settings.AutoActionsEnabled {
+		if !settings.ProviderAutoprotectEnabled || !settings.AutoActionsEnabled {
 			continue
 		}
 

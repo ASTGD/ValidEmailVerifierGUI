@@ -61,6 +61,49 @@ func TestNormalizeRuntimeSettingsFallsBackUIRefreshIntervalsToDefaults(t *testin
 	}
 }
 
+func TestDefaultRuntimeSettingsIncludesProviderFeatureToggles(t *testing.T) {
+	cfg := Config{
+		ProviderPolicyEngineEnabled: true,
+		AdaptiveRetryEnabled:        true,
+		ProviderAutoprotectEnabled:  true,
+	}
+
+	settings := defaultRuntimeSettings(cfg)
+	if !settings.ProviderPolicyEngineEnabled {
+		t.Fatal("expected provider policy engine default toggle to be true")
+	}
+	if !settings.AdaptiveRetryEnabled {
+		t.Fatal("expected adaptive retry default toggle to be true")
+	}
+	if !settings.ProviderAutoprotectEnabled {
+		t.Fatal("expected provider auto-protect default toggle to be true")
+	}
+}
+
+func TestNormalizeRuntimeSettingsPreservesProviderFeatureToggles(t *testing.T) {
+	defaults := RuntimeSettings{
+		ProviderPolicyEngineEnabled: true,
+		AdaptiveRetryEnabled:        true,
+		ProviderAutoprotectEnabled:  true,
+	}
+	settings := RuntimeSettings{
+		ProviderPolicyEngineEnabled: false,
+		AdaptiveRetryEnabled:        true,
+		ProviderAutoprotectEnabled:  false,
+	}
+
+	normalized := normalizeRuntimeSettings(settings, defaults)
+	if normalized.ProviderPolicyEngineEnabled {
+		t.Fatal("expected provider policy engine toggle to preserve explicit false")
+	}
+	if !normalized.AdaptiveRetryEnabled {
+		t.Fatal("expected adaptive retry toggle to preserve explicit true")
+	}
+	if normalized.ProviderAutoprotectEnabled {
+		t.Fatal("expected provider auto-protect toggle to preserve explicit false")
+	}
+}
+
 func TestStaleWorkerDeleteKeysIncludePoolAndLastSeen(t *testing.T) {
 	workerID := "worker-abc"
 	keys := staleWorkerDeleteKeys(workerID)

@@ -264,9 +264,9 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 	stats, statsErr := s.collectControlPlaneStats(r.Context())
 	providerHealth := make([]ProviderHealthSummary, 0)
 	providerPolicies := ProviderPoliciesData{
-		PolicyEngineEnabled:  s.cfg.ProviderPolicyEngineEnabled,
-		AdaptiveRetryEnabled: s.cfg.AdaptiveRetryEnabled,
-		AutoProtectEnabled:   s.cfg.ProviderAutoprotectEnabled,
+		PolicyEngineEnabled:  settings.ProviderPolicyEngineEnabled,
+		AdaptiveRetryEnabled: settings.AdaptiveRetryEnabled,
+		AutoProtectEnabled:   settings.ProviderAutoprotectEnabled,
 		Modes:                []ProviderModeState{},
 	}
 	if statsErr == nil {
@@ -377,6 +377,9 @@ func (s *Server) handleUIUpdateSettings(w http.ResponseWriter, r *http.Request) 
 	settings := RuntimeSettings{
 		AlertsEnabled:                r.FormValue("alerts_enabled") != "",
 		AutoActionsEnabled:           r.FormValue("auto_actions_enabled") != "",
+		ProviderPolicyEngineEnabled:  r.FormValue("provider_policy_engine_enabled") != "",
+		AdaptiveRetryEnabled:         r.FormValue("adaptive_retry_enabled") != "",
+		ProviderAutoprotectEnabled:   r.FormValue("provider_autoprotect_enabled") != "",
 		AlertErrorRateThreshold:      threshold,
 		AlertHeartbeatGraceSecond:    grace,
 		AlertCooldownSecond:          cooldown,
