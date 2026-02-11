@@ -4,11 +4,14 @@ namespace App\Jobs;
 
 use App\Models\SeedSendCampaign;
 use App\Models\SeedSendRecipient;
+use App\Services\SeedSend\SeedSendCreditLedgerService;
+use App\Services\SeedSend\SeedSendEvidenceReportService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class ReconcileSeedSendCampaignJob implements ShouldQueue
 {
@@ -38,7 +41,7 @@ class ReconcileSeedSendCampaignJob implements ShouldQueue
         ];
     }
 
-    public function handle(): void
+    public function handle(SeedSendCreditLedgerService $creditLedgerService, SeedSendEvidenceReportService $reportService): void
     {
         $campaign = SeedSendCampaign::query()->find($this->campaignId);
         if (! $campaign) {
@@ -109,6 +112,22 @@ class ReconcileSeedSendCampaignJob implements ShouldQueue
             'pause_reason' => null,
             'paused_at' => null,
         ]);
+
+        $campaign->refresh();
+        $creditLedgerService->settleCampaign($campaign, (int) $campaign->credits_used);
+
+        try {
+            $report = $reportService->storeCampaignReport($campaign);
+            $campaign->update([
+                'report_disk' => $report['disk'],
+                'report_key' => $report['key'],
+            ]);
+        } catch (\Throwable $exception) {
+            Log::warning('SG6 report generation failed during reconcile.', [
+                'campaign_id' => $campaign->id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
 
         $campaign->job?->addLog('seed_send_campaign_completed', 'SG6 campaign reconciled and completed.', [
             'seed_send_campaign_id' => $campaign->id,

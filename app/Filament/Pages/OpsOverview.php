@@ -13,6 +13,7 @@ use App\Filament\Widgets\OpsQueueHealthOverview;
 use App\Filament\Widgets\OpsQueueIncidentStatus;
 use App\Filament\Widgets\OpsQueueRecoveryActionsTable;
 use App\Filament\Widgets\OpsQueueStatusOverview;
+use App\Filament\Widgets\OpsSeedSendHealthOverview;
 use App\Filament\Widgets\OpsSystemHealthOverview;
 use App\Filament\Widgets\OpsSystemTrendChart;
 use Filament\Pages\Dashboard;
@@ -41,6 +42,7 @@ class OpsOverview extends Dashboard
             OpsSystemHealthOverview::class,
             OpsQueueStatusOverview::class,
             OpsQueueIncidentStatus::class,
+            OpsSeedSendHealthOverview::class,
             OpsQueueHealthOverview::class,
             OpsEngineHealthOverview::class,
             OpsJobHealthOverview::class,

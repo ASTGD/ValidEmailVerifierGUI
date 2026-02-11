@@ -137,6 +137,14 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute($limit)->by('feedback-api|'.$key);
         });
+
+        RateLimiter::for('seed-send-webhooks', function (Request $request): Limit {
+            $limit = max(1, (int) config('seed_send.webhooks.rate_limit_per_minute', 120));
+            $provider = strtolower(trim((string) $request->route('provider', 'unknown')));
+            $clientIp = (string) ($request->ip() ?? 'unknown');
+
+            return Limit::perMinute($limit)->by(sprintf('seed-send-webhooks|%s|%s', $provider, $clientIp));
+        });
     }
 
     private function applyRuntimeQueueSettings(): void

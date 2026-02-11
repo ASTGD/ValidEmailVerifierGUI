@@ -3,8 +3,11 @@
 namespace App\Jobs;
 
 use App\Models\SeedSendCampaign;
+use App\Models\SeedSendConsent;
 use App\Models\SeedSendRecipient;
 use App\Services\SeedSend\Providers\SeedSendProviderManager;
+use App\Services\SeedSend\SeedSendCampaignGuardrails;
+use App\Services\SeedSend\SeedSendCampaignService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -43,16 +46,37 @@ class DispatchSeedSendCampaignJob implements ShouldQueue
         ];
     }
 
-    public function handle(SeedSendProviderManager $providerManager): void
-    {
+    public function handle(
+        SeedSendProviderManager $providerManager,
+        SeedSendCampaignGuardrails $guardrails,
+        SeedSendCampaignService $campaignService
+    ): void {
+        $campaignForGuard = SeedSendCampaign::query()
+            ->with('consent')
+            ->find($this->campaignId);
+
+        if ($campaignForGuard && $this->isConsentRevokedOrExpired($campaignForGuard)) {
+            $campaignService->cancelCampaignForSafety($campaignForGuard, 'consent_revoked_or_expired');
+
+            return;
+        }
+
         $batchSize = max(1, (int) config('seed_send.dispatch.batch_size', 25));
-        $claimedRecipientIds = DB::transaction(function () use ($batchSize): array {
+        $blockedByConsent = false;
+        $claimedRecipientIds = DB::transaction(function () use ($batchSize, &$blockedByConsent): array {
             $campaign = SeedSendCampaign::query()
                 ->where('id', $this->campaignId)
                 ->lockForUpdate()
                 ->first();
 
             if (! $campaign) {
+                return [];
+            }
+
+            $campaign->load('consent');
+            if ($this->isConsentRevokedOrExpired($campaign)) {
+                $blockedByConsent = true;
+
                 return [];
             }
 
@@ -103,8 +127,16 @@ class DispatchSeedSendCampaignJob implements ShouldQueue
             return $recipientIds;
         });
 
-        $campaign = SeedSendCampaign::query()->find($this->campaignId);
+        $campaign = SeedSendCampaign::query()
+            ->with('consent')
+            ->find($this->campaignId);
         if (! $campaign) {
+            return;
+        }
+
+        if ($blockedByConsent || $this->isConsentRevokedOrExpired($campaign)) {
+            $campaignService->cancelCampaignForSafety($campaign, 'consent_revoked_or_expired');
+
             return;
         }
 
@@ -126,9 +158,23 @@ class DispatchSeedSendCampaignJob implements ShouldQueue
             return;
         }
 
+        $campaign->refresh()->load('consent');
+        if ($this->isConsentRevokedOrExpired($campaign)) {
+            $campaignService->cancelCampaignForSafety($campaign, 'consent_revoked_or_expired');
+
+            return;
+        }
+
         $provider = $providerManager->provider($campaign->provider);
 
         foreach ($claimedRecipients as $recipient) {
+            $campaign->refresh()->load('consent');
+            if ($this->isConsentRevokedOrExpired($campaign)) {
+                $campaignService->cancelCampaignForSafety($campaign, 'consent_revoked_or_expired');
+
+                return;
+            }
+
             try {
                 $result = $provider->dispatch($campaign, $recipient);
 
@@ -154,6 +200,15 @@ class DispatchSeedSendCampaignJob implements ShouldQueue
         }
 
         $this->refreshCampaignCounters($campaign->id);
+        $campaign->refresh();
+        $guardrails->evaluateAndApply($campaign);
+
+        if ($campaign->status !== SeedSendCampaign::STATUS_RUNNING) {
+            ReconcileSeedSendCampaignJob::dispatch($campaign->id)
+                ->delay(now()->addMinutes(max(1, (int) config('seed_send.reconcile.delay_minutes', 30))));
+
+            return;
+        }
 
         $pendingCount = SeedSendRecipient::query()
             ->where('campaign_id', $campaign->id)
@@ -194,5 +249,19 @@ class DispatchSeedSendCampaignJob implements ShouldQueue
                 'deferred_count' => $deferred,
                 'updated_at' => now(),
             ]);
+    }
+
+    private function isConsentRevokedOrExpired(SeedSendCampaign $campaign): bool
+    {
+        $consent = $campaign->consent;
+        if (! $consent) {
+            return true;
+        }
+
+        if ($consent->status === SeedSendConsent::STATUS_REVOKED || $consent->revoked_at !== null) {
+            return true;
+        }
+
+        return $consent->expires_at !== null && $consent->expires_at->lte(now());
     }
 }

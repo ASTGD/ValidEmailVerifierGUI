@@ -153,6 +153,17 @@
                     </div>
 
                     @if ((bool) config('seed_send.enabled', false) && $job->status === \App\Enums\VerificationJobStatus::Completed)
+                        @php
+                            $seedSendAttempted = (int) ($latestSeedSendCampaign?->sent_count ?? 0);
+                            $seedSendDelivered = (int) ($latestSeedSendCampaign?->delivered_count ?? 0);
+                            $seedSendBounced = (int) ($latestSeedSendCampaign?->bounced_count ?? 0);
+                            $seedSendDeferred = (int) ($latestSeedSendCampaign?->deferred_count ?? 0);
+                            $seedSendBand = 'Pending';
+                            if ($seedSendAttempted > 0) {
+                                $deliveryRate = ($seedSendDelivered / max(1, $seedSendAttempted)) * 100;
+                                $seedSendBand = $deliveryRate >= 80 ? 'High' : ($deliveryRate >= 50 ? 'Medium' : 'Low');
+                            }
+                        @endphp
                         <div class="pt-6 border-t border-[#F1F5F9]">
                             <p class="text-[10px] font-black uppercase text-[#94A3B8] tracking-widest">
                                 {{ __('SG6 Seed-Send Verification') }}</p>
@@ -169,12 +180,18 @@
                                         </button>
                                     </form>
                                 @else
+                                    @php
+                                        $consentStatus = (string) $latestSeedSendConsent->status;
+                                        if ($consentStatus === 'approved' && $latestSeedSendConsent->expires_at && $latestSeedSendConsent->expires_at->lte(now())) {
+                                            $consentStatus = 'expired';
+                                        }
+                                    @endphp
                                     <div class="flex items-center gap-2">
                                         <span class="text-xs font-semibold text-[#475569]">{{ __('Consent') }}:</span>
                                         <span
                                             class="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase
-                                            {{ $latestSeedSendConsent->status === 'approved' ? 'bg-emerald-100 text-emerald-700' : ($latestSeedSendConsent->status === 'requested' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600') }}">
-                                            {{ ucfirst($latestSeedSendConsent->status) }}
+                                            {{ $consentStatus === 'approved' ? 'bg-emerald-100 text-emerald-700' : ($consentStatus === 'requested' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600') }}">
+                                            {{ ucfirst($consentStatus) }}
                                         </span>
                                     </div>
 
@@ -187,6 +204,39 @@
                                                 {{ ucfirst($latestSeedSendCampaign->status) }}
                                             </span>
                                         </div>
+
+                                        <div class="grid grid-cols-2 gap-2 rounded-xl border border-[#E2E8F0] p-3">
+                                            <div>
+                                                <p class="text-[10px] font-black uppercase tracking-widest text-[#94A3B8]">{{ __('Attempted') }}</p>
+                                                <p class="text-sm font-bold text-[#0F172A]">{{ number_format($seedSendAttempted) }}</p>
+                                            </div>
+                                            <div>
+                                                <p class="text-[10px] font-black uppercase tracking-widest text-[#94A3B8]">{{ __('Delivered') }}</p>
+                                                <p class="text-sm font-bold text-emerald-700">{{ number_format($seedSendDelivered) }}</p>
+                                            </div>
+                                            <div>
+                                                <p class="text-[10px] font-black uppercase tracking-widest text-[#94A3B8]">{{ __('Bounced') }}</p>
+                                                <p class="text-sm font-bold text-rose-700">{{ number_format($seedSendBounced) }}</p>
+                                            </div>
+                                            <div>
+                                                <p class="text-[10px] font-black uppercase tracking-widest text-[#94A3B8]">{{ __('Deferred') }}</p>
+                                                <p class="text-sm font-bold text-amber-700">{{ number_format($seedSendDeferred) }}</p>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex items-center justify-between">
+                                            <p class="text-xs text-[#64748B]">{{ __('Confidence impact band') }}</p>
+                                            <span class="inline-flex items-center rounded-full bg-[#F1F5F9] px-2.5 py-1 text-[10px] font-black uppercase text-[#334155]">
+                                                {{ __($seedSendBand) }}
+                                            </span>
+                                        </div>
+
+                                        @if ($latestSeedSendCampaign->report_key)
+                                            <a href="{{ route('portal.jobs.seed-send-report', ['job' => $job, 'campaign_id' => $latestSeedSendCampaign->id]) }}"
+                                                class="inline-flex items-center rounded-xl border border-[#E2E8F0] bg-white px-4 py-2 text-xs font-bold text-[#0F172A] transition-all hover:border-[#CBD5E1]">
+                                                {{ __('Download SG6 Evidence Report') }}
+                                            </a>
+                                        @endif
                                     @else
                                         <p class="text-xs text-[#64748B]">
                                             {{ __('Campaign has not started yet. Admin approval and start are required.') }}

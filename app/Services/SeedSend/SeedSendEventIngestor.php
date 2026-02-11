@@ -10,6 +10,8 @@ use RuntimeException;
 
 class SeedSendEventIngestor
 {
+    public function __construct(private SeedSendCampaignGuardrails $guardrails) {}
+
     /**
      * @param  array<string, mixed>  $payload
      */
@@ -100,6 +102,7 @@ class SeedSendEventIngestor
         ]);
 
         $this->refreshCampaignCounters($campaign->id);
+        $this->guardrails->evaluateAndApply($campaign->fresh());
 
         return $event;
     }
@@ -203,7 +206,7 @@ class SeedSendEventIngestor
         ?string $enhancedCode,
         array $payload
     ): string {
-        $externalEventId = $this->nullableString($payload['event_id'] ?? null);
+        $externalEventId = $this->nullableString($payload['event_id'] ?? $payload['sg_event_id'] ?? null);
 
         if ($externalEventId !== null) {
             return hash('sha256', implode('|', [

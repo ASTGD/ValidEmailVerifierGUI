@@ -129,4 +129,9 @@ class User extends Authenticatable implements FilamentUser
     {
         return $this->hasMany(SeedSendCampaign::class);
     }
+
+    public function seedSendCreditLedgerEntries(): HasMany
+    {
+        return $this->hasMany(SeedSendCreditLedger::class);
+    }
 }

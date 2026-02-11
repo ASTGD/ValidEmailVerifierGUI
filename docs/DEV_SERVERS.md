@@ -87,6 +87,16 @@ Notes:
 - `./vendor/bin/sail artisan horizon:status`
 - `./vendor/bin/sail artisan horizon:supervisors`
 
+## SG6 pilot checks
+
+- SG6 queues are isolated lanes: `seed_send_dispatch`, `seed_send_events`, `seed_send_reconcile`.
+- Admin SG6 health endpoint (authenticated): `GET /internal/admin/seed-send/health`
+- Verify active SG6 supervisors in Horizon:
+  - `supervisor-seed-send-dispatch`
+  - `supervisor-seed-send-events`
+  - `supervisor-seed-send-reconcile`
+- If SG6 campaigns auto-pause from guardrails, check recent job logs for `seed_send_campaign_auto_paused`.
+
 ## Queue recovery sequence
 
 1. `./vendor/bin/sail artisan horizon:terminate`
@@ -94,6 +104,14 @@ Notes:
 3. `./vendor/bin/sail artisan horizon:supervisors`
 4. `./vendor/bin/sail artisan ops:queue-health --json`
 5. Optional replay (safe mode): `./vendor/bin/sail artisan ops:queue-recover --lane=parse --strategy=requeue_failed --dry-run`
+
+## SG6 recovery sequence (only SG6 lanes)
+
+1. Pause or cancel the affected SG6 campaign from admin UI.
+2. Confirm queues are healthy: `./vendor/bin/sail artisan ops:queue-health --json`.
+3. Verify webhook ingest is moving via `GET /internal/admin/seed-send/health`.
+4. Retry SG6 failed/deferred subset from job admin actions if needed.
+5. Resume campaign only after webhook lag and bounce/defer spikes are stable.
 
 ## Stop background sessions
 

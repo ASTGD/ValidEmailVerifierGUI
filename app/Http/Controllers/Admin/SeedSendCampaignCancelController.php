@@ -3,27 +3,27 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\ApproveSeedSendConsentRequest;
-use App\Models\SeedSendConsent;
+use App\Http\Requests\Admin\CancelSeedSendCampaignRequest;
+use App\Models\SeedSendCampaign;
 use App\Services\SeedSend\SeedSendCampaignService;
 use Illuminate\Http\RedirectResponse;
 use RuntimeException;
 
-class SeedSendConsentApproveController extends Controller
+class SeedSendCampaignCancelController extends Controller
 {
     public function __invoke(
-        ApproveSeedSendConsentRequest $request,
-        SeedSendConsent $consent,
+        CancelSeedSendCampaignRequest $request,
+        SeedSendCampaign $campaign,
         SeedSendCampaignService $campaignService
     ): RedirectResponse {
         try {
-            $campaignService->approveConsent($consent, $request->user());
+            $campaignService->cancelCampaign($campaign, $request->user(), $request->validated('reason'));
         } catch (RuntimeException $exception) {
             return back()->withErrors([
                 'seed_send' => $exception->getMessage(),
             ]);
         }
 
-        return back()->with('status', 'SG6 consent approved.');
+        return back()->with('status', 'SG6 campaign cancelled.');
     }
 }

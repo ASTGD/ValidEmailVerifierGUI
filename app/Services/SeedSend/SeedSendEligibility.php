@@ -28,7 +28,8 @@ class SeedSendEligibility
 
         if ((bool) config('seed_send.webhooks.required', true)) {
             $secret = $this->providerManager->webhookSecretForProvider($provider);
-            if ($secret === '') {
+            $publicKey = $this->providerManager->webhookPublicKeyForProvider($provider);
+            if ($secret === '' && $publicKey === '') {
                 return ['eligible' => false, 'reason' => 'webhook_secret_missing', 'provider' => $provider];
             }
         }
@@ -40,6 +41,10 @@ class SeedSendEligibility
         if ((bool) config('seed_send.consent.required', true)) {
             $approvedConsentExists = $job->seedSendConsents()
                 ->where('status', SeedSendConsent::STATUS_APPROVED)
+                ->whereNull('revoked_at')
+                ->where(function ($query): void {
+                    $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+                })
                 ->exists();
 
             if (! $approvedConsentExists) {
