@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\VerificationJob;
 use App\Models\VerificationJobMetric;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -60,5 +61,39 @@ class GoProbeWeeklyReportCommandTest extends TestCase
 
         $files = Storage::disk('local')->allFiles('reports/ops-test');
         $this->assertNotEmpty($files);
+    }
+
+    public function test_command_reads_finalize_and_probe_queue_names_from_config_aliases(): void
+    {
+        config()->set('queue.connections.redis_finalize.queue', 'finalize_alias');
+        config()->set('queue.connections.redis_smtp_probe.queue', 'smtp_probe_alias');
+
+        QueueMetric::query()->create([
+            'driver' => 'redis_finalize',
+            'queue' => 'finalize_alias',
+            'depth' => 6,
+            'failed_count' => 0,
+            'oldest_age_seconds' => 45,
+            'throughput_per_min' => 16,
+            'captured_at' => now(),
+        ]);
+
+        QueueMetric::query()->create([
+            'driver' => 'redis_smtp_probe',
+            'queue' => 'smtp_probe_alias',
+            'depth' => 9,
+            'failed_count' => 0,
+            'oldest_age_seconds' => 120,
+            'throughput_per_min' => 12,
+            'captured_at' => now(),
+        ]);
+
+        Artisan::call('ops:go-probe-weekly-report', ['--json' => true]);
+        $output = Artisan::output();
+
+        $report = json_decode($output, true);
+        $this->assertIsArray($report);
+        $this->assertGreaterThan(0, data_get($report, 'queues.finalize.avg_depth', 0));
+        $this->assertGreaterThan(0, data_get($report, 'queues.smtp_probe.avg_depth', 0));
     }
 }

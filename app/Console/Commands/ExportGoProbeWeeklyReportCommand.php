@@ -27,10 +27,13 @@ class ExportGoProbeWeeklyReportCommand extends Command
         $probeCompleted = (int) ($probeTotals?->probe_completed_total ?? 0);
         $probeUnknown = (int) ($probeTotals?->probe_unknown_total ?? 0);
         $probeUnknownRate = $probeCompleted > 0 ? $probeUnknown / $probeCompleted : 0.0;
+        $finalizeQueue = (string) config('queue.connections.redis_finalize.queue', 'finalize');
+        $smtpProbeQueue = (string) config('queue.connections.redis_smtp_probe.queue', 'smtp_probe');
+        $queueNames = array_values(array_unique(array_filter([$finalizeQueue, $smtpProbeQueue])));
 
         $queueAggregate = QueueMetric::query()
             ->where('captured_at', '>=', $since)
-            ->whereIn('queue', ['finalize', 'smtp_probe'])
+            ->whereIn('queue', $queueNames)
             ->selectRaw('queue')
             ->selectRaw('COALESCE(AVG(oldest_age_seconds), 0) as avg_oldest_age_seconds')
             ->selectRaw('COALESCE(MAX(oldest_age_seconds), 0) as max_oldest_age_seconds')
@@ -52,14 +55,14 @@ class ExportGoProbeWeeklyReportCommand extends Command
             ],
             'queues' => [
                 'finalize' => [
-                    'avg_oldest_age_seconds' => round((float) ($queueAggregate['finalize']->avg_oldest_age_seconds ?? 0), 2),
-                    'max_oldest_age_seconds' => (int) ($queueAggregate['finalize']->max_oldest_age_seconds ?? 0),
-                    'avg_depth' => round((float) ($queueAggregate['finalize']->avg_depth ?? 0), 2),
+                    'avg_oldest_age_seconds' => round((float) ($queueAggregate[$finalizeQueue]->avg_oldest_age_seconds ?? 0), 2),
+                    'max_oldest_age_seconds' => (int) ($queueAggregate[$finalizeQueue]->max_oldest_age_seconds ?? 0),
+                    'avg_depth' => round((float) ($queueAggregate[$finalizeQueue]->avg_depth ?? 0), 2),
                 ],
                 'smtp_probe' => [
-                    'avg_oldest_age_seconds' => round((float) ($queueAggregate['smtp_probe']->avg_oldest_age_seconds ?? 0), 2),
-                    'max_oldest_age_seconds' => (int) ($queueAggregate['smtp_probe']->max_oldest_age_seconds ?? 0),
-                    'avg_depth' => round((float) ($queueAggregate['smtp_probe']->avg_depth ?? 0), 2),
+                    'avg_oldest_age_seconds' => round((float) ($queueAggregate[$smtpProbeQueue]->avg_oldest_age_seconds ?? 0), 2),
+                    'max_oldest_age_seconds' => (int) ($queueAggregate[$smtpProbeQueue]->max_oldest_age_seconds ?? 0),
+                    'avg_depth' => round((float) ($queueAggregate[$smtpProbeQueue]->avg_depth ?? 0), 2),
                 ],
             ],
         ];

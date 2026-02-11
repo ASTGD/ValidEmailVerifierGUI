@@ -114,7 +114,7 @@ func TestSendHeartbeatsUsesControlPlaneAndLaravelFallbackFrequency(t *testing.T)
 	w := New(api.NewClient(laravelServer.URL, ""), Config{
 		WorkerID:                     "worker-1",
 		Server:                       api.EngineServerPayload{Name: "node-1", IPAddress: "127.0.0.1"},
-		BaseVerifierConfig:           verifier.Config{},
+		BaseVerifierConfig:           verifier.Config{MailFromAddress: "already@known.local"},
 		ControlPlaneClient:           api.NewControlPlaneClient(controlPlaneServer.URL, ""),
 		ControlPlaneHeartbeatEnabled: true,
 		LaravelHeartbeatEnabled:      true,
@@ -134,6 +134,68 @@ func TestSendHeartbeatsUsesControlPlaneAndLaravelFallbackFrequency(t *testing.T)
 	w.sendHeartbeats(context.Background())
 	if laravelHeartbeatCalls != 1 {
 		t.Fatalf("expected laravel heartbeat to run once at count 2, got %d", laravelHeartbeatCalls)
+	}
+}
+
+func TestSendHeartbeatsSendsLaravelHeartbeatImmediatelyWhenIdentityMissing(t *testing.T) {
+	t.Parallel()
+
+	laravelHeartbeatCalls := 0
+	laravelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/verifier/heartbeat" {
+			laravelHeartbeatCalls++
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"identity": map[string]any{
+						"helo_name":         "helo.bootstrap.test",
+						"mail_from_address": "mailfrom@bootstrap.test",
+						"identity_domain":   "bootstrap.test",
+					},
+				},
+			})
+			return
+		}
+
+		http.NotFound(w, r)
+	}))
+	defer laravelServer.Close()
+
+	controlPlaneServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/workers/heartbeat" {
+			http.NotFound(w, r)
+			return
+		}
+
+		_ = json.NewEncoder(w).Encode(api.ControlPlaneHeartbeatResponse{
+			DesiredState: "running",
+			Commands:     []string{},
+		})
+	}))
+	defer controlPlaneServer.Close()
+
+	worker := New(api.NewClient(laravelServer.URL, ""), Config{
+		WorkerID:                     "worker-2",
+		Server:                       api.EngineServerPayload{Name: "node-2", IPAddress: "127.0.0.1"},
+		BaseVerifierConfig:           verifier.Config{},
+		ControlPlaneClient:           api.NewControlPlaneClient(controlPlaneServer.URL, ""),
+		ControlPlaneHeartbeatEnabled: true,
+		LaravelHeartbeatEnabled:      true,
+		LaravelHeartbeatEveryN:       10,
+	})
+
+	worker.heartbeatCount = 1
+	worker.sendHeartbeats(context.Background())
+
+	if laravelHeartbeatCalls != 1 {
+		t.Fatalf("expected immediate laravel heartbeat when identity missing, got %d calls", laravelHeartbeatCalls)
+	}
+
+	state := worker.policySnapshot()
+	if state.mailFromAddress != "mailfrom@bootstrap.test" {
+		t.Fatalf("expected mail-from identity to be populated, got %q", state.mailFromAddress)
+	}
+	if state.heloName != "helo.bootstrap.test" {
+		t.Fatalf("expected helo identity to be populated, got %q", state.heloName)
 	}
 }
 

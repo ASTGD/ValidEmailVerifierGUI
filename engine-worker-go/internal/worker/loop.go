@@ -784,6 +784,15 @@ func (w *Worker) hasMailFromIdentity() bool {
 	return state.mailFromAddress != ""
 }
 
+func (w *Worker) isHeartbeatIdentityMissing() bool {
+	if strings.TrimSpace(w.cfg.BaseVerifierConfig.MailFromAddress) != "" {
+		return false
+	}
+
+	state := w.policySnapshot()
+	return strings.TrimSpace(state.mailFromAddress) == ""
+}
+
 func (w *Worker) verifierForMode(mode string, policy policyConfig, hasPolicy bool) verifier.Verifier {
 	config := w.cfg.BaseVerifierConfig
 	state := w.policySnapshot()
@@ -1059,7 +1068,7 @@ func (w *Worker) sendHeartbeats(ctx context.Context) {
 	}
 
 	heartbeatEvery := maxInt(1, w.cfg.LaravelHeartbeatEveryN)
-	if int(w.heartbeatCount)%heartbeatEvery != 0 {
+	if !w.isHeartbeatIdentityMissing() && int(w.heartbeatCount)%heartbeatEvery != 0 {
 		return
 	}
 
