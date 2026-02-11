@@ -129,6 +129,30 @@ class SeedSendWebhookTest extends TestCase
         Bus::assertDispatchedTimes(IngestSeedSendEventJob::class, 2);
     }
 
+    public function test_seed_send_webhook_rejects_mixed_validity_batch_without_dispatching_any_jobs(): void
+    {
+        Bus::fake();
+
+        $payload = [
+            [
+                'campaign_id' => 'campaign-1',
+                'provider_message_id' => 'msg-1',
+                'event_type' => 'delivered',
+            ],
+            [
+                'campaign_id' => 'campaign-1',
+                'event_type' => 'delivered',
+            ],
+        ];
+
+        $headers = $this->signedHeaders($payload, 'nonce-batch-mixed-invalid');
+
+        $this->postJson(route('api.seed-send.webhook', ['provider' => 'log']), $payload, $headers)
+            ->assertStatus(422);
+
+        Bus::assertNotDispatched(IngestSeedSendEventJob::class);
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      * @return array<string, string>

@@ -108,6 +108,55 @@ class SeedSendAdminCampaignTest extends TestCase
         $this->assertNotNull($consent->revoked_at);
     }
 
+    public function test_revoking_consent_stops_active_campaign_and_blocks_future_dispatch(): void
+    {
+        config([
+            'seed_send.webhooks.required' => false,
+        ]);
+
+        $admin = $this->makeAdmin();
+        $customer = $this->makeCustomer();
+        $job = $this->makeCompletedJob($customer);
+        $consent = $this->makeConsent($job, $customer, SeedSendConsent::STATUS_APPROVED);
+        $this->storeResultFiles($job, ['alpha@example.com', 'beta@example.com']);
+
+        $this->actingAs($admin)
+            ->post(route('internal.admin.seed-send.campaigns.start', $job), [
+                'consent_id' => $consent->id,
+            ])
+            ->assertRedirect();
+
+        $campaign = SeedSendCampaign::query()->firstOrFail();
+
+        $this->actingAs($admin)
+            ->post(route('internal.admin.seed-send.consents.revoke', $consent), [
+                'reason' => 'pilot revoked',
+            ])
+            ->assertRedirect();
+
+        $campaign->refresh();
+        $this->assertSame(SeedSendCampaign::STATUS_CANCELLED, $campaign->status);
+        $this->assertSame('consent_revoked', $campaign->failure_reason);
+
+        $this->assertSame(0, SeedSendRecipient::query()
+            ->where('campaign_id', $campaign->id)
+            ->whereIn('status', [
+                SeedSendRecipient::STATUS_PENDING,
+                SeedSendRecipient::STATUS_DISPATCHING,
+                SeedSendRecipient::STATUS_DISPATCHED,
+            ])
+            ->count());
+
+        app()->call([new DispatchSeedSendCampaignJob($campaign->id), 'handle']);
+
+        $campaign->refresh();
+        $this->assertSame(SeedSendCampaign::STATUS_CANCELLED, $campaign->status);
+        $this->assertSame(0, SeedSendRecipient::query()
+            ->where('campaign_id', $campaign->id)
+            ->where('status', SeedSendRecipient::STATUS_DISPATCHED)
+            ->count());
+    }
+
     public function test_seed_send_campaign_start_requires_completed_job(): void
     {
         $admin = $this->makeAdmin();
@@ -254,6 +303,58 @@ class SeedSendAdminCampaignTest extends TestCase
         $campaign->refresh();
         $this->assertSame(SeedSendCampaign::STATUS_CANCELLED, $campaign->status);
 
+        $this->assertDatabaseHas('seed_send_credit_ledger', [
+            'campaign_id' => $campaign->id,
+            'entry_type' => SeedSendCreditLedgerService::ENTRY_RELEASE,
+            'credits' => 4,
+        ]);
+    }
+
+    public function test_cancellation_after_partial_progress_settles_consume_and_release_credits(): void
+    {
+        config([
+            'seed_send.credits.per_recipient' => 2,
+            'seed_send.webhooks.required' => false,
+        ]);
+
+        $admin = $this->makeAdmin();
+        $customer = $this->makeCustomer();
+        $job = $this->makeCompletedJob($customer);
+        $consent = $this->makeConsent($job, $customer, SeedSendConsent::STATUS_APPROVED);
+        $this->storeResultFiles($job, ['alpha@example.com', 'beta@example.com', 'gamma@example.com']);
+
+        $this->actingAs($admin)
+            ->post(route('internal.admin.seed-send.campaigns.start', $job), ['consent_id' => $consent->id])
+            ->assertRedirect();
+
+        $campaign = SeedSendCampaign::query()->firstOrFail();
+
+        $firstRecipient = SeedSendRecipient::query()
+            ->where('campaign_id', $campaign->id)
+            ->orderBy('id')
+            ->firstOrFail();
+
+        $firstRecipient->update([
+            'status' => SeedSendRecipient::STATUS_DELIVERED,
+            'attempt_count' => 1,
+            'last_attempt_at' => now(),
+            'last_event_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('internal.admin.seed-send.campaigns.cancel', $campaign), [
+                'reason' => 'partial settlement check',
+            ])
+            ->assertRedirect();
+
+        $campaign->refresh();
+        $this->assertSame(SeedSendCampaign::STATUS_CANCELLED, $campaign->status);
+
+        $this->assertDatabaseHas('seed_send_credit_ledger', [
+            'campaign_id' => $campaign->id,
+            'entry_type' => SeedSendCreditLedgerService::ENTRY_CONSUME,
+            'credits' => 2,
+        ]);
         $this->assertDatabaseHas('seed_send_credit_ledger', [
             'campaign_id' => $campaign->id,
             'entry_type' => SeedSendCreditLedgerService::ENTRY_RELEASE,

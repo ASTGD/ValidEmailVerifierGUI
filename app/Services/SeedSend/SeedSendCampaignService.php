@@ -236,34 +236,7 @@ class SeedSendCampaignService
             throw new RuntimeException('Campaign is already in a terminal state.');
         }
 
-        DB::transaction(function () use ($campaign, $reason): void {
-            SeedSendRecipient::query()
-                ->where('campaign_id', $campaign->id)
-                ->whereIn('status', [
-                    SeedSendRecipient::STATUS_PENDING,
-                    SeedSendRecipient::STATUS_DISPATCHING,
-                    SeedSendRecipient::STATUS_DISPATCHED,
-                ])
-                ->update([
-                    'status' => SeedSendRecipient::STATUS_FAILED,
-                    'last_event_at' => now(),
-                    'updated_at' => now(),
-                    'evidence_payload' => [
-                        'reason' => 'campaign_cancelled',
-                        'note' => $reason,
-                    ],
-                ]);
-
-            $campaign->update([
-                'status' => SeedSendCampaign::STATUS_CANCELLED,
-                'finished_at' => now(),
-                'paused_at' => now(),
-                'pause_reason' => $reason,
-                'failure_reason' => $reason ? sprintf('cancelled: %s', $reason) : 'cancelled_by_admin',
-            ]);
-
-            $this->creditLedgerService->releaseOnCancellation($campaign->refresh());
-        });
+        $this->transitionCampaignToCancelledState($campaign, 'campaign_cancelled', $reason);
 
         $campaign->refresh();
 
@@ -334,24 +307,66 @@ class SeedSendCampaignService
 
     public function revokeConsent(SeedSendConsent $consent, User $admin, ?string $reason = null): SeedSendConsent
     {
-        $consent->update([
-            'status' => SeedSendConsent::STATUS_REVOKED,
-            'revoked_at' => now(),
-            'revoked_by_admin_id' => $admin->id,
-            'revocation_reason' => $reason,
-        ]);
+        $activeCampaignIds = [];
+
+        DB::transaction(function () use ($consent, $admin, $reason, &$activeCampaignIds): void {
+            $consent->refresh();
+            $consent->update([
+                'status' => SeedSendConsent::STATUS_REVOKED,
+                'revoked_at' => now(),
+                'revoked_by_admin_id' => $admin->id,
+                'revocation_reason' => $reason,
+            ]);
+
+            $activeCampaigns = SeedSendCampaign::query()
+                ->where('seed_send_consent_id', $consent->id)
+                ->whereIn('status', [
+                    SeedSendCampaign::STATUS_QUEUED,
+                    SeedSendCampaign::STATUS_RUNNING,
+                    SeedSendCampaign::STATUS_PAUSED,
+                ])
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($activeCampaigns as $campaign) {
+                $this->transitionCampaignToCancelledState(
+                    $campaign,
+                    'consent_revoked',
+                    $reason ?: 'consent_revoked'
+                );
+                $activeCampaignIds[] = (string) $campaign->id;
+            }
+        });
+
+        $consent = $consent->refresh();
 
         $consent->job?->addLog('seed_send_consent_revoked', 'SG6 consent revoked by admin.', [
             'seed_send_consent_id' => $consent->id,
             'reason' => $reason,
+            'stopped_campaign_ids' => $activeCampaignIds,
         ], $admin->id);
+
+        foreach ($activeCampaignIds as $campaignId) {
+            $consent->job?->addLog('seed_send_campaign_cancelled', 'SG6 campaign stopped because consent was revoked.', [
+                'seed_send_campaign_id' => $campaignId,
+                'reason' => 'consent_revoked',
+            ], $admin->id);
+
+            AdminAuditLogger::log('seed_send_campaign_cancelled', null, [
+                'seed_send_campaign_id' => $campaignId,
+                'seed_send_consent_id' => $consent->id,
+                'verification_job_id' => $consent->verification_job_id,
+                'reason' => 'consent_revoked',
+            ]);
+        }
 
         AdminAuditLogger::log('seed_send_consent_revoked', $consent, [
             'verification_job_id' => $consent->verification_job_id,
             'reason' => $reason,
+            'stopped_campaign_ids' => $activeCampaignIds,
         ]);
 
-        return $consent->refresh();
+        return $consent;
     }
 
     public function resumeCampaign(SeedSendCampaign $campaign, User $admin): SeedSendCampaign
@@ -391,5 +406,93 @@ class SeedSendCampaignService
     private function isConsentExpired(SeedSendConsent $consent): bool
     {
         return $consent->expires_at !== null && $consent->expires_at->lte(now());
+    }
+
+    public function cancelCampaignForSafety(SeedSendCampaign $campaign, string $reason): SeedSendCampaign
+    {
+        if (in_array($campaign->status, [
+            SeedSendCampaign::STATUS_COMPLETED,
+            SeedSendCampaign::STATUS_FAILED,
+            SeedSendCampaign::STATUS_CANCELLED,
+        ], true)) {
+            return $campaign;
+        }
+
+        $this->transitionCampaignToCancelledState($campaign, $reason, $reason);
+        $campaign->refresh();
+
+        $campaign->job?->addLog('seed_send_campaign_cancelled', 'SG6 campaign stopped by dispatch safety guard.', [
+            'seed_send_campaign_id' => $campaign->id,
+            'reason' => $reason,
+        ]);
+
+        AdminAuditLogger::log('seed_send_campaign_cancelled', $campaign, [
+            'reason' => $reason,
+            'source' => 'dispatch_guard',
+        ]);
+
+        return $campaign;
+    }
+
+    private function transitionCampaignToCancelledState(SeedSendCampaign $campaign, string $reasonCode, ?string $note = null): void
+    {
+        DB::transaction(function () use ($campaign, $reasonCode, $note): void {
+            SeedSendRecipient::query()
+                ->where('campaign_id', $campaign->id)
+                ->where('status', SeedSendRecipient::STATUS_PENDING)
+                ->update([
+                    'status' => SeedSendRecipient::STATUS_FAILED,
+                    'last_event_at' => now(),
+                    'updated_at' => now(),
+                    'evidence_payload' => [
+                        'reason' => $reasonCode,
+                        'note' => $note,
+                    ],
+                ]);
+
+            SeedSendRecipient::query()
+                ->where('campaign_id', $campaign->id)
+                ->whereIn('status', [
+                    SeedSendRecipient::STATUS_DISPATCHING,
+                    SeedSendRecipient::STATUS_DISPATCHED,
+                ])
+                ->update([
+                    'status' => SeedSendRecipient::STATUS_DEFERRED,
+                    'last_event_at' => now(),
+                    'updated_at' => now(),
+                    'evidence_payload' => [
+                        'reason' => $reasonCode,
+                        'note' => $note,
+                    ],
+                ]);
+
+            $totals = SeedSendRecipient::query()
+                ->selectRaw('status, count(*) as count')
+                ->where('campaign_id', $campaign->id)
+                ->groupBy('status')
+                ->pluck('count', 'status');
+
+            $delivered = (int) ($totals[SeedSendRecipient::STATUS_DELIVERED] ?? 0);
+            $bounced = (int) ($totals[SeedSendRecipient::STATUS_BOUNCED] ?? 0);
+            $deferred = (int) ($totals[SeedSendRecipient::STATUS_DEFERRED] ?? 0);
+            $dispatched = (int) ($totals[SeedSendRecipient::STATUS_DISPATCHED] ?? 0);
+            $failed = (int) ($totals[SeedSendRecipient::STATUS_FAILED] ?? 0);
+            $sentCount = $dispatched + $delivered + $bounced + $deferred + $failed;
+
+            $campaign->refresh();
+            $campaign->update([
+                'status' => SeedSendCampaign::STATUS_CANCELLED,
+                'finished_at' => now(),
+                'paused_at' => now(),
+                'pause_reason' => $note,
+                'failure_reason' => $reasonCode,
+                'sent_count' => $sentCount,
+                'delivered_count' => $delivered,
+                'bounced_count' => $bounced,
+                'deferred_count' => $deferred,
+            ]);
+
+            $this->creditLedgerService->settleCancellation($campaign->refresh());
+        });
     }
 }

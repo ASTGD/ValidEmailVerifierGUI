@@ -4,6 +4,7 @@ namespace App\Services\SeedSend;
 
 use App\Models\SeedSendCampaign;
 use App\Models\SeedSendCreditLedger;
+use App\Models\SeedSendRecipient;
 
 class SeedSendCreditLedgerService
 {
@@ -40,22 +41,49 @@ class SeedSendCreditLedgerService
         ]);
     }
 
-    public function releaseOnCancellation(SeedSendCampaign $campaign): void
+    public function settleCancellation(SeedSendCampaign $campaign): void
     {
         $reservedCredits = max(0, (int) $campaign->credits_reserved);
-        if ($reservedCredits === 0) {
-            return;
-        }
-
-        $consumedCredits = (int) SeedSendCreditLedger::query()
+        $creditsPerRecipient = max(1, (int) config('seed_send.credits.per_recipient', 1));
+        $recipientCount = SeedSendRecipient::query()
             ->where('campaign_id', $campaign->id)
-            ->where('entry_type', self::ENTRY_CONSUME)
-            ->value('credits');
+            ->count();
 
-        $releaseCredits = max(0, $reservedCredits - $consumedCredits);
+        $derivedAttemptedCount = SeedSendRecipient::query()
+            ->where('campaign_id', $campaign->id)
+            ->where(function ($query): void {
+                $query
+                    ->where('attempt_count', '>', 0)
+                    ->orWhereIn('status', [
+                        SeedSendRecipient::STATUS_DISPATCHED,
+                        SeedSendRecipient::STATUS_DELIVERED,
+                        SeedSendRecipient::STATUS_BOUNCED,
+                        SeedSendRecipient::STATUS_DEFERRED,
+                    ]);
+            })
+            ->count();
 
-        $this->upsertEntry($campaign, self::ENTRY_RELEASE, $releaseCredits, 'release-cancelled', [
+        $sentCountBasedCredits = max(0, (int) $campaign->sent_count) * $creditsPerRecipient;
+        $derivedCredits = max(0, (int) $derivedAttemptedCount) * $creditsPerRecipient;
+
+        $usedCredits = $recipientCount > 0
+            ? $derivedCredits
+            : $sentCountBasedCredits;
+        $usedCredits = max(0, min($usedCredits, $reservedCredits));
+        $releaseCredits = max(0, $reservedCredits - $usedCredits);
+
+        $this->upsertEntry($campaign, self::ENTRY_CONSUME, $usedCredits, 'consume', [
             'campaign_status' => $campaign->status,
+            'settlement_mode' => 'cancellation',
+            'derived_attempted_count' => $derivedAttemptedCount,
+            'sent_count' => (int) $campaign->sent_count,
+        ]);
+
+        $this->upsertEntry($campaign, self::ENTRY_RELEASE, $releaseCredits, 'release', [
+            'campaign_status' => $campaign->status,
+            'settlement_mode' => 'cancellation',
+            'derived_attempted_count' => $derivedAttemptedCount,
+            'sent_count' => (int) $campaign->sent_count,
         ]);
     }
 
