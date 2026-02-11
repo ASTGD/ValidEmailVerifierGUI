@@ -38,6 +38,8 @@ class SeedSendCampaign extends Model
         'target_scope',
         'provider',
         'provider_campaign_ref',
+        'report_disk',
+        'report_key',
         'target_count',
         'sent_count',
         'delivered_count',
@@ -93,5 +95,10 @@ class SeedSendCampaign extends Model
     public function events(): HasMany
     {
         return $this->hasMany(SeedSendEvent::class, 'campaign_id');
+    }
+
+    public function creditLedgerEntries(): HasMany
+    {
+        return $this->hasMany(SeedSendCreditLedger::class, 'campaign_id');
     }
 }

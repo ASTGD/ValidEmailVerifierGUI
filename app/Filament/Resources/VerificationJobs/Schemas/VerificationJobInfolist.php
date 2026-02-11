@@ -344,16 +344,29 @@ class VerificationJobInfolist
                                     ->latest('id')
                                     ->first();
 
-                                return $consent ? ucfirst($consent->status) : 'Not requested';
+                                if (! $consent) {
+                                    return 'Not requested';
+                                }
+
+                                if ($consent->status === 'approved' && $consent->expires_at && $consent->expires_at->lte(now())) {
+                                    return 'Expired';
+                                }
+
+                                return ucfirst($consent->status);
                             })
                             ->badge()
                             ->color(function (VerificationJob $record): string {
-                                $status = $record->seedSendConsents()->latest('id')->value('status');
+                                $consent = $record->seedSendConsents()->latest('id')->first();
+                                $status = $consent?->status;
+
+                                if ($status === 'approved' && $consent?->expires_at && $consent->expires_at->lte(now())) {
+                                    return 'danger';
+                                }
 
                                 return match ($status) {
                                     'approved' => 'success',
                                     'requested' => 'warning',
-                                    'rejected' => 'danger',
+                                    'revoked', 'rejected' => 'danger',
                                     default => 'gray',
                                 };
                             }),
@@ -407,6 +420,25 @@ class VerificationJobInfolist
                                     (int) $campaign->credits_used
                                 );
                             }),
+                        TextEntry::make('seed_send_report')
+                            ->label('Evidence report')
+                            ->state(function (VerificationJob $record): string {
+                                $campaign = $record->seedSendCampaigns()->latest('created_at')->first();
+
+                                return $campaign && $campaign->report_key ? 'Download SG6 report' : 'Not generated';
+                            })
+                            ->url(function (VerificationJob $record): ?string {
+                                $campaign = $record->seedSendCampaigns()->latest('created_at')->first();
+                                if (! $campaign || ! $campaign->report_key) {
+                                    return null;
+                                }
+
+                                return route('portal.jobs.seed-send-report', [
+                                    'job' => $record,
+                                    'campaign_id' => $campaign->id,
+                                ]);
+                            })
+                            ->openUrlInNewTab(),
                     ])
                     ->columns(2),
                 Section::make('Recent Logs')

@@ -1,12 +1,17 @@
 <?php
 
+use App\Http\Controllers\Admin\SeedSendCampaignCancelController;
+use App\Http\Controllers\Admin\SeedSendCampaignHealthController;
 use App\Http\Controllers\Admin\SeedSendCampaignPauseController;
+use App\Http\Controllers\Admin\SeedSendCampaignRetryFailedController;
 use App\Http\Controllers\Admin\SeedSendCampaignStartController;
 use App\Http\Controllers\Admin\SeedSendConsentApproveController;
+use App\Http\Controllers\Admin\SeedSendConsentRevokeController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\MarketingController;
 use App\Http\Controllers\Portal\SeedSendConsentRequestController;
+use App\Http\Controllers\Portal\SeedSendReportDownloadController;
 use App\Http\Controllers\Portal\UploadController;
 use App\Http\Controllers\Portal\VerificationJobDownloadController;
 use App\Http\Controllers\ProvisioningBundleDownloadController;
@@ -66,6 +71,9 @@ Route::middleware(['auth', 'verified'])
         Route::post('jobs/{job}/seed-send-consent', SeedSendConsentRequestController::class)
             ->whereUuid('job')
             ->name('jobs.seed-send-consent');
+        Route::get('jobs/{job}/seed-send-report', SeedSendReportDownloadController::class)
+            ->whereUuid('job')
+            ->name('jobs.seed-send-report');
         Route::get('orders', OrdersIndex::class)->name('orders.index');
         Route::get('settings', Settings::class)->name('settings');
         Route::get('support', Support::class)->name('support');
@@ -80,12 +88,22 @@ Route::middleware(['auth', 'verified', 'admin.role'])
     ->group(function () {
         Route::post('consents/{consent}/approve', SeedSendConsentApproveController::class)
             ->name('consents.approve');
+        Route::post('consents/{consent}/revoke', SeedSendConsentRevokeController::class)
+            ->name('consents.revoke');
         Route::post('jobs/{job}/campaigns/start', SeedSendCampaignStartController::class)
             ->whereUuid('job')
             ->name('campaigns.start');
         Route::post('campaigns/{campaign}/state', SeedSendCampaignPauseController::class)
             ->whereUuid('campaign')
             ->name('campaigns.state');
+        Route::post('campaigns/{campaign}/cancel', SeedSendCampaignCancelController::class)
+            ->whereUuid('campaign')
+            ->name('campaigns.cancel');
+        Route::post('campaigns/{campaign}/retry-failed', SeedSendCampaignRetryFailedController::class)
+            ->whereUuid('campaign')
+            ->name('campaigns.retry-failed');
+        Route::get('health', SeedSendCampaignHealthController::class)
+            ->name('health');
     });
 
 Route::middleware(['auth', 'verified'])

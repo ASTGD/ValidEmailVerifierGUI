@@ -235,6 +235,10 @@ class ViewVerificationJob extends ViewRecord
                 ->color('success')
                 ->requiresConfirmation()
                 ->visible(function (): bool {
+                    if (! (bool) config('seed_send.enabled', false)) {
+                        return false;
+                    }
+
                     return $this->record->seedSendConsents()
                         ->where('status', SeedSendConsent::STATUS_REQUESTED)
                         ->exists();
@@ -261,11 +265,61 @@ class ViewVerificationJob extends ViewRecord
                         ->success()
                         ->send();
                 }),
+            Action::make('revoke_seed_send_consent')
+                ->label('Revoke SG6 Consent')
+                ->color('danger')
+                ->form([
+                    TextInput::make('reason')
+                        ->label('Revocation reason')
+                        ->maxLength(500),
+                ])
+                ->visible(function (): bool {
+                    if (! (bool) config('seed_send.enabled', false)) {
+                        return false;
+                    }
+
+                    return $this->record->seedSendConsents()
+                        ->where('status', SeedSendConsent::STATUS_APPROVED)
+                        ->whereNull('revoked_at')
+                        ->exists();
+                })
+                ->action(function (array $data): void {
+                    $consent = $this->record->seedSendConsents()
+                        ->where('status', SeedSendConsent::STATUS_APPROVED)
+                        ->whereNull('revoked_at')
+                        ->latest('id')
+                        ->first();
+
+                    if (! $consent) {
+                        Notification::make()
+                            ->title('No active SG6 consent found.')
+                            ->warning()
+                            ->send();
+
+                        return;
+                    }
+
+                    try {
+                        app(SeedSendCampaignService::class)->revokeConsent($consent, auth()->user(), $data['reason'] ?? null);
+                    } catch (RuntimeException $exception) {
+                        Notification::make()
+                            ->title($exception->getMessage())
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
+                    Notification::make()
+                        ->title('SG6 consent revoked.')
+                        ->success()
+                        ->send();
+                }),
             Action::make('start_seed_send_campaign')
                 ->label('Start SG6 Campaign')
                 ->color('warning')
                 ->requiresConfirmation()
-                ->visible(fn (): bool => $this->record->status === VerificationJobStatus::Completed)
+                ->visible(fn (): bool => (bool) config('seed_send.enabled', false) && $this->record->status === VerificationJobStatus::Completed)
                 ->action(function (): void {
                     $consent = $this->record->seedSendConsents()
                         ->where('status', SeedSendConsent::STATUS_APPROVED)
@@ -306,6 +360,10 @@ class ViewVerificationJob extends ViewRecord
                         ->maxLength(255),
                 ])
                 ->visible(function (): bool {
+                    if (! (bool) config('seed_send.enabled', false)) {
+                        return false;
+                    }
+
                     return $this->record->seedSendCampaigns()
                         ->whereIn('status', [SeedSendCampaign::STATUS_RUNNING, SeedSendCampaign::STATUS_QUEUED])
                         ->exists();
@@ -345,6 +403,10 @@ class ViewVerificationJob extends ViewRecord
                 ->label('Resume SG6 Campaign')
                 ->color('info')
                 ->visible(function (): bool {
+                    if (! (bool) config('seed_send.enabled', false)) {
+                        return false;
+                    }
+
                     return $this->record->seedSendCampaigns()
                         ->where('status', SeedSendCampaign::STATUS_PAUSED)
                         ->exists();
@@ -377,6 +439,99 @@ class ViewVerificationJob extends ViewRecord
 
                     Notification::make()
                         ->title('SG6 campaign resumed.')
+                        ->success()
+                        ->send();
+                }),
+            Action::make('cancel_seed_send_campaign')
+                ->label('Cancel SG6 Campaign')
+                ->color('danger')
+                ->form([
+                    TextInput::make('reason')
+                        ->label('Cancel reason')
+                        ->maxLength(255),
+                ])
+                ->visible(function (): bool {
+                    if (! (bool) config('seed_send.enabled', false)) {
+                        return false;
+                    }
+
+                    return $this->record->seedSendCampaigns()
+                        ->whereIn('status', [SeedSendCampaign::STATUS_QUEUED, SeedSendCampaign::STATUS_RUNNING, SeedSendCampaign::STATUS_PAUSED])
+                        ->exists();
+                })
+                ->action(function (array $data): void {
+                    $campaign = $this->record->seedSendCampaigns()
+                        ->whereIn('status', [SeedSendCampaign::STATUS_QUEUED, SeedSendCampaign::STATUS_RUNNING, SeedSendCampaign::STATUS_PAUSED])
+                        ->latest('created_at')
+                        ->first();
+
+                    if (! $campaign) {
+                        Notification::make()
+                            ->title('No active SG6 campaign found.')
+                            ->warning()
+                            ->send();
+
+                        return;
+                    }
+
+                    try {
+                        app(SeedSendCampaignService::class)->cancelCampaign($campaign, auth()->user(), $data['reason'] ?? null);
+                    } catch (RuntimeException $exception) {
+                        Notification::make()
+                            ->title($exception->getMessage())
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
+                    Notification::make()
+                        ->title('SG6 campaign cancelled.')
+                        ->success()
+                        ->send();
+                }),
+            Action::make('retry_seed_send_failed_subset')
+                ->label('Retry SG6 Failed/Deferred')
+                ->color('warning')
+                ->visible(function (): bool {
+                    if (! (bool) config('seed_send.enabled', false)) {
+                        return false;
+                    }
+
+                    $campaign = $this->record->seedSendCampaigns()->latest('created_at')->first();
+                    if (! $campaign) {
+                        return false;
+                    }
+
+                    return $campaign->recipients()
+                        ->whereIn('status', [\App\Models\SeedSendRecipient::STATUS_DEFERRED, \App\Models\SeedSendRecipient::STATUS_FAILED])
+                        ->exists();
+                })
+                ->action(function (): void {
+                    $campaign = $this->record->seedSendCampaigns()->latest('created_at')->first();
+
+                    if (! $campaign) {
+                        Notification::make()
+                            ->title('No SG6 campaign found.')
+                            ->warning()
+                            ->send();
+
+                        return;
+                    }
+
+                    try {
+                        $affected = app(SeedSendCampaignService::class)->retryDeferredOrFailedRecipients($campaign, auth()->user(), 500);
+                    } catch (RuntimeException $exception) {
+                        Notification::make()
+                            ->title($exception->getMessage())
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
+                    Notification::make()
+                        ->title($affected > 0 ? sprintf('Requeued %d SG6 recipients.', $affected) : 'No SG6 recipients to retry.')
                         ->success()
                         ->send();
                 }),

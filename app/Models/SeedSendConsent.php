@@ -14,22 +14,31 @@ class SeedSendConsent extends Model
 
     public const STATUS_REJECTED = 'rejected';
 
+    public const STATUS_REVOKED = 'revoked';
+
     protected $fillable = [
         'verification_job_id',
         'user_id',
         'scope',
         'consent_text_version',
+        'consent_text_snapshot',
         'consented_at',
+        'expires_at',
         'consented_by_user_id',
         'status',
         'approved_by_admin_id',
         'approved_at',
+        'revoked_at',
+        'revoked_by_admin_id',
+        'revocation_reason',
         'rejection_reason',
     ];
 
     protected $casts = [
         'consented_at' => 'datetime',
+        'expires_at' => 'datetime',
         'approved_at' => 'datetime',
+        'revoked_at' => 'datetime',
     ];
 
     public function job(): BelongsTo
@@ -50,6 +59,11 @@ class SeedSendConsent extends Model
     public function approvedByAdmin(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by_admin_id');
+    }
+
+    public function revokedByAdmin(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'revoked_by_admin_id');
     }
 
     public function campaigns(): HasMany

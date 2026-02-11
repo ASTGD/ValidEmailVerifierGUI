@@ -100,6 +100,35 @@ class SeedSendWebhookTest extends TestCase
             ->assertStatus(401);
     }
 
+    public function test_seed_send_webhook_accepts_batched_events_and_dispatches_each_event(): void
+    {
+        Bus::fake();
+
+        $payload = [
+            [
+                'campaign_id' => 'campaign-1',
+                'provider_message_id' => 'msg-1',
+                'event_type' => 'delivered',
+            ],
+            [
+                'campaign_id' => 'campaign-1',
+                'provider_message_id' => 'msg-2',
+                'event_type' => 'bounced',
+            ],
+        ];
+
+        $headers = $this->signedHeaders($payload, 'nonce-batch-1');
+
+        $this->postJson(route('api.seed-send.webhook', ['provider' => 'log']), $payload, $headers)
+            ->assertStatus(202)
+            ->assertJson([
+                'message' => 'accepted',
+                'accepted_events' => 2,
+            ]);
+
+        Bus::assertDispatchedTimes(IngestSeedSendEventJob::class, 2);
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      * @return array<string, string>

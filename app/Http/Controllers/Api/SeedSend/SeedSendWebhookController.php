@@ -34,16 +34,26 @@ class SeedSendWebhookController extends Controller
             return response()->json(['message' => 'Invalid webhook payload.'], 422);
         }
 
-        if (! $this->hasValidMappingKey($payload)) {
+        $normalizedEvents = $providerManager->normalizeWebhookEvents($provider, $payload);
+        if ($normalizedEvents === []) {
             return response()->json([
-                'message' => 'Invalid webhook mapping key. Provide provider_message_id or campaign_id + valid email.',
+                'message' => 'Unable to normalize webhook payload.',
             ], 422);
         }
 
-        IngestSeedSendEventJob::dispatch(strtolower(trim($provider)), $payload);
+        foreach ($normalizedEvents as $event) {
+            if (! $this->hasValidMappingKey($event)) {
+                return response()->json([
+                    'message' => 'Invalid webhook mapping key. Provide provider_message_id or campaign_id + valid email.',
+                ], 422);
+            }
+
+            IngestSeedSendEventJob::dispatch(strtolower(trim($provider)), $event);
+        }
 
         return response()->json([
             'message' => 'accepted',
+            'accepted_events' => count($normalizedEvents),
         ], 202);
     }
 

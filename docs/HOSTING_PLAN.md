@@ -26,6 +26,7 @@ Run long-lived processes as systemd services:
 Required queue observability jobs:
 - Scheduler must run continuously so `horizon:snapshot` executes every 5 minutes.
 - Scheduler must run continuously so `ops:queue-health` executes every minute.
+- SG6 lanes (`seed_send_dispatch`, `seed_send_events`, `seed_send_reconcile`) must stay isolated from finalize/smtp_probe supervisors.
 
 ## Networking & URLs
 - Laravel app: main domain (CyberPanel vhost)
@@ -52,6 +53,13 @@ Required queue observability jobs:
 3. Verify all segmented supervisors are back (`supervisor-default`, `supervisor-prepare`, `supervisor-parse`, `supervisor-finalize`, `supervisor-imports`, `supervisor-cache-writeback`).
 4. Re-run `php artisan ops:queue-health --json` and confirm status is `healthy` or only expected warnings.
 5. If required, run safe replay preview: `php artisan ops:queue-recover --lane=parse --strategy=requeue_failed --dry-run`.
+
+## SG6 Pilot Safety Checklist
+1. Confirm SG6 provider is enabled and webhook evidence path is healthy.
+2. Confirm SG6 campaigns can be paused/cancelled independently from core verification lanes.
+3. Verify `GET /internal/admin/seed-send/health` returns healthy/warning as expected.
+4. If SG6 guardrails auto-pause a campaign, investigate bounce/defer spikes before resuming.
+5. Keep SG6 campaign retries scoped to SG6 recipients only (never requeue finalize/smtp lanes).
 
 ## Security
 - Restrict Go dashboard with IP allowlist or basic auth.

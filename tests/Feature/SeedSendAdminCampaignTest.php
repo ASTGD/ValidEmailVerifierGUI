@@ -10,6 +10,7 @@ use App\Models\SeedSendConsent;
 use App\Models\SeedSendRecipient;
 use App\Models\User;
 use App\Models\VerificationJob;
+use App\Services\SeedSend\SeedSendCreditLedgerService;
 use App\Services\SeedSend\SeedSendEventIngestor;
 use App\Support\Roles;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -66,6 +67,10 @@ class SeedSendAdminCampaignTest extends TestCase
                 'action' => 'pause',
             ])
             ->assertForbidden();
+
+        $this->actingAs($customer)
+            ->get(route('internal.admin.seed-send.health'))
+            ->assertForbidden();
     }
 
     public function test_seed_send_campaign_start_requires_approved_consent(): void
@@ -85,6 +90,24 @@ class SeedSendAdminCampaignTest extends TestCase
         $this->assertDatabaseCount('seed_send_campaigns', 0);
     }
 
+    public function test_admin_can_revoke_approved_consent(): void
+    {
+        $admin = $this->makeAdmin();
+        $customer = $this->makeCustomer();
+        $job = $this->makeCompletedJob($customer);
+        $consent = $this->makeConsent($job, $customer, SeedSendConsent::STATUS_APPROVED);
+
+        $this->actingAs($admin)
+            ->post(route('internal.admin.seed-send.consents.revoke', $consent), [
+                'reason' => 'customer request',
+            ])
+            ->assertRedirect();
+
+        $consent->refresh();
+        $this->assertSame(SeedSendConsent::STATUS_REVOKED, $consent->status);
+        $this->assertNotNull($consent->revoked_at);
+    }
+
     public function test_seed_send_campaign_start_requires_completed_job(): void
     {
         $admin = $this->makeAdmin();
@@ -98,6 +121,29 @@ class SeedSendAdminCampaignTest extends TestCase
             'input_key' => 'uploads/'.$customer->id.'/processing/input.csv',
         ]);
         $consent = $this->makeConsent($job, $customer, SeedSendConsent::STATUS_APPROVED);
+        $this->storeResultFiles($job, ['alpha@example.com']);
+
+        $this->actingAs($admin)
+            ->post(route('internal.admin.seed-send.campaigns.start', $job), [
+                'consent_id' => $consent->id,
+            ])
+            ->assertSessionHasErrors('seed_send');
+
+        $this->assertDatabaseCount('seed_send_campaigns', 0);
+    }
+
+    public function test_seed_send_campaign_start_blocks_expired_consent(): void
+    {
+        config([
+            'seed_send.consent.expiry_days' => 1,
+        ]);
+
+        $admin = $this->makeAdmin();
+        $customer = $this->makeCustomer();
+        $job = $this->makeCompletedJob($customer);
+        $consent = $this->makeConsent($job, $customer, SeedSendConsent::STATUS_APPROVED, [
+            'expires_at' => now()->subMinute(),
+        ]);
         $this->storeResultFiles($job, ['alpha@example.com']);
 
         $this->actingAs($admin)
@@ -159,6 +205,104 @@ class SeedSendAdminCampaignTest extends TestCase
         $this->assertSame(SeedSendCampaign::STATUS_COMPLETED, $campaign->status);
         $this->assertSame(3, $campaign->delivered_count);
         $this->assertSame(6, $campaign->credits_used);
+        $this->assertNotNull($campaign->report_key);
+        $this->assertNotNull($campaign->report_disk);
+        $this->assertTrue(Storage::disk((string) $campaign->report_disk)->exists((string) $campaign->report_key));
+
+        $this->assertDatabaseHas('seed_send_credit_ledger', [
+            'campaign_id' => $campaign->id,
+            'entry_type' => SeedSendCreditLedgerService::ENTRY_RESERVE,
+            'credits' => 6,
+        ]);
+        $this->assertDatabaseHas('seed_send_credit_ledger', [
+            'campaign_id' => $campaign->id,
+            'entry_type' => SeedSendCreditLedgerService::ENTRY_CONSUME,
+            'credits' => 6,
+        ]);
+        $this->assertDatabaseHas('seed_send_credit_ledger', [
+            'campaign_id' => $campaign->id,
+            'entry_type' => SeedSendCreditLedgerService::ENTRY_RELEASE,
+            'credits' => 0,
+        ]);
+    }
+
+    public function test_admin_can_cancel_campaign_and_release_reserved_credits(): void
+    {
+        config([
+            'seed_send.credits.per_recipient' => 2,
+            'seed_send.webhooks.required' => false,
+        ]);
+
+        $admin = $this->makeAdmin();
+        $customer = $this->makeCustomer();
+        $job = $this->makeCompletedJob($customer);
+        $consent = $this->makeConsent($job, $customer, SeedSendConsent::STATUS_APPROVED);
+        $this->storeResultFiles($job, ['alpha@example.com', 'beta@example.com']);
+
+        $this->actingAs($admin)
+            ->post(route('internal.admin.seed-send.campaigns.start', $job), ['consent_id' => $consent->id])
+            ->assertRedirect();
+
+        $campaign = SeedSendCampaign::query()->firstOrFail();
+
+        $this->actingAs($admin)
+            ->post(route('internal.admin.seed-send.campaigns.cancel', $campaign), [
+                'reason' => 'pilot stop',
+            ])
+            ->assertRedirect();
+
+        $campaign->refresh();
+        $this->assertSame(SeedSendCampaign::STATUS_CANCELLED, $campaign->status);
+
+        $this->assertDatabaseHas('seed_send_credit_ledger', [
+            'campaign_id' => $campaign->id,
+            'entry_type' => SeedSendCreditLedgerService::ENTRY_RELEASE,
+            'credits' => 4,
+        ]);
+    }
+
+    public function test_admin_retry_failed_subset_requeues_deferred_and_failed_recipients(): void
+    {
+        config([
+            'seed_send.webhooks.required' => false,
+        ]);
+
+        $admin = $this->makeAdmin();
+        $customer = $this->makeCustomer();
+        $job = $this->makeCompletedJob($customer);
+        $consent = $this->makeConsent($job, $customer, SeedSendConsent::STATUS_APPROVED);
+        $this->storeResultFiles($job, ['alpha@example.com', 'beta@example.com']);
+
+        $this->actingAs($admin)
+            ->post(route('internal.admin.seed-send.campaigns.start', $job), ['consent_id' => $consent->id])
+            ->assertRedirect();
+
+        $campaign = SeedSendCampaign::query()->firstOrFail();
+
+        SeedSendRecipient::query()
+            ->where('campaign_id', $campaign->id)
+            ->orderBy('id')
+            ->limit(1)
+            ->update(['status' => SeedSendRecipient::STATUS_FAILED]);
+
+        SeedSendRecipient::query()
+            ->where('campaign_id', $campaign->id)
+            ->orderByDesc('id')
+            ->limit(1)
+            ->update(['status' => SeedSendRecipient::STATUS_DEFERRED]);
+
+        $this->actingAs($admin)
+            ->post(route('internal.admin.seed-send.campaigns.retry-failed', $campaign), [
+                'max_recipients' => 10,
+            ])
+            ->assertRedirect();
+
+        $pendingCount = SeedSendRecipient::query()
+            ->where('campaign_id', $campaign->id)
+            ->where('status', SeedSendRecipient::STATUS_PENDING)
+            ->count();
+
+        $this->assertGreaterThanOrEqual(2, $pendingCount);
     }
 
     public function test_seed_send_event_ingestor_is_idempotent_by_dedupe_key(): void
@@ -206,6 +350,25 @@ class SeedSendAdminCampaignTest extends TestCase
         $this->assertSame(1, $campaign->delivered_count);
     }
 
+    public function test_admin_health_endpoint_returns_summary_payload(): void
+    {
+        $admin = $this->makeAdmin();
+
+        $this->actingAs($admin)
+            ->get(route('internal.admin.seed-send.health'))
+            ->assertOk()
+            ->assertJsonStructure([
+                'status',
+                'checked_at',
+                'active_campaigns',
+                'running_campaigns',
+                'queued_campaigns',
+                'paused_campaigns',
+                'provider',
+                'issues',
+            ]);
+    }
+
     private function makeAdmin(): User
     {
         Role::findOrCreate(Roles::ADMIN, config('auth.defaults.guard'));
@@ -244,19 +407,24 @@ class SeedSendAdminCampaignTest extends TestCase
         ]);
     }
 
-    private function makeConsent(VerificationJob $job, User $customer, string $status): SeedSendConsent
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function makeConsent(VerificationJob $job, User $customer, string $status, array $overrides = []): SeedSendConsent
     {
-        return SeedSendConsent::query()->create([
+        return SeedSendConsent::query()->create(array_merge([
             'verification_job_id' => $job->id,
             'user_id' => $customer->id,
             'scope' => 'full_list',
             'consent_text_version' => 'v1',
+            'consent_text_snapshot' => 'SG6 consent text',
             'consented_at' => now(),
+            'expires_at' => now()->addDays(30),
             'consented_by_user_id' => $customer->id,
             'status' => $status,
             'approved_at' => $status === SeedSendConsent::STATUS_APPROVED ? now() : null,
             'approved_by_admin_id' => null,
-        ]);
+        ], $overrides));
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Enums\VerificationJobStatus;
 use App\Jobs\DispatchSeedSendCampaignJob;
 use App\Models\SeedSendCampaign;
 use App\Models\SeedSendConsent;
+use App\Models\SeedSendRecipient;
 use App\Models\User;
 use App\Models\VerificationJob;
 use App\Support\AdminAuditLogger;
@@ -17,7 +18,8 @@ class SeedSendCampaignService
 {
     public function __construct(
         private SeedSendRecipientResolver $recipientResolver,
-        private SeedSendEligibility $eligibility
+        private SeedSendEligibility $eligibility,
+        private SeedSendCreditLedgerService $creditLedgerService
     ) {}
 
     public function requestConsent(VerificationJob $job, User $user, ?string $scope = null): SeedSendConsent
@@ -29,6 +31,10 @@ class SeedSendCampaignService
             ->where('user_id', $user->id)
             ->where('scope', $scope)
             ->whereIn('status', [SeedSendConsent::STATUS_REQUESTED, SeedSendConsent::STATUS_APPROVED])
+            ->whereNull('revoked_at')
+            ->where(function ($query): void {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
             ->latest('id')
             ->first();
 
@@ -41,7 +47,9 @@ class SeedSendCampaignService
             'user_id' => $user->id,
             'scope' => $scope,
             'consent_text_version' => (string) config('seed_send.consent.text_version', 'v1'),
+            'consent_text_snapshot' => (string) config('seed_send.consent.text', ''),
             'consented_at' => now(),
+            'expires_at' => now()->addDays(max(1, (int) config('seed_send.consent.expiry_days', 30))),
             'consented_by_user_id' => $user->id,
             'status' => SeedSendConsent::STATUS_REQUESTED,
         ]);
@@ -60,11 +68,22 @@ class SeedSendCampaignService
             return $consent;
         }
 
+        if ($this->isConsentExpired($consent)) {
+            throw new RuntimeException('SG6 consent has expired and must be requested again.');
+        }
+
+        if ($consent->status === SeedSendConsent::STATUS_REVOKED || $consent->revoked_at !== null) {
+            throw new RuntimeException('Revoked SG6 consent cannot be approved.');
+        }
+
         $consent->update([
             'status' => SeedSendConsent::STATUS_APPROVED,
             'approved_by_admin_id' => $admin->id,
             'approved_at' => now(),
             'rejection_reason' => null,
+            'revoked_at' => null,
+            'revoked_by_admin_id' => null,
+            'revocation_reason' => null,
         ]);
 
         $job = $consent->job;
@@ -89,6 +108,14 @@ class SeedSendCampaignService
 
         if ($consent->status !== SeedSendConsent::STATUS_APPROVED) {
             throw new RuntimeException('SG6 consent must be approved before campaign start.');
+        }
+
+        if ($this->isConsentExpired($consent)) {
+            throw new RuntimeException('SG6 consent has expired and must be renewed.');
+        }
+
+        if ($consent->status === SeedSendConsent::STATUS_REVOKED || $consent->revoked_at !== null) {
+            throw new RuntimeException('SG6 consent is revoked and cannot be used.');
         }
 
         $eligibility = $this->eligibility->evaluate($job);
@@ -144,7 +171,7 @@ class SeedSendCampaignService
                     'campaign_id' => $campaign->id,
                     'email' => $email,
                     'email_hash' => hash('sha256', $email),
-                    'status' => \App\Models\SeedSendRecipient::STATUS_PENDING,
+                    'status' => SeedSendRecipient::STATUS_PENDING,
                     'attempt_count' => 0,
                     'created_at' => $now,
                     'updated_at' => $now,
@@ -152,8 +179,10 @@ class SeedSendCampaignService
             }
 
             foreach (array_chunk($rows, 500) as $chunk) {
-                \App\Models\SeedSendRecipient::query()->insert($chunk);
+                SeedSendRecipient::query()->insert($chunk);
             }
+
+            $this->creditLedgerService->reserveForCampaign($campaign);
 
             $job->addLog('seed_send_campaign_queued', 'SG6 campaign queued by admin.', [
                 'seed_send_campaign_id' => $campaign->id,
@@ -197,6 +226,134 @@ class SeedSendCampaignService
         return $campaign->refresh();
     }
 
+    public function cancelCampaign(SeedSendCampaign $campaign, User $admin, ?string $reason = null): SeedSendCampaign
+    {
+        if (in_array($campaign->status, [
+            SeedSendCampaign::STATUS_COMPLETED,
+            SeedSendCampaign::STATUS_FAILED,
+            SeedSendCampaign::STATUS_CANCELLED,
+        ], true)) {
+            throw new RuntimeException('Campaign is already in a terminal state.');
+        }
+
+        DB::transaction(function () use ($campaign, $reason): void {
+            SeedSendRecipient::query()
+                ->where('campaign_id', $campaign->id)
+                ->whereIn('status', [
+                    SeedSendRecipient::STATUS_PENDING,
+                    SeedSendRecipient::STATUS_DISPATCHING,
+                    SeedSendRecipient::STATUS_DISPATCHED,
+                ])
+                ->update([
+                    'status' => SeedSendRecipient::STATUS_FAILED,
+                    'last_event_at' => now(),
+                    'updated_at' => now(),
+                    'evidence_payload' => [
+                        'reason' => 'campaign_cancelled',
+                        'note' => $reason,
+                    ],
+                ]);
+
+            $campaign->update([
+                'status' => SeedSendCampaign::STATUS_CANCELLED,
+                'finished_at' => now(),
+                'paused_at' => now(),
+                'pause_reason' => $reason,
+                'failure_reason' => $reason ? sprintf('cancelled: %s', $reason) : 'cancelled_by_admin',
+            ]);
+
+            $this->creditLedgerService->releaseOnCancellation($campaign->refresh());
+        });
+
+        $campaign->refresh();
+
+        $campaign->job?->addLog('seed_send_campaign_cancelled', 'SG6 campaign cancelled by admin.', [
+            'seed_send_campaign_id' => $campaign->id,
+            'reason' => $reason,
+        ], $admin->id);
+
+        AdminAuditLogger::log('seed_send_campaign_cancelled', $campaign, [
+            'reason' => $reason,
+        ]);
+
+        return $campaign;
+    }
+
+    public function retryDeferredOrFailedRecipients(SeedSendCampaign $campaign, User $admin, int $maxRecipients = 500): int
+    {
+        if (in_array($campaign->status, [SeedSendCampaign::STATUS_CANCELLED, SeedSendCampaign::STATUS_FAILED], true)) {
+            throw new RuntimeException('Cannot retry recipients for cancelled or failed campaigns.');
+        }
+
+        $maxRecipients = max(1, $maxRecipients);
+
+        $recipientIds = SeedSendRecipient::query()
+            ->where('campaign_id', $campaign->id)
+            ->whereIn('status', [SeedSendRecipient::STATUS_DEFERRED, SeedSendRecipient::STATUS_FAILED])
+            ->orderBy('id')
+            ->limit($maxRecipients)
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
+
+        if ($recipientIds === []) {
+            return 0;
+        }
+
+        SeedSendRecipient::query()
+            ->whereIn('id', $recipientIds)
+            ->update([
+                'status' => SeedSendRecipient::STATUS_PENDING,
+                'provider_message_id' => null,
+                'provider_payload' => null,
+                'evidence_payload' => null,
+                'updated_at' => now(),
+            ]);
+
+        $campaign->update([
+            'status' => SeedSendCampaign::STATUS_QUEUED,
+            'finished_at' => null,
+            'paused_at' => null,
+            'pause_reason' => null,
+            'failure_reason' => null,
+        ]);
+
+        DispatchSeedSendCampaignJob::dispatch($campaign->id);
+
+        $campaign->job?->addLog('seed_send_campaign_retry_subset', 'SG6 deferred/failed recipients requeued by admin.', [
+            'seed_send_campaign_id' => $campaign->id,
+            'recipient_count' => count($recipientIds),
+        ], $admin->id);
+
+        AdminAuditLogger::log('seed_send_campaign_retry_subset', $campaign, [
+            'recipient_count' => count($recipientIds),
+        ]);
+
+        return count($recipientIds);
+    }
+
+    public function revokeConsent(SeedSendConsent $consent, User $admin, ?string $reason = null): SeedSendConsent
+    {
+        $consent->update([
+            'status' => SeedSendConsent::STATUS_REVOKED,
+            'revoked_at' => now(),
+            'revoked_by_admin_id' => $admin->id,
+            'revocation_reason' => $reason,
+        ]);
+
+        $consent->job?->addLog('seed_send_consent_revoked', 'SG6 consent revoked by admin.', [
+            'seed_send_consent_id' => $consent->id,
+            'reason' => $reason,
+        ], $admin->id);
+
+        AdminAuditLogger::log('seed_send_consent_revoked', $consent, [
+            'verification_job_id' => $consent->verification_job_id,
+            'reason' => $reason,
+        ]);
+
+        return $consent->refresh();
+    }
+
     public function resumeCampaign(SeedSendCampaign $campaign, User $admin): SeedSendCampaign
     {
         if ($campaign->status !== SeedSendCampaign::STATUS_PAUSED) {
@@ -229,5 +386,10 @@ class SeedSendCampaignService
         }
 
         return $scope;
+    }
+
+    private function isConsentExpired(SeedSendConsent $consent): bool
+    {
+        return $consent->expires_at !== null && $consent->expires_at->lte(now());
     }
 }

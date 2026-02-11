@@ -22,6 +22,8 @@ class SeedSendConsentFlowTest extends TestCase
         config([
             'seed_send.enabled' => true,
             'seed_send.webhooks.required' => false,
+            'seed_send.consent.text' => 'Pilot SG6 consent text',
+            'seed_send.consent.expiry_days' => 14,
         ]);
     }
 
@@ -42,6 +44,8 @@ class SeedSendConsentFlowTest extends TestCase
         $this->assertSame($customer->id, $consent->user_id);
         $this->assertSame(SeedSendConsent::STATUS_REQUESTED, $consent->status);
         $this->assertSame('full_list', $consent->scope);
+        $this->assertSame('Pilot SG6 consent text', $consent->consent_text_snapshot);
+        $this->assertNotNull($consent->expires_at);
     }
 
     public function test_seed_send_consent_request_requires_completed_job(): void

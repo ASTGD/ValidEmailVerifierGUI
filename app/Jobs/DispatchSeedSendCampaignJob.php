@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\SeedSendCampaign;
 use App\Models\SeedSendRecipient;
 use App\Services\SeedSend\Providers\SeedSendProviderManager;
+use App\Services\SeedSend\SeedSendCampaignGuardrails;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -43,7 +44,7 @@ class DispatchSeedSendCampaignJob implements ShouldQueue
         ];
     }
 
-    public function handle(SeedSendProviderManager $providerManager): void
+    public function handle(SeedSendProviderManager $providerManager, SeedSendCampaignGuardrails $guardrails): void
     {
         $batchSize = max(1, (int) config('seed_send.dispatch.batch_size', 25));
         $claimedRecipientIds = DB::transaction(function () use ($batchSize): array {
@@ -154,6 +155,15 @@ class DispatchSeedSendCampaignJob implements ShouldQueue
         }
 
         $this->refreshCampaignCounters($campaign->id);
+        $campaign->refresh();
+        $guardrails->evaluateAndApply($campaign);
+
+        if ($campaign->status !== SeedSendCampaign::STATUS_RUNNING) {
+            ReconcileSeedSendCampaignJob::dispatch($campaign->id)
+                ->delay(now()->addMinutes(max(1, (int) config('seed_send.reconcile.delay_minutes', 30))));
+
+            return;
+        }
 
         $pendingCount = SeedSendRecipient::query()
             ->where('campaign_id', $campaign->id)
