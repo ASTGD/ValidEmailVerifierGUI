@@ -15,24 +15,26 @@ import (
 
 type OverviewData struct {
 	BasePageData
-	WorkerCount       int
-	PoolCount         int
-	DesiredTotal      int
-	ErrorRateTotal    float64
-	ErrorRateAverage  float64
-	IncidentCount     int
-	ProbeUnknownRate  float64
-	ProbeTempfailRate float64
-	ProbeRejectRate   float64
-	ProviderHealth    []ProviderHealthSummary
-	Pools             []PoolSummary
-	ChartLabels       []string
-	ChartOnline       []int
-	ChartDesired      []int
-	HistoryLabels     []string
-	HistoryWorkers    []int
-	HistoryDesired    []int
-	HasHistory        bool
+	WorkerCount            int
+	PoolCount              int
+	DesiredTotal           int
+	ErrorRateTotal         float64
+	ErrorRateAverage       float64
+	IncidentCount          int
+	ProbeUnknownRate       float64
+	ProbeTempfailRate      float64
+	ProbeRejectRate        float64
+	LaravelFallbackWorkers int
+	ProviderHealth         []ProviderHealthSummary
+	ProviderPolicies       ProviderPoliciesData
+	Pools                  []PoolSummary
+	ChartLabels            []string
+	ChartOnline            []int
+	ChartDesired           []int
+	HistoryLabels          []string
+	HistoryWorkers         []int
+	HistoryDesired         []int
+	HasHistory             bool
 }
 
 type WorkersPageData struct {
@@ -70,21 +72,23 @@ type SettingsPageData struct {
 }
 
 type LivePayload struct {
-	Timestamp          string                  `json:"timestamp"`
-	WorkerCount        int                     `json:"worker_count"`
-	PoolCount          int                     `json:"pool_count"`
-	DesiredTotal       int                     `json:"desired_total"`
-	ErrorRateTotal     float64                 `json:"error_rate_total"`
-	ErrorRateAverage   float64                 `json:"error_rate_average"`
-	Pools              []PoolSummary           `json:"pools"`
-	IncidentCount      int                     `json:"incident_count"`
-	ProbeUnknownRate   float64                 `json:"probe_unknown_rate"`
-	ProbeTempfailRate  float64                 `json:"probe_tempfail_rate"`
-	ProbeRejectRate    float64                 `json:"probe_reject_rate"`
-	ProviderHealth     []ProviderHealthSummary `json:"provider_health,omitempty"`
-	AlertsEnabled      bool                    `json:"alerts_enabled"`
-	AutoActionsEnabled bool                    `json:"auto_actions_enabled"`
-	AutoscaleEnabled   bool                    `json:"autoscale_enabled"`
+	Timestamp              string                  `json:"timestamp"`
+	WorkerCount            int                     `json:"worker_count"`
+	PoolCount              int                     `json:"pool_count"`
+	DesiredTotal           int                     `json:"desired_total"`
+	ErrorRateTotal         float64                 `json:"error_rate_total"`
+	ErrorRateAverage       float64                 `json:"error_rate_average"`
+	Pools                  []PoolSummary           `json:"pools"`
+	IncidentCount          int                     `json:"incident_count"`
+	ProbeUnknownRate       float64                 `json:"probe_unknown_rate"`
+	ProbeTempfailRate      float64                 `json:"probe_tempfail_rate"`
+	ProbeRejectRate        float64                 `json:"probe_reject_rate"`
+	LaravelFallbackWorkers int                     `json:"laravel_fallback_workers"`
+	ActivePolicyVersion    string                  `json:"active_policy_version"`
+	ProviderHealth         []ProviderHealthSummary `json:"provider_health,omitempty"`
+	AlertsEnabled          bool                    `json:"alerts_enabled"`
+	AutoActionsEnabled     bool                    `json:"auto_actions_enabled"`
+	AutoscaleEnabled       bool                    `json:"autoscale_enabled"`
 }
 
 func (s *Server) handleUIRedirect(w http.ResponseWriter, r *http.Request) {
@@ -136,20 +140,22 @@ func (s *Server) handleUIOverview(w http.ResponseWriter, r *http.Request) {
 			BasePath:        "/verifier-engine-room",
 			LiveStreamPath:  "/verifier-engine-room/events",
 		},
-		WorkerCount:       stats.WorkerCount,
-		PoolCount:         stats.PoolCount,
-		DesiredTotal:      stats.DesiredTotal,
-		ErrorRateTotal:    stats.ErrorRateTotal,
-		ErrorRateAverage:  stats.ErrorRateAverage,
-		IncidentCount:     stats.IncidentCount,
-		ProbeUnknownRate:  stats.ProbeUnknownRate,
-		ProbeTempfailRate: stats.ProbeTempfailRate,
-		ProbeRejectRate:   stats.ProbeRejectRate,
-		ProviderHealth:    stats.ProviderHealth,
-		Pools:             stats.Pools,
-		ChartLabels:       labels,
-		ChartOnline:       online,
-		ChartDesired:      desired,
+		WorkerCount:            stats.WorkerCount,
+		PoolCount:              stats.PoolCount,
+		DesiredTotal:           stats.DesiredTotal,
+		ErrorRateTotal:         stats.ErrorRateTotal,
+		ErrorRateAverage:       stats.ErrorRateAverage,
+		IncidentCount:          stats.IncidentCount,
+		ProbeUnknownRate:       stats.ProbeUnknownRate,
+		ProbeTempfailRate:      stats.ProbeTempfailRate,
+		ProbeRejectRate:        stats.ProbeRejectRate,
+		LaravelFallbackWorkers: stats.LaravelFallbackWorkers,
+		ProviderHealth:         stats.ProviderHealth,
+		ProviderPolicies:       stats.ProviderPolicies,
+		Pools:                  stats.Pools,
+		ChartLabels:            labels,
+		ChartOnline:            online,
+		ChartDesired:           desired,
 	}
 
 	if s.snapshots != nil {
@@ -520,21 +526,23 @@ func (s *Server) pushLiveEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	payload := LivePayload{
-		Timestamp:          time.Now().UTC().Format(time.RFC3339),
-		WorkerCount:        stats.WorkerCount,
-		PoolCount:          stats.PoolCount,
-		DesiredTotal:       stats.DesiredTotal,
-		ErrorRateTotal:     stats.ErrorRateTotal,
-		ErrorRateAverage:   stats.ErrorRateAverage,
-		Pools:              stats.Pools,
-		IncidentCount:      stats.IncidentCount,
-		ProbeUnknownRate:   stats.ProbeUnknownRate,
-		ProbeTempfailRate:  stats.ProbeTempfailRate,
-		ProbeRejectRate:    stats.ProbeRejectRate,
-		ProviderHealth:     stats.ProviderHealth,
-		AlertsEnabled:      stats.Settings.AlertsEnabled,
-		AutoActionsEnabled: stats.Settings.AutoActionsEnabled,
-		AutoscaleEnabled:   stats.Settings.AutoscaleEnabled,
+		Timestamp:              time.Now().UTC().Format(time.RFC3339),
+		WorkerCount:            stats.WorkerCount,
+		PoolCount:              stats.PoolCount,
+		DesiredTotal:           stats.DesiredTotal,
+		ErrorRateTotal:         stats.ErrorRateTotal,
+		ErrorRateAverage:       stats.ErrorRateAverage,
+		Pools:                  stats.Pools,
+		IncidentCount:          stats.IncidentCount,
+		ProbeUnknownRate:       stats.ProbeUnknownRate,
+		ProbeTempfailRate:      stats.ProbeTempfailRate,
+		ProbeRejectRate:        stats.ProbeRejectRate,
+		LaravelFallbackWorkers: stats.LaravelFallbackWorkers,
+		ActivePolicyVersion:    stats.ProviderPolicies.ActiveVersion,
+		ProviderHealth:         stats.ProviderHealth,
+		AlertsEnabled:          stats.Settings.AlertsEnabled,
+		AutoActionsEnabled:     stats.Settings.AutoActionsEnabled,
+		AutoscaleEnabled:       stats.Settings.AutoscaleEnabled,
 	}
 
 	data, err := json.Marshal(payload)

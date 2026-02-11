@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Filament\Widgets\OpsActiveJobsTable;
 use App\Filament\Widgets\OpsEngineActivityTable;
 use App\Filament\Widgets\OpsEngineHealthOverview;
+use App\Filament\Widgets\OpsGoControlPlaneOverview;
 use App\Filament\Widgets\OpsJobHealthOverview;
 use App\Filament\Widgets\OpsOpenQueueIncidentsTable;
 use App\Filament\Widgets\OpsQueueDepthChart;
@@ -44,6 +45,7 @@ class OpsOverview extends Dashboard
             OpsQueueIncidentStatus::class,
             OpsSeedSendHealthOverview::class,
             OpsQueueHealthOverview::class,
+            OpsGoControlPlaneOverview::class,
             OpsEngineHealthOverview::class,
             OpsJobHealthOverview::class,
             OpsSystemTrendChart::class,

@@ -254,6 +254,18 @@ func (c *Client) LogChunk(ctx context.Context, chunkID string, payload map[strin
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body interface{}) (int, []byte, error) {
+	return doJSON(ctx, c.httpClient, c.baseURL, c.token, method, path, body)
+}
+
+func doJSON(
+	ctx context.Context,
+	httpClient *http.Client,
+	baseURL string,
+	token string,
+	method string,
+	path string,
+	body interface{},
+) (int, []byte, error) {
 	var reader io.Reader
 	if body != nil {
 		payload, err := json.Marshal(body)
@@ -263,7 +275,7 @@ func (c *Client) do(ctx context.Context, method, path string, body interface{}) 
 		reader = bytes.NewReader(payload)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reader)
+	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(baseURL, "/")+path, reader)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -272,11 +284,11 @@ func (c *Client) do(ctx context.Context, method, path string, body interface{}) 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return 0, nil, err
 	}

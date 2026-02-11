@@ -570,6 +570,7 @@ func (s *Store) GetWorkers(ctx context.Context) ([]WorkerSummary, error) {
 			IPAddress:       meta.IPAddress,
 			Version:         meta.Version,
 			Pool:            pool,
+			Tags:            meta.Tags,
 			Status:          defaultString(status, "unknown"),
 			DesiredState:    desired,
 			Quarantined:     quarantined,

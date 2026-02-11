@@ -19,6 +19,8 @@ import (
 func main() {
 	baseURL := mustEnv("ENGINE_API_BASE_URL")
 	token := mustEnv("ENGINE_API_TOKEN")
+	controlPlaneBaseURL := strings.TrimSpace(os.Getenv("CONTROL_PLANE_BASE_URL"))
+	controlPlaneToken := strings.TrimSpace(os.Getenv("CONTROL_PLANE_TOKEN"))
 
 	workerID := envOr("WORKER_ID", hostname())
 	workerCapability := parseWorkerCapability(os.Getenv("WORKER_CAPABILITY"))
@@ -46,6 +48,16 @@ func main() {
 	smtpRateLimit := envInt("SMTP_RATE_LIMIT_PER_MINUTE", 0)
 	providerPolicyEngineEnabled := envBool("PROVIDER_POLICY_ENGINE_ENABLED", false)
 	adaptiveRetryEnabled := envBool("ADAPTIVE_RETRY_ENABLED", false)
+	controlPlaneHeartbeatEnabled := envBool(
+		"CONTROL_PLANE_HEARTBEAT_ENABLED",
+		controlPlaneBaseURL != "" && controlPlaneToken != "",
+	)
+	laravelHeartbeatEnabled := envBool("LARAVEL_HEARTBEAT_ENABLED", true)
+	laravelHeartbeatEveryN := envInt("LARAVEL_HEARTBEAT_EVERY_N", 10)
+	controlPlanePolicySyncEnabled := envBool(
+		"CONTROL_PLANE_POLICY_SYNC_ENABLED",
+		controlPlaneBaseURL != "" && controlPlaneToken != "",
+	)
 	roleAccounts := parseRoleAccounts(os.Getenv("ROLE_ACCOUNTS"))
 	roleAccountsBehavior := parseRoleAccountsBehavior(os.Getenv("ROLE_ACCOUNTS_BEHAVIOR"))
 	domainTypos := parseDomainTypos(os.Getenv("DOMAIN_TYPOS"))
@@ -78,6 +90,21 @@ func main() {
 	}
 
 	client := api.NewClient(baseURL, token)
+
+	var controlPlaneClient *api.ControlPlaneClient
+	if controlPlaneBaseURL != "" && controlPlaneToken != "" {
+		controlPlaneClient = api.NewControlPlaneClient(controlPlaneBaseURL, controlPlaneToken)
+	}
+
+	if controlPlaneHeartbeatEnabled && controlPlaneClient == nil {
+		fmt.Println("CONTROL_PLANE_BASE_URL and CONTROL_PLANE_TOKEN are required when CONTROL_PLANE_HEARTBEAT_ENABLED=true")
+		os.Exit(1)
+	}
+
+	if controlPlanePolicySyncEnabled && controlPlaneClient == nil {
+		fmt.Println("CONTROL_PLANE_BASE_URL and CONTROL_PLANE_TOKEN are required when CONTROL_PLANE_POLICY_SYNC_ENABLED=true")
+		os.Exit(1)
+	}
 
 	verifierConfig := verifier.Config{
 		DNSTimeout:                  dnsTimeout,
@@ -127,6 +154,11 @@ func main() {
 			Region:      serverRegion,
 			Meta:        serverMeta,
 		},
+		ControlPlaneClient:            controlPlaneClient,
+		ControlPlaneHeartbeatEnabled:  controlPlaneHeartbeatEnabled,
+		LaravelHeartbeatEnabled:       laravelHeartbeatEnabled,
+		LaravelHeartbeatEveryN:        laravelHeartbeatEveryN,
+		ControlPlanePolicySyncEnabled: controlPlanePolicySyncEnabled,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

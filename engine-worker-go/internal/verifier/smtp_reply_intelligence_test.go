@@ -207,3 +207,46 @@ func TestClassifySMTPPolicyEngineKeeps57AsPolicyBlocked(t *testing.T) {
 		t.Fatal("expected matched rule id metadata to be populated")
 	}
 }
+
+func TestClassifySMTPPolicyEngineUsesProviderSpecificGmailRule(t *testing.T) {
+	engine := DefaultProviderReplyPolicyEngine()
+	reply := smtpReply{
+		Code:         451,
+		EnhancedCode: "4.7.26",
+		Message:      "Rate limited, try again later",
+	}
+
+	result := classifySMTPRcptReply(reply, "gmail", "gmail-smtp-in.l.google.com", true, engine, true)
+	if result.DecisionClass != DecisionRetryable {
+		t.Fatalf("expected retryable decision class, got %q", result.DecisionClass)
+	}
+	if result.ProviderProfile != "gmail" {
+		t.Fatalf("expected gmail provider profile, got %q", result.ProviderProfile)
+	}
+	if result.MatchedRuleID == "" {
+		t.Fatal("expected matched rule id for provider-specific mapping")
+	}
+	if result.RetryAfterSecond < 120 {
+		t.Fatalf("expected gmail adaptive retry >= 120, got %d", result.RetryAfterSecond)
+	}
+}
+
+func TestClassifySMTPPolicyEngineUsesProviderSpecificMicrosoftRule(t *testing.T) {
+	engine := DefaultProviderReplyPolicyEngine()
+	reply := smtpReply{
+		Code:         421,
+		EnhancedCode: "4.7.0",
+		Message:      "Sender throttled, try this again later",
+	}
+
+	result := classifySMTPRcptReply(reply, "microsoft", "outlook-com.olc.protection.outlook.com", true, engine, true)
+	if result.DecisionClass != DecisionRetryable {
+		t.Fatalf("expected retryable decision class, got %q", result.DecisionClass)
+	}
+	if result.ProviderProfile != "microsoft" {
+		t.Fatalf("expected microsoft provider profile, got %q", result.ProviderProfile)
+	}
+	if result.RetryStrategy == "none" {
+		t.Fatalf("expected retry strategy, got %q", result.RetryStrategy)
+	}
+}

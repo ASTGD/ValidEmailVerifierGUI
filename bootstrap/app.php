@@ -29,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('ops:queue-health')->everyMinute()->withoutOverlapping();
         $schedule->command('ops:queue-rollup')->hourly()->withoutOverlapping();
         $schedule->command('ops:queue-slo-report')->everyFiveMinutes()->withoutOverlapping();
+        $schedule->command('ops:go-probe-weekly-report')->weeklyOn(1, '09:00')->withoutOverlapping();
         $schedule->command('ops:queue-prune')->daily()->withoutOverlapping();
     })
     ->withExceptions(function (Exceptions $exceptions): void {

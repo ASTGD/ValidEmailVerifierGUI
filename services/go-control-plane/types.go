@@ -64,6 +64,7 @@ type WorkerSummary struct {
 	IPAddress       string           `json:"ip_address,omitempty"`
 	Version         string           `json:"version,omitempty"`
 	Pool            string           `json:"pool,omitempty"`
+	Tags            []string         `json:"tags,omitempty"`
 	Status          string           `json:"status"`
 	DesiredState    string           `json:"desired_state"`
 	Quarantined     bool             `json:"quarantined"`
