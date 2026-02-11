@@ -33,6 +33,8 @@ class JobShow extends Component
 
         return view('livewire.portal.job-show', [
             'job' => $this->job,
+            'latestSeedSendConsent' => $this->job->seedSendConsents()->latest('id')->first(),
+            'latestSeedSendCampaign' => $this->job->seedSendCampaigns()->latest('created_at')->first(),
             'activityLogs' => $this->job->logs()
                 ->latest()
                 ->limit(20)

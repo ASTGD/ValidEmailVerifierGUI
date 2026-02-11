@@ -12,7 +12,7 @@ return [
 
     'heavy_submission_lanes' => array_values(array_filter(array_map(
         'trim',
-        explode(',', (string) env('QUEUE_SLO_HEAVY_SUBMISSION_LANES', 'prepare,parse,smtp_probe,imports,cache_writeback'))
+        explode(',', (string) env('QUEUE_SLO_HEAVY_SUBMISSION_LANES', 'prepare,parse,smtp_probe,imports,cache_writeback,seed_send_dispatch,seed_send_events,seed_send_reconcile'))
     ))),
 
     'retry_contracts' => [
@@ -43,6 +43,18 @@ return [
         'redis_cache_writeback' => [
             'timeout' => (int) env('QUEUE_SLO_CACHE_WRITEBACK_TIMEOUT_SECONDS', 1800),
             'retry_after' => (int) env('REDIS_CACHE_WRITEBACK_RETRY_AFTER', 3600),
+        ],
+        'redis_seed_send_dispatch' => [
+            'timeout' => (int) env('QUEUE_SLO_SEED_SEND_DISPATCH_TIMEOUT_SECONDS', 1800),
+            'retry_after' => (int) env('REDIS_SEED_SEND_DISPATCH_RETRY_AFTER', 3600),
+        ],
+        'redis_seed_send_events' => [
+            'timeout' => (int) env('QUEUE_SLO_SEED_SEND_EVENTS_TIMEOUT_SECONDS', 300),
+            'retry_after' => (int) env('REDIS_SEED_SEND_EVENTS_RETRY_AFTER', 900),
+        ],
+        'redis_seed_send_reconcile' => [
+            'timeout' => (int) env('QUEUE_SLO_SEED_SEND_RECONCILE_TIMEOUT_SECONDS', 1200),
+            'retry_after' => (int) env('REDIS_SEED_SEND_RECONCILE_RETRY_AFTER', 3600),
         ],
     ],
 

@@ -86,7 +86,17 @@ class OpsQueueHealthOverview extends StatsOverviewWidget
                 'queue' => (string) config('queue.connections.redis.queue', 'default'),
             ];
 
-            foreach (['redis_prepare', 'redis_parse', 'redis_smtp_probe', 'redis_finalize', 'redis_import', 'redis_cache_writeback'] as $connection) {
+            foreach ([
+                'redis_prepare',
+                'redis_parse',
+                'redis_smtp_probe',
+                'redis_finalize',
+                'redis_import',
+                'redis_cache_writeback',
+                'redis_seed_send_dispatch',
+                'redis_seed_send_events',
+                'redis_seed_send_reconcile',
+            ] as $connection) {
                 $queue = (string) config("queue.connections.{$connection}.queue", '');
 
                 if ($queue === '') {

@@ -276,6 +276,7 @@ Codex must:
 - Keep app runnable on port 8082.
 - Update README/AGENTS only when rules/requirements change.
 - When DB migrations are added/changed, run `./vendor/bin/sail artisan migrate` and confirm migrations are done.
+- When PM explicitly requests local environment setup, Codex may create or update local `.env` files (including service-level files such as `engine-worker-go/.env`), but must never commit them.
 
 Codex must NOT:
 - Change architecture, stack, or ports without PM approval.

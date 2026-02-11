@@ -106,6 +106,9 @@ return [
         sprintf('redis_finalize:%s', env('QUEUE_FINALIZE_NAME', 'finalize')) => 45,
         sprintf('redis_import:%s', env('QUEUE_IMPORT_NAME', 'imports')) => 300,
         sprintf('redis_cache_writeback:%s', env('QUEUE_CACHE_WRITEBACK_NAME', 'cache_writeback')) => 300,
+        sprintf('redis_seed_send_dispatch:%s', env('QUEUE_SEED_SEND_DISPATCH_NAME', 'seed_send_dispatch')) => 600,
+        sprintf('redis_seed_send_events:%s', env('QUEUE_SEED_SEND_EVENTS_NAME', 'seed_send_events')) => 120,
+        sprintf('redis_seed_send_reconcile:%s', env('QUEUE_SEED_SEND_RECONCILE_NAME', 'seed_send_reconcile')) => 900,
     ],
 
     /*
@@ -302,6 +305,48 @@ return [
             'timeout' => 1800,
             'nice' => 0,
         ],
+
+        'supervisor-seed-send-dispatch' => [
+            'connection' => 'redis_seed_send_dispatch',
+            'queue' => [env('QUEUE_SEED_SEND_DISPATCH_NAME', 'seed_send_dispatch')],
+            'balance' => 'simple',
+            'minProcesses' => 1,
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 2,
+            'timeout' => 1800,
+            'nice' => 0,
+        ],
+
+        'supervisor-seed-send-events' => [
+            'connection' => 'redis_seed_send_events',
+            'queue' => [env('QUEUE_SEED_SEND_EVENTS_NAME', 'seed_send_events')],
+            'balance' => 'simple',
+            'minProcesses' => 1,
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 3,
+            'timeout' => 300,
+            'nice' => 0,
+        ],
+
+        'supervisor-seed-send-reconcile' => [
+            'connection' => 'redis_seed_send_reconcile',
+            'queue' => [env('QUEUE_SEED_SEND_RECONCILE_NAME', 'seed_send_reconcile')],
+            'balance' => 'simple',
+            'minProcesses' => 1,
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 2,
+            'timeout' => 1200,
+            'nice' => 0,
+        ],
     ],
 
     'environments' => [
@@ -342,6 +387,18 @@ return [
             'supervisor-cache-writeback' => [
                 'maxProcesses' => 1,
             ],
+
+            'supervisor-seed-send-dispatch' => [
+                'maxProcesses' => 1,
+            ],
+
+            'supervisor-seed-send-events' => [
+                'maxProcesses' => 1,
+            ],
+
+            'supervisor-seed-send-reconcile' => [
+                'maxProcesses' => 1,
+            ],
         ],
 
         'local' => [
@@ -373,6 +430,18 @@ return [
             ],
 
             'supervisor-cache-writeback' => [
+                'maxProcesses' => 1,
+            ],
+
+            'supervisor-seed-send-dispatch' => [
+                'maxProcesses' => 1,
+            ],
+
+            'supervisor-seed-send-events' => [
+                'maxProcesses' => 1,
+            ],
+
+            'supervisor-seed-send-reconcile' => [
                 'maxProcesses' => 1,
             ],
         ],
