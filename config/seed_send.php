@@ -50,6 +50,7 @@ return [
         'nonce_header' => (string) env('SEED_SEND_WEBHOOK_NONCE_HEADER', 'X-Seed-Nonce'),
         'signature_max_age_seconds' => max(1, (int) env('SEED_SEND_WEBHOOK_SIGNATURE_MAX_AGE_SECONDS', 300)),
         'replay_cache_prefix' => (string) env('SEED_SEND_WEBHOOK_REPLAY_CACHE_PREFIX', 'seed_send:webhook:nonce'),
+        'rate_limit_per_minute' => max(1, (int) env('SEED_SEND_WEBHOOK_RATE_LIMIT_PER_MINUTE', 120)),
     ],
     'reports' => [
         'disk' => (string) env('SEED_SEND_REPORT_DISK', (string) env('FILESYSTEM_DISK', 'local')),

@@ -25,6 +25,7 @@ class SeedSendWebhookTest extends TestCase
             'seed_send.webhooks.nonce_header' => 'X-Seed-Nonce',
             'seed_send.webhooks.signature_max_age_seconds' => 300,
             'seed_send.webhooks.replay_cache_prefix' => 'seed_send:webhook:test',
+            'seed_send.webhooks.rate_limit_per_minute' => 120,
         ]);
     }
 
@@ -151,6 +152,31 @@ class SeedSendWebhookTest extends TestCase
             ->assertStatus(422);
 
         Bus::assertNotDispatched(IngestSeedSendEventJob::class);
+    }
+
+    public function test_seed_send_webhook_throttle_returns_429_after_limit(): void
+    {
+        Bus::fake();
+
+        config([
+            'seed_send.webhooks.rate_limit_per_minute' => 1,
+        ]);
+
+        $payload = [
+            'campaign_id' => 'campaign-1',
+            'provider_message_id' => 'msg-1',
+            'event_type' => 'delivered',
+            'event_time' => now()->toIso8601String(),
+        ];
+
+        $firstHeaders = $this->signedHeaders($payload, 'nonce-throttle-1');
+        $secondHeaders = $this->signedHeaders($payload, 'nonce-throttle-2');
+
+        $this->postJson(route('api.seed-send.webhook', ['provider' => 'log']), $payload, $firstHeaders)
+            ->assertStatus(202);
+
+        $this->postJson(route('api.seed-send.webhook', ['provider' => 'log']), $payload, $secondHeaders)
+            ->assertStatus(429);
     }
 
     /**

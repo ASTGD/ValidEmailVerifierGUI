@@ -26,6 +26,7 @@ use App\Http\Middleware\EnsureVerifierService;
 use Illuminate\Support\Facades\Route;
 
 Route::post('seed-send/webhooks/{provider}', SeedSendWebhookController::class)
+    ->middleware('throttle:seed-send-webhooks')
     ->name('api.seed-send.webhook');
 
 Route::middleware('signed')

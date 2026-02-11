@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Contracts\SeedSendProvider;
 use App\Enums\VerificationJobStatus;
 use App\Jobs\DispatchSeedSendCampaignJob;
 use App\Jobs\ReconcileSeedSendCampaignJob;
@@ -10,6 +11,7 @@ use App\Models\SeedSendConsent;
 use App\Models\SeedSendRecipient;
 use App\Models\User;
 use App\Models\VerificationJob;
+use App\Services\SeedSend\Providers\LogSeedSendProvider;
 use App\Services\SeedSend\SeedSendCreditLedgerService;
 use App\Services\SeedSend\SeedSendEventIngestor;
 use App\Support\Roles;
@@ -154,6 +156,74 @@ class SeedSendAdminCampaignTest extends TestCase
         $this->assertSame(0, SeedSendRecipient::query()
             ->where('campaign_id', $campaign->id)
             ->where('status', SeedSendRecipient::STATUS_DISPATCHED)
+            ->count());
+    }
+
+    public function test_dispatch_stops_immediately_when_consent_is_revoked_mid_run(): void
+    {
+        config([
+            'seed_send.webhooks.required' => false,
+        ]);
+
+        $admin = $this->makeAdmin();
+        $customer = $this->makeCustomer();
+        $job = $this->makeCompletedJob($customer);
+        $consent = $this->makeConsent($job, $customer, SeedSendConsent::STATUS_APPROVED);
+        $this->storeResultFiles($job, [
+            'alpha@example.com',
+            'beta@example.com',
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('internal.admin.seed-send.campaigns.start', $job), [
+                'consent_id' => $consent->id,
+            ])
+            ->assertRedirect();
+
+        $campaign = SeedSendCampaign::query()->firstOrFail();
+
+        $provider = new class($consent->id, $admin->id) extends LogSeedSendProvider implements SeedSendProvider
+        {
+            public int $dispatchCalls = 0;
+
+            public function __construct(private int $consentId, private int $adminId) {}
+
+            public function dispatch(SeedSendCampaign $campaign, SeedSendRecipient $recipient): array
+            {
+                $this->dispatchCalls++;
+                $result = parent::dispatch($campaign, $recipient);
+
+                if ($this->dispatchCalls === 1) {
+                    SeedSendConsent::query()
+                        ->whereKey($this->consentId)
+                        ->update([
+                            'status' => SeedSendConsent::STATUS_REVOKED,
+                            'revoked_at' => now(),
+                            'revoked_by_admin_id' => $this->adminId,
+                            'revocation_reason' => 'mid_run_test',
+                        ]);
+                }
+
+                return $result;
+            }
+        };
+
+        $this->app->instance(LogSeedSendProvider::class, $provider);
+
+        app()->call([new DispatchSeedSendCampaignJob($campaign->id), 'handle']);
+
+        $campaign->refresh();
+
+        $this->assertSame(1, $provider->dispatchCalls);
+        $this->assertSame(SeedSendCampaign::STATUS_CANCELLED, $campaign->status);
+        $this->assertSame('consent_revoked_or_expired', $campaign->failure_reason);
+        $this->assertSame(0, SeedSendRecipient::query()
+            ->where('campaign_id', $campaign->id)
+            ->whereIn('status', [
+                SeedSendRecipient::STATUS_PENDING,
+                SeedSendRecipient::STATUS_DISPATCHING,
+                SeedSendRecipient::STATUS_DISPATCHED,
+            ])
             ->count());
     }
 

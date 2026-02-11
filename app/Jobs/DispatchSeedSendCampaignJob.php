@@ -168,6 +168,13 @@ class DispatchSeedSendCampaignJob implements ShouldQueue
         $provider = $providerManager->provider($campaign->provider);
 
         foreach ($claimedRecipients as $recipient) {
+            $campaign->refresh()->load('consent');
+            if ($this->isConsentRevokedOrExpired($campaign)) {
+                $campaignService->cancelCampaignForSafety($campaign, 'consent_revoked_or_expired');
+
+                return;
+            }
+
             try {
                 $result = $provider->dispatch($campaign, $recipient);
 
