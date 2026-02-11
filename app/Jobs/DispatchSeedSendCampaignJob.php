@@ -10,6 +10,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class DispatchSeedSendCampaignJob implements ShouldQueue
@@ -44,68 +45,111 @@ class DispatchSeedSendCampaignJob implements ShouldQueue
 
     public function handle(SeedSendProviderManager $providerManager): void
     {
+        $batchSize = max(1, (int) config('seed_send.dispatch.batch_size', 25));
+        $claimedRecipientIds = DB::transaction(function () use ($batchSize): array {
+            $campaign = SeedSendCampaign::query()
+                ->where('id', $this->campaignId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $campaign) {
+                return [];
+            }
+
+            if (in_array($campaign->status, [
+                SeedSendCampaign::STATUS_PAUSED,
+                SeedSendCampaign::STATUS_COMPLETED,
+                SeedSendCampaign::STATUS_FAILED,
+                SeedSendCampaign::STATUS_CANCELLED,
+            ], true)) {
+                return [];
+            }
+
+            if ($campaign->status === SeedSendCampaign::STATUS_QUEUED) {
+                $campaign->update([
+                    'status' => SeedSendCampaign::STATUS_RUNNING,
+                    'started_at' => $campaign->started_at ?: now(),
+                ]);
+            }
+
+            if ($campaign->status !== SeedSendCampaign::STATUS_RUNNING) {
+                return [];
+            }
+
+            $recipientIds = SeedSendRecipient::query()
+                ->where('campaign_id', $campaign->id)
+                ->where('status', SeedSendRecipient::STATUS_PENDING)
+                ->orderBy('id')
+                ->limit($batchSize)
+                ->lockForUpdate()
+                ->pluck('id')
+                ->map(fn ($value): int => (int) $value)
+                ->all();
+
+            if ($recipientIds === []) {
+                return [];
+            }
+
+            SeedSendRecipient::query()
+                ->whereIn('id', $recipientIds)
+                ->where('status', SeedSendRecipient::STATUS_PENDING)
+                ->update([
+                    'status' => SeedSendRecipient::STATUS_DISPATCHING,
+                    'attempt_count' => DB::raw('attempt_count + 1'),
+                    'last_attempt_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+            return $recipientIds;
+        });
+
         $campaign = SeedSendCampaign::query()->find($this->campaignId);
         if (! $campaign) {
             return;
         }
 
-        if (in_array($campaign->status, [
-            SeedSendCampaign::STATUS_PAUSED,
-            SeedSendCampaign::STATUS_COMPLETED,
-            SeedSendCampaign::STATUS_FAILED,
-            SeedSendCampaign::STATUS_CANCELLED,
-        ], true)) {
-            return;
-        }
-
-        if ($campaign->status === SeedSendCampaign::STATUS_QUEUED) {
-            $campaign->update([
-                'status' => SeedSendCampaign::STATUS_RUNNING,
-                'started_at' => $campaign->started_at ?: now(),
-            ]);
-        }
-
-        if ($campaign->status !== SeedSendCampaign::STATUS_RUNNING) {
-            return;
-        }
-
-        $batchSize = max(1, (int) config('seed_send.dispatch.batch_size', 25));
-        $pendingRecipients = SeedSendRecipient::query()
-            ->where('campaign_id', $campaign->id)
-            ->where('status', SeedSendRecipient::STATUS_PENDING)
-            ->orderBy('id')
-            ->limit($batchSize)
-            ->get();
-
-        if ($pendingRecipients->isEmpty()) {
+        if ($claimedRecipientIds === []) {
             ReconcileSeedSendCampaignJob::dispatch($campaign->id)
                 ->delay(now()->addMinutes(max(1, (int) config('seed_send.reconcile.delay_minutes', 30))));
 
             return;
         }
 
+        $claimedRecipients = SeedSendRecipient::query()
+            ->whereIn('id', $claimedRecipientIds)
+            ->where('campaign_id', $campaign->id)
+            ->where('status', SeedSendRecipient::STATUS_DISPATCHING)
+            ->orderBy('id')
+            ->get();
+
+        if ($claimedRecipients->isEmpty()) {
+            return;
+        }
+
         $provider = $providerManager->provider($campaign->provider);
 
-        foreach ($pendingRecipients as $recipient) {
+        foreach ($claimedRecipients as $recipient) {
             try {
                 $result = $provider->dispatch($campaign, $recipient);
 
-                $recipient->update([
-                    'status' => SeedSendRecipient::STATUS_DISPATCHED,
-                    'attempt_count' => $recipient->attempt_count + 1,
-                    'last_attempt_at' => now(),
-                    'provider_message_id' => (string) ($result['provider_message_id'] ?? $recipient->provider_message_id),
-                    'provider_payload' => is_array($result['payload'] ?? null) ? $result['payload'] : null,
-                ]);
+                SeedSendRecipient::query()
+                    ->where('id', $recipient->id)
+                    ->where('status', SeedSendRecipient::STATUS_DISPATCHING)
+                    ->update([
+                        'status' => SeedSendRecipient::STATUS_DISPATCHED,
+                        'provider_message_id' => (string) ($result['provider_message_id'] ?? $recipient->provider_message_id),
+                        'provider_payload' => is_array($result['payload'] ?? null) ? $result['payload'] : null,
+                    ]);
             } catch (Throwable $exception) {
-                $recipient->update([
-                    'status' => SeedSendRecipient::STATUS_DEFERRED,
-                    'attempt_count' => $recipient->attempt_count + 1,
-                    'last_attempt_at' => now(),
-                    'evidence_payload' => [
-                        'dispatch_error' => $exception->getMessage(),
-                    ],
-                ]);
+                SeedSendRecipient::query()
+                    ->where('id', $recipient->id)
+                    ->where('status', SeedSendRecipient::STATUS_DISPATCHING)
+                    ->update([
+                        'status' => SeedSendRecipient::STATUS_DEFERRED,
+                        'evidence_payload' => [
+                            'dispatch_error' => $exception->getMessage(),
+                        ],
+                    ]);
             }
         }
 

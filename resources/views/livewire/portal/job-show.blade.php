@@ -152,7 +152,7 @@
                         </div>
                     </div>
 
-                    @if ($job->status === \App\Enums\VerificationJobStatus::Completed)
+                    @if ((bool) config('seed_send.enabled', false) && $job->status === \App\Enums\VerificationJobStatus::Completed)
                         <div class="pt-6 border-t border-[#F1F5F9]">
                             <p class="text-[10px] font-black uppercase text-[#94A3B8] tracking-widest">
                                 {{ __('SG6 Seed-Send Verification') }}</p>

@@ -10,6 +10,7 @@ use App\Models\SeedSendConsent;
 use App\Models\SeedSendRecipient;
 use App\Models\User;
 use App\Models\VerificationJob;
+use App\Services\SeedSend\SeedSendEventIngestor;
 use App\Support\Roles;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -158,6 +159,51 @@ class SeedSendAdminCampaignTest extends TestCase
         $this->assertSame(SeedSendCampaign::STATUS_COMPLETED, $campaign->status);
         $this->assertSame(3, $campaign->delivered_count);
         $this->assertSame(6, $campaign->credits_used);
+    }
+
+    public function test_seed_send_event_ingestor_is_idempotent_by_dedupe_key(): void
+    {
+        $customer = $this->makeCustomer();
+        $job = $this->makeCompletedJob($customer);
+        $consent = $this->makeConsent($job, $customer, SeedSendConsent::STATUS_APPROVED);
+
+        $campaign = SeedSendCampaign::query()->create([
+            'id' => (string) \Illuminate\Support\Str::uuid(),
+            'verification_job_id' => $job->id,
+            'user_id' => $customer->id,
+            'seed_send_consent_id' => $consent->id,
+            'status' => SeedSendCampaign::STATUS_RUNNING,
+            'target_scope' => 'full_list',
+            'provider' => 'log',
+            'target_count' => 1,
+        ]);
+
+        $recipient = SeedSendRecipient::query()->create([
+            'campaign_id' => $campaign->id,
+            'email' => 'alpha@example.com',
+            'email_hash' => hash('sha256', 'alpha@example.com'),
+            'status' => SeedSendRecipient::STATUS_DISPATCHED,
+            'provider_message_id' => 'msg-dedupe-1',
+        ]);
+
+        $payload = [
+            'provider_message_id' => 'msg-dedupe-1',
+            'event_type' => 'delivered',
+            'event_time' => now()->toIso8601String(),
+        ];
+
+        /** @var SeedSendEventIngestor $ingestor */
+        $ingestor = app(SeedSendEventIngestor::class);
+        $ingestor->ingest('log', $payload);
+        $ingestor->ingest('log', $payload);
+
+        $this->assertDatabaseCount('seed_send_events', 1);
+
+        $recipient->refresh();
+        $campaign->refresh();
+
+        $this->assertSame(SeedSendRecipient::STATUS_DELIVERED, $recipient->status);
+        $this->assertSame(1, $campaign->delivered_count);
     }
 
     private function makeAdmin(): User

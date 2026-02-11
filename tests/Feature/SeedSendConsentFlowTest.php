@@ -56,6 +56,31 @@ class SeedSendConsentFlowTest extends TestCase
         $this->assertDatabaseCount('seed_send_consents', 0);
     }
 
+    public function test_seed_send_consent_request_returns_not_found_when_feature_disabled(): void
+    {
+        config(['seed_send.enabled' => false]);
+
+        $customer = $this->makeCustomer();
+        $job = $this->makeJob($customer, VerificationJobStatus::Completed);
+
+        $this->actingAs($customer)
+            ->post(route('portal.jobs.seed-send-consent', $job))
+            ->assertNotFound();
+    }
+
+    public function test_portal_job_page_hides_seed_send_section_when_feature_disabled(): void
+    {
+        config(['seed_send.enabled' => false]);
+
+        $customer = $this->makeCustomer();
+        $job = $this->makeJob($customer, VerificationJobStatus::Completed);
+
+        $this->actingAs($customer)
+            ->get(route('portal.jobs.show', $job))
+            ->assertOk()
+            ->assertDontSee('SG6 Seed-Send Verification');
+    }
+
     private function makeCustomer(): User
     {
         Role::findOrCreate(Roles::CUSTOMER, config('auth.defaults.guard'));

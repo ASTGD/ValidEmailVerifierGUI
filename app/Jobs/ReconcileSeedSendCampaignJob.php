@@ -60,7 +60,11 @@ class ReconcileSeedSendCampaignJob implements ShouldQueue
         $maxPendingAgeMinutes = max(1, (int) config('seed_send.reconcile.max_pending_age_minutes', 120));
         $pendingOrDispatchedCount = SeedSendRecipient::query()
             ->where('campaign_id', $campaign->id)
-            ->whereIn('status', [SeedSendRecipient::STATUS_PENDING, SeedSendRecipient::STATUS_DISPATCHED])
+            ->whereIn('status', [
+                SeedSendRecipient::STATUS_PENDING,
+                SeedSendRecipient::STATUS_DISPATCHING,
+                SeedSendRecipient::STATUS_DISPATCHED,
+            ])
             ->count();
 
         if ($pendingOrDispatchedCount > 0 && $campaign->started_at && $campaign->started_at->gt(now()->subMinutes($maxPendingAgeMinutes))) {
@@ -71,7 +75,11 @@ class ReconcileSeedSendCampaignJob implements ShouldQueue
 
         SeedSendRecipient::query()
             ->where('campaign_id', $campaign->id)
-            ->whereIn('status', [SeedSendRecipient::STATUS_PENDING, SeedSendRecipient::STATUS_DISPATCHED])
+            ->whereIn('status', [
+                SeedSendRecipient::STATUS_PENDING,
+                SeedSendRecipient::STATUS_DISPATCHING,
+                SeedSendRecipient::STATUS_DISPATCHED,
+            ])
             ->update([
                 'status' => SeedSendRecipient::STATUS_DEFERRED,
                 'last_event_at' => now(),

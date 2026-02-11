@@ -16,6 +16,7 @@ class SeedSendEvent extends Model
         'smtp_code',
         'enhanced_code',
         'provider_message_id',
+        'dedupe_key',
         'raw_payload',
     ];
 

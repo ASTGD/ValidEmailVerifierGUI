@@ -10,6 +10,8 @@ class SeedSendRecipient extends Model
 {
     public const STATUS_PENDING = 'pending';
 
+    public const STATUS_DISPATCHING = 'dispatching';
+
     public const STATUS_DISPATCHED = 'dispatched';
 
     public const STATUS_DELIVERED = 'delivered';

@@ -28,6 +28,10 @@ return [
     'webhooks' => [
         'required' => (bool) env('SEED_SEND_WEBHOOK_REQUIRED', true),
         'signature_header' => (string) env('SEED_SEND_WEBHOOK_SIGNATURE_HEADER', 'X-Seed-Signature'),
+        'timestamp_header' => (string) env('SEED_SEND_WEBHOOK_TIMESTAMP_HEADER', 'X-Seed-Timestamp'),
+        'nonce_header' => (string) env('SEED_SEND_WEBHOOK_NONCE_HEADER', 'X-Seed-Nonce'),
+        'signature_max_age_seconds' => max(1, (int) env('SEED_SEND_WEBHOOK_SIGNATURE_MAX_AGE_SECONDS', 300)),
+        'replay_cache_prefix' => (string) env('SEED_SEND_WEBHOOK_REPLAY_CACHE_PREFIX', 'seed_send:webhook:nonce'),
     ],
     'dispatch' => [
         'batch_size' => max(1, (int) env('SEED_SEND_DISPATCH_BATCH_SIZE', 25)),

@@ -15,6 +15,10 @@ class SeedSendConsentRequestController extends Controller
         VerificationJob $job,
         SeedSendCampaignService $campaignService
     ): RedirectResponse {
+        if (! (bool) config('seed_send.enabled', false)) {
+            abort(404);
+        }
+
         $campaignService->requestConsent($job, $request->user(), $request->validated('scope'));
 
         return back()->with('status', 'SG6 consent request submitted. Admin approval is required before campaign start.');

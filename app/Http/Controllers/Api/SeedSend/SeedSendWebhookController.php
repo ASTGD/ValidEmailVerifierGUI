@@ -34,10 +34,36 @@ class SeedSendWebhookController extends Controller
             return response()->json(['message' => 'Invalid webhook payload.'], 422);
         }
 
+        if (! $this->hasValidMappingKey($payload)) {
+            return response()->json([
+                'message' => 'Invalid webhook mapping key. Provide provider_message_id or campaign_id + valid email.',
+            ], 422);
+        }
+
         IngestSeedSendEventJob::dispatch(strtolower(trim($provider)), $payload);
 
         return response()->json([
             'message' => 'accepted',
         ], 202);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function hasValidMappingKey(array $payload): bool
+    {
+        $providerMessageId = trim((string) ($payload['provider_message_id'] ?? $payload['message_id'] ?? ''));
+        if ($providerMessageId !== '') {
+            return true;
+        }
+
+        $campaignId = trim((string) ($payload['campaign_id'] ?? ''));
+        $email = strtolower(trim((string) ($payload['email'] ?? '')));
+
+        if ($campaignId === '' || $email === '') {
+            return false;
+        }
+
+        return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
     }
 }
