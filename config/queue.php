@@ -127,6 +127,33 @@ return [
             'after_commit' => false,
         ],
 
+        'redis_seed_send_dispatch' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_SEED_SEND_DISPATCH_NAME', 'seed_send_dispatch'),
+            'retry_after' => (int) env('REDIS_SEED_SEND_DISPATCH_RETRY_AFTER', 3600),
+            'block_for' => (int) env('REDIS_SEED_SEND_DISPATCH_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
+        'redis_seed_send_events' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_SEED_SEND_EVENTS_NAME', 'seed_send_events'),
+            'retry_after' => (int) env('REDIS_SEED_SEND_EVENTS_RETRY_AFTER', 900),
+            'block_for' => (int) env('REDIS_SEED_SEND_EVENTS_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
+        'redis_seed_send_reconcile' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_SEED_SEND_RECONCILE_NAME', 'seed_send_reconcile'),
+            'retry_after' => (int) env('REDIS_SEED_SEND_RECONCILE_RETRY_AFTER', 3600),
+            'block_for' => (int) env('REDIS_SEED_SEND_RECONCILE_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
         'deferred' => [
             'driver' => 'deferred',
         ],

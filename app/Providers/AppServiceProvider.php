@@ -5,12 +5,14 @@ namespace App\Providers;
 use App\Contracts\CacheWriteBackService;
 use App\Contracts\EmailVerificationCacheStore;
 use App\Contracts\EngineStorageUrlSigner;
+use App\Contracts\SeedSendProvider;
 use App\Models\VerificationJob;
 use App\Policies\VerificationJobPolicy;
 use App\Services\EmailVerificationCache\DatabaseEmailVerificationCacheStore;
 use App\Services\EmailVerificationCache\DynamoDbCacheWriteBackService;
 use App\Services\EmailVerificationCache\DynamoDbEmailVerificationCacheStore;
 use App\Services\EmailVerificationCache\NullCacheStore;
+use App\Services\SeedSend\Providers\SeedSendProviderManager;
 use App\Support\EngineSettings;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -51,6 +53,13 @@ class AppServiceProvider extends ServiceProvider
 
         $this->app->bind(EngineStorageUrlSigner::class, function ($app) {
             return $app->make(\App\Services\EngineStorage\StorageEngineUrlSigner::class);
+        });
+
+        $this->app->bind(SeedSendProvider::class, function ($app) {
+            /** @var SeedSendProviderManager $manager */
+            $manager = $app->make(SeedSendProviderManager::class);
+
+            return $manager->provider($manager->defaultProvider());
         });
     }
 

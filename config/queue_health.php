@@ -2,7 +2,7 @@
 
 $requiredSupervisors = (string) env(
     'QUEUE_HEALTH_REQUIRED_SUPERVISORS',
-    'supervisor-default,supervisor-prepare,supervisor-parse,supervisor-smtp-probe,supervisor-finalize,supervisor-imports,supervisor-cache-writeback'
+    'supervisor-default,supervisor-prepare,supervisor-parse,supervisor-smtp-probe,supervisor-finalize,supervisor-imports,supervisor-cache-writeback,supervisor-seed-send-dispatch,supervisor-seed-send-events,supervisor-seed-send-reconcile'
 );
 
 $requiredSupervisors = array_values(array_filter(array_map('trim', explode(',', $requiredSupervisors))));
@@ -67,6 +67,24 @@ return [
             'queue' => env('QUEUE_CACHE_WRITEBACK_NAME', 'cache_writeback'),
             'max_depth' => (int) env('QUEUE_SLO_CACHE_WRITEBACK_MAX_DEPTH', 200),
             'max_oldest_age_seconds' => (int) env('QUEUE_SLO_CACHE_WRITEBACK_MAX_AGE_SECONDS', 3600),
+        ],
+        'seed_send_dispatch' => [
+            'driver' => 'redis_seed_send_dispatch',
+            'queue' => env('QUEUE_SEED_SEND_DISPATCH_NAME', 'seed_send_dispatch'),
+            'max_depth' => (int) env('QUEUE_SLO_SEED_SEND_DISPATCH_MAX_DEPTH', 100),
+            'max_oldest_age_seconds' => (int) env('QUEUE_SLO_SEED_SEND_DISPATCH_MAX_AGE_SECONDS', 600),
+        ],
+        'seed_send_events' => [
+            'driver' => 'redis_seed_send_events',
+            'queue' => env('QUEUE_SEED_SEND_EVENTS_NAME', 'seed_send_events'),
+            'max_depth' => (int) env('QUEUE_SLO_SEED_SEND_EVENTS_MAX_DEPTH', 200),
+            'max_oldest_age_seconds' => (int) env('QUEUE_SLO_SEED_SEND_EVENTS_MAX_AGE_SECONDS', 300),
+        ],
+        'seed_send_reconcile' => [
+            'driver' => 'redis_seed_send_reconcile',
+            'queue' => env('QUEUE_SEED_SEND_RECONCILE_NAME', 'seed_send_reconcile'),
+            'max_depth' => (int) env('QUEUE_SLO_SEED_SEND_RECONCILE_MAX_DEPTH', 50),
+            'max_oldest_age_seconds' => (int) env('QUEUE_SLO_SEED_SEND_RECONCILE_MAX_AGE_SECONDS', 1800),
         ],
     ],
 ];

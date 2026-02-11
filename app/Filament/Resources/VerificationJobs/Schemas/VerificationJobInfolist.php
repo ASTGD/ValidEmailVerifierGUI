@@ -335,6 +335,80 @@ class VerificationJobInfolist
                             ->openUrlInNewTab(),
                     ])
                     ->columns(3),
+                Section::make('SG6 Seed Send')
+                    ->schema([
+                        TextEntry::make('seed_send_consent_status')
+                            ->label('Consent status')
+                            ->state(function (VerificationJob $record): string {
+                                $consent = $record->seedSendConsents()
+                                    ->latest('id')
+                                    ->first();
+
+                                return $consent ? ucfirst($consent->status) : 'Not requested';
+                            })
+                            ->badge()
+                            ->color(function (VerificationJob $record): string {
+                                $status = $record->seedSendConsents()->latest('id')->value('status');
+
+                                return match ($status) {
+                                    'approved' => 'success',
+                                    'requested' => 'warning',
+                                    'rejected' => 'danger',
+                                    default => 'gray',
+                                };
+                            }),
+                        TextEntry::make('seed_send_campaign_status')
+                            ->label('Campaign status')
+                            ->state(function (VerificationJob $record): string {
+                                $campaign = $record->seedSendCampaigns()
+                                    ->latest('created_at')
+                                    ->first();
+
+                                return $campaign ? ucfirst($campaign->status) : 'Not started';
+                            })
+                            ->badge()
+                            ->color(function (VerificationJob $record): string {
+                                $status = $record->seedSendCampaigns()->latest('created_at')->value('status');
+
+                                return match ($status) {
+                                    'running', 'queued', 'pending' => 'warning',
+                                    'completed' => 'success',
+                                    'paused' => 'gray',
+                                    'failed', 'cancelled' => 'danger',
+                                    default => 'gray',
+                                };
+                            }),
+                        TextEntry::make('seed_send_campaign_counts')
+                            ->label('Delivered / Bounced / Deferred')
+                            ->state(function (VerificationJob $record): string {
+                                $campaign = $record->seedSendCampaigns()->latest('created_at')->first();
+                                if (! $campaign) {
+                                    return '-';
+                                }
+
+                                return sprintf(
+                                    '%d / %d / %d',
+                                    (int) $campaign->delivered_count,
+                                    (int) $campaign->bounced_count,
+                                    (int) $campaign->deferred_count
+                                );
+                            }),
+                        TextEntry::make('seed_send_campaign_credits')
+                            ->label('Credits reserved / used')
+                            ->state(function (VerificationJob $record): string {
+                                $campaign = $record->seedSendCampaigns()->latest('created_at')->first();
+                                if (! $campaign) {
+                                    return '-';
+                                }
+
+                                return sprintf(
+                                    '%d / %d',
+                                    (int) $campaign->credits_reserved,
+                                    (int) $campaign->credits_used
+                                );
+                            }),
+                    ])
+                    ->columns(2),
                 Section::make('Recent Logs')
                     ->schema([
                         RepeatableEntry::make('activity')

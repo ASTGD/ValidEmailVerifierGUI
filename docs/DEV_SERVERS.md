@@ -43,6 +43,30 @@ Required env vars for the Go worker:
 - `./scripts/run-go-worker.sh`
 - `./scripts/run-ngrok.sh`
 
+## Optional tmux workflow (multiple terminals)
+
+Install:
+- `brew install tmux`
+
+Start a session:
+- `tmux new -s vev`
+
+Common tmux keys:
+- Split vertical: `Ctrl+b` then `%`
+- Split horizontal: `Ctrl+b` then `"`
+- Move between panes: `Ctrl+b` then arrow keys
+- Detach (keep processes running): `Ctrl+b` then `d`
+- Reattach session later: `tmux attach -t vev`
+- List sessions: `tmux ls`
+
+Suggested pane commands for this project:
+- Pane 1: `./vendor/bin/sail up -d && ./vendor/bin/sail npm run dev`
+- Pane 2: `./vendor/bin/sail artisan horizon`
+- Pane 3: `./vendor/bin/sail artisan schedule:work`
+- Pane 4: `./scripts/run-go-dashboard.sh`
+- Pane 5: `./scripts/run-go-worker.sh`
+- Pane 6: `./scripts/run-ngrok.sh`
+
 ## Run everything at once
 
 - `./scripts/run-all.sh`

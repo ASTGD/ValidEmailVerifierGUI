@@ -135,6 +135,16 @@ class VerificationJob extends Model
         return $this->hasOne(VerificationOrder::class, 'verification_job_id');
     }
 
+    public function seedSendConsents(): HasMany
+    {
+        return $this->hasMany(SeedSendConsent::class, 'verification_job_id');
+    }
+
+    public function seedSendCampaigns(): HasMany
+    {
+        return $this->hasMany(SeedSendCampaign::class, 'verification_job_id');
+    }
+
     public function addLog(string $event, ?string $message = null, ?array $context = null, ?int $userId = null): VerificationJobLog
     {
         return $this->logs()->create([

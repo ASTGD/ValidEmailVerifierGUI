@@ -96,7 +96,17 @@ class OpsQueueDepthChart extends ChartWidget
                 'queue' => (string) config('queue.connections.redis.queue', 'default'),
             ];
 
-            foreach (['redis_prepare', 'redis_parse', 'redis_smtp_probe', 'redis_finalize', 'redis_import', 'redis_cache_writeback'] as $connection) {
+            foreach ([
+                'redis_prepare',
+                'redis_parse',
+                'redis_smtp_probe',
+                'redis_finalize',
+                'redis_import',
+                'redis_cache_writeback',
+                'redis_seed_send_dispatch',
+                'redis_seed_send_events',
+                'redis_seed_send_reconcile',
+            ] as $connection) {
                 $queue = (string) config("queue.connections.{$connection}.queue", '');
 
                 if ($queue === '') {
@@ -151,6 +161,9 @@ class OpsQueueDepthChart extends ChartWidget
             'finalize' => '#10b981',
             'imports' => '#ef4444',
             'cache_writeback' => '#8b5cf6',
+            'seed_send_dispatch' => '#0f766e',
+            'seed_send_events' => '#0369a1',
+            'seed_send_reconcile' => '#7c3aed',
             default => '#6b7280',
         };
     }
