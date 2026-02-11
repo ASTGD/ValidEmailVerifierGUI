@@ -77,4 +77,9 @@ return [
         'queue_metrics_rollup_retention_days' => (int) env('QUEUE_METRICS_ROLLUP_RETENTION_DAYS', 90),
         'failed_jobs_retention_hours' => (int) env('QUEUE_FAILED_JOBS_RETENTION_HOURS', 168),
     ],
+
+    'weekly_report' => [
+        'disk' => env('QUEUE_SLO_WEEKLY_REPORT_DISK', env('FILESYSTEM_DISK', 'local')),
+        'prefix' => env('QUEUE_SLO_WEEKLY_REPORT_PREFIX', 'reports/ops'),
+    ],
 ];

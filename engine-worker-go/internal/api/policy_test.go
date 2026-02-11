@@ -93,3 +93,29 @@ func TestPolicyResponseParsing(t *testing.T) {
 		t.Fatalf("expected provider name outlook")
 	}
 }
+
+func TestPolicyVersionPayloadResponseParsing(t *testing.T) {
+	payload := `{
+		"data": {
+			"version": "v2.9.0",
+			"is_active": true,
+			"status": "active",
+			"policy_payload": {
+				"enabled": true,
+				"version": "v2.9.0"
+			}
+		}
+	}`
+
+	var resp PolicyVersionPayloadResponse
+	if err := json.Unmarshal([]byte(payload), &resp); err != nil {
+		t.Fatalf("failed to parse policy version payload response: %v", err)
+	}
+
+	if resp.Data.Version != "v2.9.0" {
+		t.Fatalf("expected version v2.9.0, got %s", resp.Data.Version)
+	}
+	if len(resp.Data.PolicyPayload) == 0 {
+		t.Fatalf("expected policy payload content")
+	}
+}

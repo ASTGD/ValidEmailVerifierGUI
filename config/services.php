@@ -40,4 +40,10 @@ return [
         'price_name' => env('STRIPE_PRICE_NAME', 'Standard'),
     ],
 
+    'go_control_plane' => [
+        'base_url' => env('GO_CONTROL_PLANE_BASE_URL'),
+        'token' => env('GO_CONTROL_PLANE_TOKEN'),
+        'timeout_seconds' => (int) env('GO_CONTROL_PLANE_TIMEOUT_SECONDS', 3),
+    ],
+
 ];

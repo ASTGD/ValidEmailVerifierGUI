@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 )
 
 type Policy struct {
@@ -43,6 +44,15 @@ type PolicyResponse struct {
 	} `json:"data"`
 }
 
+type PolicyVersionPayloadResponse struct {
+	Data struct {
+		Version       string          `json:"version"`
+		IsActive      bool            `json:"is_active"`
+		Status        string          `json:"status"`
+		PolicyPayload json.RawMessage `json:"policy_payload"`
+	} `json:"data"`
+}
+
 func (c *Client) Policy(ctx context.Context) (*PolicyResponse, error) {
 	status, body, err := c.do(ctx, http.MethodGet, "/api/verifier/policy", nil)
 	if err != nil {
@@ -52,6 +62,24 @@ func (c *Client) Policy(ctx context.Context) (*PolicyResponse, error) {
 		return nil, APIError{Status: status, Body: string(body)}
 	}
 	var resp PolicyResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+func (c *Client) PolicyVersionPayload(ctx context.Context, version string) (*PolicyVersionPayloadResponse, error) {
+	encodedVersion := url.PathEscape(version)
+	status, body, err := c.do(ctx, http.MethodGet, "/api/verifier/policy-versions/"+encodedVersion+"/payload", nil)
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, APIError{Status: status, Body: string(body)}
+	}
+
+	var resp PolicyVersionPayloadResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, err
 	}

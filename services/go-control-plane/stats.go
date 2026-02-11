@@ -21,6 +21,7 @@ type ControlPlaneStats struct {
 	ProbeRejectRate         float64
 	ScreeningProcessedTotal int64
 	ProbeProcessedTotal     int64
+	LaravelFallbackWorkers  int
 	Settings                RuntimeSettings
 	ProviderHealth          []ProviderHealthSummary
 	ProviderPolicies        ProviderPoliciesData
@@ -74,7 +75,11 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 	var smtpMetricsWorkers int
 	var screeningProcessed int64
 	var probeProcessed int64
+	laravelFallbackWorkers := 0
 	for _, worker := range workers {
+		if hasWorkerTag(worker.Tags, "laravel_heartbeat:true") {
+			laravelFallbackWorkers++
+		}
 		if worker.SMTPMetrics != nil {
 			unknownTotal += worker.SMTPMetrics.UnknownRate
 			tempfailTotal += worker.SMTPMetrics.TempfailRate
@@ -152,6 +157,7 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 		ProbeRejectRate:         rejectAvg,
 		ScreeningProcessedTotal: screeningProcessed,
 		ProbeProcessedTotal:     probeProcessed,
+		LaravelFallbackWorkers:  laravelFallbackWorkers,
 		Settings:                settings,
 		ProviderHealth:          providerHealth,
 		ProviderPolicies: ProviderPoliciesData{
@@ -164,4 +170,14 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 			Modes:                providerModes,
 		},
 	}, nil
+}
+
+func hasWorkerTag(tags []string, expected string) bool {
+	for _, tag := range tags {
+		if tag == expected {
+			return true
+		}
+	}
+
+	return false
 }

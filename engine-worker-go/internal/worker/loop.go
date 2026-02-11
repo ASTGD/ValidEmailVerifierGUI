@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,15 +20,20 @@ import (
 )
 
 type Config struct {
-	PollInterval       time.Duration
-	HeartbeatInterval  time.Duration
-	LeaseSeconds       *int
-	MaxConcurrency     int
-	PolicyRefresh      time.Duration
-	Server             api.EngineServerPayload
-	WorkerID           string
-	WorkerCapability   string
-	BaseVerifierConfig verifier.Config
+	PollInterval                  time.Duration
+	HeartbeatInterval             time.Duration
+	LeaseSeconds                  *int
+	MaxConcurrency                int
+	PolicyRefresh                 time.Duration
+	Server                        api.EngineServerPayload
+	WorkerID                      string
+	WorkerCapability              string
+	BaseVerifierConfig            verifier.Config
+	ControlPlaneClient            *api.ControlPlaneClient
+	ControlPlaneHeartbeatEnabled  bool
+	LaravelHeartbeatEnabled       bool
+	LaravelHeartbeatEveryN        int
+	ControlPlanePolicySyncEnabled bool
 }
 
 type Worker struct {
@@ -35,9 +42,12 @@ type Worker struct {
 	wg              sync.WaitGroup
 	active          int64
 	maxConcurrency  int64
+	heartbeatCount  int64
 	policyMu        sync.RWMutex
 	policy          policyState
 	lastPolicyFetch time.Time
+	desiredState    atomic.Value
+	telemetry       *workerTelemetry
 }
 
 type policyState struct {
@@ -49,6 +59,10 @@ type policyState struct {
 	heloName             string
 	mailFromAddress      string
 	identityDomain       string
+	activePolicyVersion  string
+	policyEngineEnabled  bool
+	adaptiveRetryEnabled bool
+	replyPolicyEngine    *verifier.ProviderReplyPolicyEngine
 	providerPolicies     []verifier.ProviderPolicy
 	standard             policyConfig
 	enhanced             policyConfig
@@ -76,6 +90,30 @@ type chunkOutputs struct {
 	ValidCount   int
 	InvalidCount int
 	RiskyCount   int
+	ReasonCounts map[string]int
+}
+
+func (c *chunkOutputs) baseReasonCount(reason string) int {
+	if c == nil || c.ReasonCounts == nil {
+		return 0
+	}
+
+	return c.ReasonCounts[reason]
+}
+
+func (c *chunkOutputs) baseReasonPrefixCount(prefix string) int {
+	if c == nil || c.ReasonCounts == nil {
+		return 0
+	}
+
+	total := 0
+	for key, value := range c.ReasonCounts {
+		if strings.HasPrefix(key, prefix) {
+			total += value
+		}
+	}
+
+	return total
 }
 
 func New(client *api.Client, cfg Config) *Worker {
@@ -84,11 +122,20 @@ func New(client *api.Client, cfg Config) *Worker {
 		max = 1
 	}
 
-	return &Worker{
+	laravelHeartbeatEveryN := cfg.LaravelHeartbeatEveryN
+	if laravelHeartbeatEveryN < 1 {
+		laravelHeartbeatEveryN = 1
+	}
+
+	w := &Worker{
 		client:         client,
 		cfg:            cfg,
 		maxConcurrency: int64(max),
+		telemetry:      newWorkerTelemetry(),
 	}
+	w.cfg.LaravelHeartbeatEveryN = laravelHeartbeatEveryN
+	w.desiredState.Store("running")
+	return w
 }
 
 func (w *Worker) Run(ctx context.Context) error {
@@ -105,18 +152,23 @@ func (w *Worker) Run(ctx context.Context) error {
 		}
 
 		if now.Sub(lastHeartbeat) >= w.cfg.HeartbeatInterval {
-			resp, err := w.client.Heartbeat(ctx, w.cfg.Server)
-			if err != nil {
-				fmt.Printf("heartbeat error: %v\n", err)
-			} else {
-				w.applyHeartbeatIdentity(resp)
-			}
+			w.heartbeatCount++
+			w.sendHeartbeats(ctx)
 			lastHeartbeat = now
 		}
 
 		w.refreshPolicyIfNeeded(ctx, now)
 
 		if w.enginePaused() {
+			time.Sleep(w.cfg.PollInterval)
+			continue
+		}
+
+		switch w.currentDesiredState() {
+		case "paused", "stopped":
+			time.Sleep(w.cfg.PollInterval)
+			continue
+		case "draining":
 			time.Sleep(w.cfg.PollInterval)
 			continue
 		}
@@ -178,7 +230,7 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 
 	processingStage := normalizeProcessingStage(claim.Data.ProcessingStage)
 	if !w.canProcessStage(processingStage) {
-		return w.failChunk(ctx, chunkID, "worker capability does not match chunk stage", fmt.Errorf("stage=%s capability=%s", processingStage, w.workerCapability()), true)
+		return w.failChunk(ctx, chunkID, processingStage, "worker capability does not match chunk stage", fmt.Errorf("stage=%s capability=%s", processingStage, w.workerCapability()), true)
 	}
 
 	mode := modeForStage(processingStage, claim.Data.VerificationMode)
@@ -187,17 +239,17 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 
 	details, err := w.client.ChunkDetails(ctx, chunkID)
 	if err != nil {
-		return w.failChunk(ctx, chunkID, "failed to load chunk details", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to load chunk details", err, true)
 	}
 
 	inputURL, err := w.client.InputURL(ctx, chunkID)
 	if err != nil {
-		return w.failChunk(ctx, chunkID, "failed to fetch input url", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to fetch input url", err, true)
 	}
 
 	reader, err := downloadStream(ctx, inputURL.Data.URL)
 	if err != nil {
-		return w.failChunk(ctx, chunkID, "failed to download input", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to download input", err, true)
 	}
 	defer reader.Close()
 
@@ -234,22 +286,22 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 	}
 	outputs, err := buildOutputs(ctx, reader, engineVerifier)
 	if err != nil {
-		return w.failChunk(ctx, chunkID, "failed to parse input", err, false)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to parse input", err, false)
 	}
 
 	outputURLs, err := w.client.OutputURLs(ctx, chunkID)
 	if err != nil {
-		return w.failChunk(ctx, chunkID, "failed to fetch output urls", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to fetch output urls", err, true)
 	}
 
 	if err := uploadSigned(ctx, outputURLs.Data.Targets.Valid.URL, outputs.ValidData); err != nil {
-		return w.failChunk(ctx, chunkID, "failed to upload valid output", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to upload valid output", err, true)
 	}
 	if err := uploadSigned(ctx, outputURLs.Data.Targets.Invalid.URL, outputs.InvalidData); err != nil {
-		return w.failChunk(ctx, chunkID, "failed to upload invalid output", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to upload invalid output", err, true)
 	}
 	if err := uploadSigned(ctx, outputURLs.Data.Targets.Risky.URL, outputs.RiskyData); err != nil {
-		return w.failChunk(ctx, chunkID, "failed to upload risky output", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to upload risky output", err, true)
 	}
 
 	completePayload := map[string]interface{}{
@@ -264,8 +316,10 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 	}
 
 	if err := w.client.CompleteChunk(ctx, chunkID, completePayload); err != nil {
-		return w.failChunk(ctx, chunkID, "failed to complete chunk", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to complete chunk", err, true)
 	}
+
+	w.telemetry.recordChunkSuccess(processingStage, claim.Data.RoutingProvider, outputs)
 
 	_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
 		"level":   "info",
@@ -287,7 +341,9 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 	return nil
 }
 
-func (w *Worker) failChunk(ctx context.Context, chunkID, message string, err error, retryable bool) error {
+func (w *Worker) failChunk(ctx context.Context, chunkID, stage, message string, err error, retryable bool) error {
+	w.telemetry.recordChunkFailure(stage)
+
 	_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
 		"level":   "error",
 		"event":   "chunk_error",
@@ -367,6 +423,7 @@ func buildOutputs(ctx context.Context, reader io.Reader, engineVerifier verifier
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	output := &chunkOutputs{}
+	output.ReasonCounts = map[string]int{}
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -381,6 +438,8 @@ func buildOutputs(ctx context.Context, reader io.Reader, engineVerifier verifier
 		output.EmailCount++
 		result := engineVerifier.Verify(ctx, line)
 		reason := reasonWithEvidence(result)
+		baseReason := baseReasonOnly(reason)
+		output.ReasonCounts[baseReason]++
 
 		switch result.Category {
 		case verifier.CategoryInvalid:
@@ -415,6 +474,24 @@ func buildOutputs(ctx context.Context, reader io.Reader, engineVerifier verifier
 	output.RiskyData = riskyBuf.Bytes()
 
 	return output, nil
+}
+
+func baseReasonOnly(reason string) string {
+	normalized := strings.TrimSpace(reason)
+	if normalized == "" {
+		return "unknown"
+	}
+
+	if separator := strings.Index(normalized, ":"); separator >= 0 {
+		normalized = normalized[:separator]
+	}
+
+	normalized = strings.TrimSpace(normalized)
+	if normalized == "" {
+		return "unknown"
+	}
+
+	return normalized
 }
 
 func isHeaderLine(line string) bool {
@@ -494,15 +571,81 @@ func (w *Worker) refreshPolicyIfNeeded(ctx context.Context, now time.Time) {
 
 	existing := w.policySnapshot()
 	state := policyStateFrom(resp)
+	runtime := w.resolvePolicyRuntime(ctx, existing)
 	state.heloName = existing.heloName
 	state.mailFromAddress = existing.mailFromAddress
 	state.identityDomain = existing.identityDomain
+	state.activePolicyVersion = runtime.activeVersion
+	state.policyEngineEnabled = runtime.policyEngineEnabled
+	state.adaptiveRetryEnabled = runtime.adaptiveRetryEnabled
+	state.replyPolicyEngine = runtime.replyPolicyEngine
 
 	w.policyMu.Lock()
 	w.policy = state
 	w.policyMu.Unlock()
 
 	w.updateMaxConcurrency(state)
+}
+
+type policyRuntimeState struct {
+	activeVersion        string
+	policyEngineEnabled  bool
+	adaptiveRetryEnabled bool
+	replyPolicyEngine    *verifier.ProviderReplyPolicyEngine
+}
+
+func (w *Worker) resolvePolicyRuntime(ctx context.Context, previous policyState) policyRuntimeState {
+	result := policyRuntimeState{
+		activeVersion:        previous.activePolicyVersion,
+		policyEngineEnabled:  w.cfg.BaseVerifierConfig.ProviderPolicyEngineEnabled,
+		adaptiveRetryEnabled: w.cfg.BaseVerifierConfig.AdaptiveRetryEnabled,
+		replyPolicyEngine:    cloneProviderReplyPolicyEngine(w.cfg.BaseVerifierConfig.ProviderReplyPolicyEngine),
+	}
+
+	if previous.replyPolicyEngine != nil {
+		result.replyPolicyEngine = cloneProviderReplyPolicyEngine(previous.replyPolicyEngine)
+	}
+
+	if w.cfg.ControlPlanePolicySyncEnabled && w.cfg.ControlPlaneClient != nil {
+		policies, err := w.cfg.ControlPlaneClient.ProviderPolicies(ctx)
+		if err != nil {
+			fmt.Printf("control-plane policies fetch error: %v\n", err)
+		} else {
+			result.policyEngineEnabled = policies.Data.PolicyEngineEnabled
+			result.adaptiveRetryEnabled = policies.Data.AdaptiveRetryEnabled
+			result.activeVersion = strings.TrimSpace(policies.Data.ActiveVersion)
+		}
+	}
+
+	if result.activeVersion != "" {
+		payloadResp, err := w.client.PolicyVersionPayload(ctx, result.activeVersion)
+		if err != nil {
+			var apiErr api.APIError
+			if !errors.As(err, &apiErr) || apiErr.Status != http.StatusNotFound {
+				fmt.Printf("policy version payload fetch error (%s): %v\n", result.activeVersion, err)
+			}
+		} else if len(payloadResp.Data.PolicyPayload) > 0 {
+			parsed, parseErr := verifier.ParseProviderReplyPolicyEngineJSON(string(payloadResp.Data.PolicyPayload))
+			if parseErr != nil {
+				fmt.Printf("policy version payload parse error (%s): %v\n", result.activeVersion, parseErr)
+			} else {
+				result.replyPolicyEngine = parsed
+			}
+		}
+	}
+
+	if result.replyPolicyEngine == nil && result.policyEngineEnabled {
+		result.replyPolicyEngine = verifier.DefaultProviderReplyPolicyEngine()
+	}
+
+	if result.replyPolicyEngine != nil {
+		result.replyPolicyEngine.Enabled = result.policyEngineEnabled
+		if strings.TrimSpace(result.activeVersion) != "" {
+			result.replyPolicyEngine.Version = strings.TrimSpace(result.activeVersion)
+		}
+	}
+
+	return result
 }
 
 func policyStateFrom(resp *api.PolicyResponse) policyState {
@@ -641,6 +784,15 @@ func (w *Worker) hasMailFromIdentity() bool {
 	return state.mailFromAddress != ""
 }
 
+func (w *Worker) isHeartbeatIdentityMissing() bool {
+	if strings.TrimSpace(w.cfg.BaseVerifierConfig.MailFromAddress) != "" {
+		return false
+	}
+
+	state := w.policySnapshot()
+	return strings.TrimSpace(state.mailFromAddress) == ""
+}
+
 func (w *Worker) verifierForMode(mode string, policy policyConfig, hasPolicy bool) verifier.Verifier {
 	config := w.cfg.BaseVerifierConfig
 	state := w.policySnapshot()
@@ -648,6 +800,18 @@ func (w *Worker) verifierForMode(mode string, policy policyConfig, hasPolicy boo
 
 	if hasPolicy {
 		config = applyPolicy(config, policy)
+	}
+
+	config.ProviderPolicyEngineEnabled = state.policyEngineEnabled
+	config.AdaptiveRetryEnabled = state.adaptiveRetryEnabled
+	if state.replyPolicyEngine != nil {
+		config.ProviderReplyPolicyEngine = cloneProviderReplyPolicyEngine(state.replyPolicyEngine)
+	} else {
+		config.ProviderReplyPolicyEngine = cloneProviderReplyPolicyEngine(config.ProviderReplyPolicyEngine)
+	}
+
+	if config.ProviderReplyPolicyEngine != nil {
+		config.ProviderReplyPolicyEngine.Enabled = config.ProviderPolicyEngineEnabled
 	}
 
 	var smtpFactory verifier.SMTPCheckerFactory
@@ -809,6 +973,14 @@ func minInt(a, b int) int {
 	return b
 }
 
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+
+	return b
+}
+
 func (w *Worker) workerCapability() string {
 	return normalizeWorkerCapability(w.cfg.WorkerCapability)
 }
@@ -864,6 +1036,114 @@ func normalizeVerificationMode(value string) string {
 	return "standard"
 }
 
+func (w *Worker) sendHeartbeats(ctx context.Context) {
+	if w.cfg.ControlPlaneHeartbeatEnabled && w.cfg.ControlPlaneClient != nil {
+		snapshot := w.telemetry.snapshot()
+		payload := api.ControlPlaneHeartbeatRequest{
+			WorkerID:  w.cfg.WorkerID,
+			Host:      w.cfg.Server.Name,
+			IPAddress: w.cfg.Server.IPAddress,
+			Pool:      stringFromMeta(w.cfg.Server.Meta, "pool"),
+			Tags: []string{
+				fmt.Sprintf("laravel_heartbeat:%t", w.cfg.LaravelHeartbeatEnabled),
+				fmt.Sprintf("laravel_heartbeat_every_n:%d", maxInt(1, w.cfg.LaravelHeartbeatEveryN)),
+				fmt.Sprintf("policy_sync:%t", w.cfg.ControlPlanePolicySyncEnabled),
+			},
+			Status:          w.currentDesiredState(),
+			StageMetrics:    snapshot.stageMetrics,
+			SMTPMetrics:     snapshot.smtpMetrics,
+			ProviderMetrics: snapshot.providerMetrics,
+		}
+
+		response, err := w.cfg.ControlPlaneClient.Heartbeat(ctx, payload)
+		if err != nil {
+			fmt.Printf("control-plane heartbeat error: %v\n", err)
+		} else {
+			w.applyControlPlaneHeartbeat(response)
+		}
+	}
+
+	if !w.cfg.LaravelHeartbeatEnabled {
+		return
+	}
+
+	heartbeatEvery := maxInt(1, w.cfg.LaravelHeartbeatEveryN)
+	if !w.isHeartbeatIdentityMissing() && int(w.heartbeatCount)%heartbeatEvery != 0 {
+		return
+	}
+
+	resp, err := w.client.Heartbeat(ctx, w.cfg.Server)
+	if err != nil {
+		fmt.Printf("laravel heartbeat warning: %v\n", err)
+		return
+	}
+
+	w.applyHeartbeatIdentity(resp)
+}
+
+func (w *Worker) applyControlPlaneHeartbeat(resp *api.ControlPlaneHeartbeatResponse) {
+	if resp == nil {
+		return
+	}
+
+	desiredState := normalizeDesiredState(resp.DesiredState)
+	if desiredState != "" {
+		w.desiredState.Store(desiredState)
+	}
+
+	for _, command := range resp.Commands {
+		command = strings.ToLower(strings.TrimSpace(command))
+		switch command {
+		case "pause":
+			w.desiredState.Store("paused")
+		case "resume", "run":
+			w.desiredState.Store("running")
+		case "drain":
+			w.desiredState.Store("draining")
+		case "stop":
+			w.desiredState.Store("stopped")
+		}
+	}
+}
+
+func (w *Worker) currentDesiredState() string {
+	state, ok := w.desiredState.Load().(string)
+	if !ok {
+		return "running"
+	}
+
+	state = normalizeDesiredState(state)
+	if state == "" {
+		return "running"
+	}
+
+	return state
+}
+
+func normalizeDesiredState(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch normalized {
+	case "running", "paused", "draining", "stopped":
+		return normalized
+	default:
+		return ""
+	}
+}
+
+func stringFromMeta(meta map[string]interface{}, key string) string {
+	if meta == nil {
+		return ""
+	}
+
+	value, ok := meta[key]
+	if !ok {
+		return ""
+	}
+
+	normalized := strings.TrimSpace(fmt.Sprintf("%v", value))
+	return normalized
+}
+
 func (w *Worker) applyHeartbeatIdentity(resp *api.HeartbeatResponse) {
 	if resp == nil {
 		return
@@ -876,6 +1156,33 @@ func (w *Worker) applyHeartbeatIdentity(resp *api.HeartbeatResponse) {
 	w.policy.mailFromAddress = strings.TrimSpace(identity.MailFromAddress)
 	w.policy.identityDomain = strings.TrimSpace(identity.IdentityDomain)
 	w.policyMu.Unlock()
+}
+
+func cloneProviderReplyPolicyEngine(
+	engine *verifier.ProviderReplyPolicyEngine,
+) *verifier.ProviderReplyPolicyEngine {
+	if engine == nil {
+		return nil
+	}
+
+	payload, err := json.Marshal(engine)
+	if err != nil {
+		clone := *engine
+		return &clone
+	}
+
+	parsed, parseErr := verifier.ParseProviderReplyPolicyEngineJSON(string(payload))
+	if parseErr != nil {
+		clone := *engine
+		return &clone
+	}
+
+	parsed.Enabled = engine.Enabled
+	if strings.TrimSpace(engine.Version) != "" {
+		parsed.Version = strings.TrimSpace(engine.Version)
+	}
+
+	return parsed
 }
 
 type staticRiskyVerifier struct {

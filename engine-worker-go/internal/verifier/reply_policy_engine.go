@@ -211,6 +211,36 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 		},
 		"gmail": {
 			Name: "gmail",
+			EnhancedRules: []ProviderReplyRule{
+				{
+					RuleID:           "gmail-enhanced-47-retry",
+					EnhancedPrefixes: []string{"4.7."},
+					DecisionClass:    DecisionRetryable,
+					Category:         CategoryRisky,
+					Reason:           "smtp_tempfail",
+					ReasonCode:       "smtp_tempfail",
+				},
+			},
+			SMTPCodeRules: []ProviderReplyRule{
+				{
+					RuleID:        "gmail-smtp-421-451-retry",
+					SMTPCodes:     []int{421, 450, 451},
+					DecisionClass: DecisionRetryable,
+					Category:      CategoryRisky,
+					Reason:        "smtp_tempfail",
+					ReasonCode:    "smtp_tempfail",
+				},
+			},
+			MessageRules: []ProviderReplyRule{
+				{
+					RuleID:          "gmail-msg-rate-limit-retry",
+					MessageContains: []string{"rate limited", "temporarily deferred", "try again later"},
+					DecisionClass:   DecisionRetryable,
+					Category:        CategoryRisky,
+					Reason:          "smtp_tempfail",
+					ReasonCode:      "smtp_tempfail",
+				},
+			},
 			Retry: ProviderRetryPolicy{
 				DefaultSeconds:      90,
 				TempfailSeconds:     120,
@@ -221,6 +251,36 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 		},
 		"microsoft": {
 			Name: "microsoft",
+			EnhancedRules: []ProviderReplyRule{
+				{
+					RuleID:           "microsoft-enhanced-47-retry",
+					EnhancedPrefixes: []string{"4.7."},
+					DecisionClass:    DecisionRetryable,
+					Category:         CategoryRisky,
+					Reason:           "smtp_tempfail",
+					ReasonCode:       "smtp_tempfail",
+				},
+			},
+			SMTPCodeRules: []ProviderReplyRule{
+				{
+					RuleID:        "microsoft-smtp-421-451-retry",
+					SMTPCodes:     []int{421, 451, 452},
+					DecisionClass: DecisionRetryable,
+					Category:      CategoryRisky,
+					Reason:        "smtp_tempfail",
+					ReasonCode:    "smtp_tempfail",
+				},
+			},
+			MessageRules: []ProviderReplyRule{
+				{
+					RuleID:          "microsoft-msg-deferral-retry",
+					MessageContains: []string{"temporarily deferred", "throttled", "try this again later"},
+					DecisionClass:   DecisionRetryable,
+					Category:        CategoryRisky,
+					Reason:          "smtp_tempfail",
+					ReasonCode:      "smtp_tempfail",
+				},
+			},
 			Retry: ProviderRetryPolicy{
 				DefaultSeconds:      90,
 				TempfailSeconds:     150,
@@ -231,6 +291,36 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 		},
 		"yahoo": {
 			Name: "yahoo",
+			EnhancedRules: []ProviderReplyRule{
+				{
+					RuleID:           "yahoo-enhanced-47-retry",
+					EnhancedPrefixes: []string{"4.7."},
+					DecisionClass:    DecisionRetryable,
+					Category:         CategoryRisky,
+					Reason:           "smtp_tempfail",
+					ReasonCode:       "smtp_tempfail",
+				},
+			},
+			SMTPCodeRules: []ProviderReplyRule{
+				{
+					RuleID:        "yahoo-smtp-421-451-retry",
+					SMTPCodes:     []int{421, 451, 452},
+					DecisionClass: DecisionRetryable,
+					Category:      CategoryRisky,
+					Reason:        "smtp_tempfail",
+					ReasonCode:    "smtp_tempfail",
+				},
+			},
+			MessageRules: []ProviderReplyRule{
+				{
+					RuleID:          "yahoo-msg-tempfail-retry",
+					MessageContains: []string{"temporarily deferred", "temporarily unavailable", "try again later"},
+					DecisionClass:   DecisionRetryable,
+					Category:        CategoryRisky,
+					Reason:          "smtp_tempfail",
+					ReasonCode:      "smtp_tempfail",
+				},
+			},
 			Retry: ProviderRetryPolicy{
 				DefaultSeconds:      75,
 				TempfailSeconds:     120,
