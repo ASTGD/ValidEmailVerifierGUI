@@ -9,50 +9,59 @@ import (
 )
 
 type Config struct {
-	Port                         string
-	SSEWriteTimeoutSec           int
-	InstanceID                   string
-	RedisAddr                    string
-	RedisPassword                string
-	RedisDB                      int
-	MySQLDSN                     string
-	SnapshotInterval             time.Duration
-	ControlPlaneToken            string
-	HeartbeatTTL                 time.Duration
-	ShutdownTimeoutSec           int
-	LeaderLockEnabled            bool
-	LeaderLockTTL                time.Duration
-	StaleWorkerTTL               time.Duration
-	StuckDesiredGrace            time.Duration
-	AlertsEnabled                bool
-	AlertCheckInterval           time.Duration
-	AlertHeartbeatGrace          time.Duration
-	AlertCooldown                time.Duration
-	AlertErrorRateThreshold      float64
-	AutoActionsEnabled           bool
-	AutoScaleEnabled             bool
-	AutoScaleInterval            time.Duration
-	AutoScaleCooldown            time.Duration
-	AutoScaleMinDesired          int
-	AutoScaleMaxDesired          int
-	AutoScaleCanaryPercent       int
-	QuarantineErrorRate          float64
-	ProviderPolicyEngineEnabled  bool
-	AdaptiveRetryEnabled         bool
-	ProviderAutoprotectEnabled   bool
-	ProviderTempfailWarnRate     float64
-	ProviderTempfailCriticalRate float64
-	ProviderRejectWarnRate       float64
-	ProviderRejectCriticalRate   float64
-	ProviderUnknownWarnRate      float64
-	ProviderUnknownCriticalRate  float64
-	SlackWebhookURL              string
-	SMTPHost                     string
-	SMTPPort                     int
-	SMTPUsername                 string
-	SMTPPassword                 string
-	SMTPFrom                     string
-	SMTPTo                       []string
+	Port                                      string
+	SSEWriteTimeoutSec                        int
+	InstanceID                                string
+	RedisAddr                                 string
+	RedisPassword                             string
+	RedisDB                                   int
+	MySQLDSN                                  string
+	SnapshotInterval                          time.Duration
+	ControlPlaneToken                         string
+	HeartbeatTTL                              time.Duration
+	ShutdownTimeoutSec                        int
+	LeaderLockEnabled                         bool
+	LeaderLockTTL                             time.Duration
+	StaleWorkerTTL                            time.Duration
+	StuckDesiredGrace                         time.Duration
+	AlertsEnabled                             bool
+	AlertCheckInterval                        time.Duration
+	AlertHeartbeatGrace                       time.Duration
+	AlertCooldown                             time.Duration
+	AlertErrorRateThreshold                   float64
+	AutoActionsEnabled                        bool
+	AutoScaleEnabled                          bool
+	AutoScaleInterval                         time.Duration
+	AutoScaleCooldown                         time.Duration
+	AutoScaleMinDesired                       int
+	AutoScaleMaxDesired                       int
+	AutoScaleCanaryPercent                    int
+	QuarantineErrorRate                       float64
+	ProviderPolicyEngineEnabled               bool
+	AdaptiveRetryEnabled                      bool
+	ProviderAutoprotectEnabled                bool
+	ProviderTempfailWarnRate                  float64
+	ProviderTempfailCriticalRate              float64
+	ProviderRejectWarnRate                    float64
+	ProviderRejectCriticalRate                float64
+	ProviderUnknownWarnRate                   float64
+	ProviderUnknownCriticalRate               float64
+	SlackWebhookURL                           string
+	SMTPHost                                  string
+	SMTPPort                                  int
+	SMTPUsername                              string
+	SMTPPassword                              string
+	SMTPFrom                                  string
+	SMTPTo                                    []string
+	LaravelAPIBaseURL                         string
+	LaravelVerifierToken                      string
+	PolicyPayloadStrictValidationEnabled      bool
+	PolicyCanaryAutopilotEnabled              bool
+	PolicyCanaryWindowMinutes                 int
+	PolicyCanaryRequiredHealthWindows         int
+	PolicyCanaryUnknownRegressionThreshold    float64
+	PolicyCanaryTempfailRecoveryDropThreshold float64
+	PolicyCanaryPolicyBlockSpikeThreshold     float64
 }
 
 func LoadConfig() (Config, error) {
@@ -70,6 +79,8 @@ func LoadConfig() (Config, error) {
 	cfg.SMTPPassword = os.Getenv("SMTP_PASSWORD")
 	cfg.SMTPFrom = os.Getenv("SMTP_FROM")
 	cfg.SMTPTo = splitCSV(os.Getenv("SMTP_TO"))
+	cfg.LaravelAPIBaseURL = strings.TrimSpace(os.Getenv("LARAVEL_API_BASE_URL"))
+	cfg.LaravelVerifierToken = strings.TrimSpace(os.Getenv("LARAVEL_VERIFIER_TOKEN"))
 
 	if cfg.Port == "" {
 		return cfg, fmt.Errorf("PORT is required")
@@ -343,6 +354,28 @@ func LoadConfig() (Config, error) {
 	}
 
 	cfg.SSEWriteTimeoutSec = 0
+	cfg.PolicyPayloadStrictValidationEnabled = parseBoolWithDefault("POLICY_PAYLOAD_STRICT_VALIDATION_ENABLED", true)
+	cfg.PolicyCanaryAutopilotEnabled = parseBoolWithDefault("POLICY_CANARY_AUTOPILOT_ENABLED", false)
+	cfg.PolicyCanaryWindowMinutes = envInt("POLICY_CANARY_WINDOW_MINUTES", 15)
+	if cfg.PolicyCanaryWindowMinutes < 1 {
+		cfg.PolicyCanaryWindowMinutes = 15
+	}
+	cfg.PolicyCanaryRequiredHealthWindows = envInt("POLICY_CANARY_REQUIRED_HEALTH_WINDOWS", 4)
+	if cfg.PolicyCanaryRequiredHealthWindows < 1 {
+		cfg.PolicyCanaryRequiredHealthWindows = 4
+	}
+	cfg.PolicyCanaryUnknownRegressionThreshold = envFloat("POLICY_CANARY_UNKNOWN_REGRESSION_THRESHOLD", 0.05)
+	if cfg.PolicyCanaryUnknownRegressionThreshold < 0 {
+		cfg.PolicyCanaryUnknownRegressionThreshold = 0.05
+	}
+	cfg.PolicyCanaryTempfailRecoveryDropThreshold = envFloat("POLICY_CANARY_TEMPFAIL_RECOVERY_DROP_THRESHOLD", 0.10)
+	if cfg.PolicyCanaryTempfailRecoveryDropThreshold < 0 {
+		cfg.PolicyCanaryTempfailRecoveryDropThreshold = 0.10
+	}
+	cfg.PolicyCanaryPolicyBlockSpikeThreshold = envFloat("POLICY_CANARY_POLICY_BLOCK_SPIKE_THRESHOLD", 0.10)
+	if cfg.PolicyCanaryPolicyBlockSpikeThreshold < 0 {
+		cfg.PolicyCanaryPolicyBlockSpikeThreshold = 0.10
+	}
 
 	if value := os.Getenv("SMTP_PORT"); value != "" {
 		parsed, err := strconv.Atoi(value)
@@ -382,6 +415,43 @@ func parseBool(value string) bool {
 	default:
 		return false
 	}
+}
+
+func parseBoolWithDefault(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	return parseBool(value)
+}
+
+func envInt(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+
+	return parsed
+}
+
+func envFloat(key string, fallback float64) float64 {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return fallback
+	}
+
+	return parsed
 }
 
 func splitCSV(value string) []string {

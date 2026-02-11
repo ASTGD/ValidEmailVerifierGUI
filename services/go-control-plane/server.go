@@ -59,6 +59,7 @@ func (s *Server) Router() http.Handler {
 		router.Post("/api/providers/{provider}/mode", s.handleProviderMode)
 		router.Post("/api/providers/policies/reload", s.handleProviderPoliciesReload)
 		router.Get("/api/policies/versions", s.handlePolicyVersions)
+		router.Post("/api/policies/validate", s.handlePolicyValidate)
 		router.Post("/api/policies/promote", s.handlePolicyPromote)
 		router.Post("/api/policies/rollback", s.handlePolicyRollback)
 		router.Get("/metrics", s.handleMetrics)
@@ -80,6 +81,7 @@ func (s *Server) Router() http.Handler {
 		router.Post("/ui/settings", s.requireSameOriginUI(s.handleUIUpdateSettings))
 		router.Post("/ui/providers/{provider}/mode", s.requireSameOriginUI(s.handleUIProviderMode))
 		router.Post("/ui/providers/policies/reload", s.requireSameOriginUI(s.handleUIProviderPoliciesReload))
+		router.Post("/ui/policies/validate", s.requireSameOriginUI(s.handleUIPolicyValidate))
 		router.Post("/ui/policies/promote", s.requireSameOriginUI(s.handleUIPolicyPromote))
 		router.Post("/ui/policies/rollback", s.requireSameOriginUI(s.handleUIPolicyRollback))
 
@@ -99,6 +101,7 @@ func (s *Server) Router() http.Handler {
 		router.Post("/verifier-engine-room/pools/{pool}/scale", s.requireSameOriginUI(s.handleUIScalePool))
 		router.Post("/verifier-engine-room/providers/{provider}/mode", s.requireSameOriginUI(s.handleUIProviderMode))
 		router.Post("/verifier-engine-room/providers/policies/reload", s.requireSameOriginUI(s.handleUIProviderPoliciesReload))
+		router.Post("/verifier-engine-room/policies/validate", s.requireSameOriginUI(s.handleUIPolicyValidate))
 		router.Post("/verifier-engine-room/policies/promote", s.requireSameOriginUI(s.handleUIPolicyPromote))
 		router.Post("/verifier-engine-room/policies/rollback", s.requireSameOriginUI(s.handleUIPolicyRollback))
 

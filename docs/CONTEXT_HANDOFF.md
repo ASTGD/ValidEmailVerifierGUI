@@ -1,12 +1,13 @@
 # Context Handoff (ValidEmailVerifierGUI)
 
-Last updated: 2026-02-10
+Last updated: 2026-02-11
 
 This document is the handoff bundle for a fresh workspace. It summarizes the current system state, key decisions, and how to resume work without losing context. Do not place secrets in this file.
 
 ## 1) Current status (high level)
 - Core platform is running on Laravel 12 + Livewire (portal) + Filament (admin) with Go workers for verification.
-- Standard (SG1-SG4) and Enhanced (SG5 RCPT probing) modes exist; Enhanced gating can be toggled in settings.
+- Customer-facing verification is a single product flow (no mode selector in portal).
+- Internally, verification runs a staged pipeline: `screening -> smtp_probe -> finalize`.
 - Output CSV schema is: `email,status,sub_status,score,reason`.
 - S3 storage is supported for uploads/results in local dev and production (storage disk is configurable).
 - DynamoDB cache read (cache-only mode) is implemented and tested with a real table.
@@ -24,6 +25,7 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Storage: local for dev, S3 for production (disk-configurable).
 - Go worker: `engine-worker-go` via Docker image (GHCR) + provisioning bundle.
 - Monitor: `engine-monitor-go` service (systemd supported).
+- Go control-plane is primary operational heartbeat source; Laravel heartbeat is fallback identity/liveness.
 
 ## 3) Important docs
 - `docs/ENGINE_CONTRACT.md`
@@ -37,13 +39,14 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - `PrepareVerificationJob` -> `ParseAndChunkJob`:
   - Normalize/dedupe
   - Cache lookup (EmailVerificationCacheStore)
-  - Create chunks for worker
-- Go worker pulls chunks, runs checks, posts results.
+  - Create stage-1 chunks (`screening`)
+- Go worker processes stage-1 chunks, and screening handoff creates stage-2 probe chunks when policy allows.
+- Go worker processes stage-2 probe chunks and posts results.
 - Finalization merges outputs and computes score.
 
-## 5) Verification modes
-- `verification_mode` is stored on jobs: `standard` or `enhanced`.
-- Enhanced triggers SG5 RCPT probing in Go worker when policy allows.
+## 5) Internal policy stages
+- `verification_mode` remains an internal compatibility field, but customer-facing mode selection is removed.
+- Screening runs first for all jobs; SMTP probe runs by internal policy gates and worker capability routing.
 - Catch-all policy is admin-only:
   - `risky_only` or `promote_if_score_gte` threshold.
 
@@ -55,7 +58,7 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 ## 7) Single Email Test (portal)
 - Single-check uses the same pipeline as list uploads (job origin = `single_check`).
 - Results are shown in the portal; job visibility can be hidden by admin setting.
-- Enhanced selection currently enabled for testing (guardrails can be re-added later).
+- No customer mode selection is exposed; internal policy gates decide probe execution.
 
 ## 8) Engine server provisioning (worker)
 - Admin manages Engine Servers and Verifier Domains.
@@ -114,15 +117,9 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Added progress bars + metrics to admin job list and job detail view; logs are collapsible.
 
 ## 15) Next planned upgrades (not yet implemented)
-- SMTP policy version wiring (control plane -> worker):
-  - Store versioned policy payloads per `smtp_policy_versions.version`.
-  - Expose active payload from control plane for workers to fetch.
-  - Worker reload/apply active policy version without redeploy.
-  - Make `Promote / Rollback` controls affect live SMTP decision behavior, not only rollout state/history.
-- Cache read metrics + dashboard widgets
-- Adaptive throttling for cache reads
-- Chunked cache lookup jobs for large uploads
-- Retry strategy improvements (partial unprocessed keys)
+- SG6 pilot completion items (real ESP adapter, credit settlement finalization, operational reporting)
+- Go policy canary drill automation and wider provider rollout (post-pilot)
+- Additional cache-read optimization for very large uploads
 
 
 ---
@@ -258,6 +255,24 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 ### 2026-02-07 — Go control plane Phase 5 polish + safety
 - Added protected Prometheus metrics endpoint at `/metrics`.
 - Added SSE stream for UI live updates at `/verifier-engine-room/events`.
+
+### 2026-02-11 — Go Phase 17 closure (policy safety + rotation observability + autopilot)
+- Added strict policy payload safety coupling in Go control-plane:
+  - promote/rollback preflight now fetches policy payload from Laravel and validates required schema.
+  - rollout metadata now stores validation state, checksum, and validation timestamp.
+- Added policy lifecycle controls:
+  - new control-plane `validate` action and UI flow.
+  - Laravel `smtp_policy_versions` lifecycle fields (`validation_status`, errors, validated_at/by) with admin validation action.
+- Added routing-quality observability:
+  - worker routing counters in heartbeat payload.
+  - control-plane aggregate panel + Prometheus routing metrics.
+- Added KPI canary autopilot foundation:
+  - step progression (`5 -> 25 -> 50 -> 100`) with healthy-window gating.
+  - auto-rollback gates for unknown regression, tempfail-recovery drop, and policy-block spikes.
+  - manual override protection.
+- Added reliability drill tooling:
+  - `services/go-control-plane/scripts/run_reliability_drill.sh`
+  - `docs/GO_RELIABILITY_DRILL_REPORT_TEMPLATE.md`
 - Added Alerts page (`/verifier-engine-room/alerts`) reading `go_alerts` records.
 - Added Settings page (`/verifier-engine-room/settings`) backed by Redis runtime settings (no `.env` edits).
 - Updated alert service to read runtime settings dynamically (alerts toggle, auto-actions toggle, thresholds/cooldowns).

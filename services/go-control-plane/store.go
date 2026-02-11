@@ -14,8 +14,10 @@ import (
 )
 
 type Store struct {
-	rdb          *redis.Client
-	heartbeatTTL time.Duration
+	rdb                           *redis.Client
+	heartbeatTTL                  time.Duration
+	policyPayloadValidator        PolicyPayloadValidator
+	policyPayloadStrictValidation bool
 }
 
 const (
@@ -52,6 +54,11 @@ func NewStore(rdb *redis.Client, ttl time.Duration) *Store {
 		rdb:          rdb,
 		heartbeatTTL: ttl,
 	}
+}
+
+func (s *Store) SetPolicyPayloadValidator(validator PolicyPayloadValidator, strict bool) {
+	s.policyPayloadValidator = validator
+	s.policyPayloadStrictValidation = strict
 }
 
 func (s *Store) Ping(ctx context.Context) error {
@@ -186,6 +193,15 @@ func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (stri
 		providerMetricsJSON = payload
 	}
 
+	routingMetricsJSON := []byte("{}")
+	if req.RoutingMetrics != nil {
+		payload, marshalErr := json.Marshal(req.RoutingMetrics)
+		if marshalErr != nil {
+			return "", marshalErr
+		}
+		routingMetricsJSON = payload
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	pipe := s.rdb.Pipeline()
@@ -199,6 +215,7 @@ func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (stri
 	pipe.Set(ctx, workerKey(req.WorkerID, "stage_metrics"), stageMetricsJSON, s.heartbeatTTL)
 	pipe.Set(ctx, workerKey(req.WorkerID, "smtp_metrics"), smtpMetricsJSON, s.heartbeatTTL)
 	pipe.Set(ctx, workerKey(req.WorkerID, "provider_metrics"), providerMetricsJSON, s.heartbeatTTL)
+	pipe.Set(ctx, workerKey(req.WorkerID, "routing_metrics"), routingMetricsJSON, s.heartbeatTTL)
 	if req.PoolHealthHint != nil {
 		pipe.Set(ctx, workerKey(req.WorkerID, "pool_health_hint"), *req.PoolHealthHint, s.heartbeatTTL)
 	}
@@ -557,6 +574,14 @@ func (s *Store) GetWorkers(ctx context.Context) ([]WorkerSummary, error) {
 			}
 		}
 
+		var routingMetrics *RoutingMetrics
+		if payload, payloadErr := s.rdb.Get(ctx, workerKey(id, "routing_metrics")).Result(); payloadErr == nil && payload != "" {
+			parsed := RoutingMetrics{}
+			if unmarshalErr := json.Unmarshal([]byte(payload), &parsed); unmarshalErr == nil {
+				routingMetrics = &parsed
+			}
+		}
+
 		poolHealthHint := 0.0
 		if payload, payloadErr := s.rdb.Get(ctx, workerKey(id, "pool_health_hint")).Result(); payloadErr == nil && payload != "" {
 			if parsed, parseErr := strconv.ParseFloat(payload, 64); parseErr == nil {
@@ -581,6 +606,7 @@ func (s *Store) GetWorkers(ctx context.Context) ([]WorkerSummary, error) {
 			StageMetrics:    stageMetrics,
 			SMTPMetrics:     smtpMetrics,
 			ProviderMetrics: providerMetrics,
+			RoutingMetrics:  routingMetrics,
 			PoolHealthHint:  poolHealthHint,
 		})
 	}
@@ -970,6 +996,18 @@ func (s *Store) PromoteSMTPPolicyVersion(
 	if err != nil {
 		return SMTPPolicyVersionRecord{}, err
 	}
+	targetRecord, exists := records[version]
+	if !exists {
+		return SMTPPolicyVersionRecord{}, fmt.Errorf("policy version is not validated")
+	}
+	if s.policyPayloadStrictValidation && normalizePolicyValidationStatus(targetRecord.ValidationStatus) != policyValidationStatusValid {
+		return SMTPPolicyVersionRecord{}, fmt.Errorf("policy version must be validated before promote")
+	}
+
+	validation, err := s.preflightPolicyPayload(ctx, version, s.policyPayloadStrictValidation)
+	if err != nil {
+		return SMTPPolicyVersionRecord{}, err
+	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	records, target, nextActiveVersion := applySMTPPolicyPromoteState(
@@ -980,16 +1018,82 @@ func (s *Store) PromoteSMTPPolicyVersion(
 		triggeredBy,
 		now,
 	)
+	target.ValidationStatus = normalizePolicyValidationStatus(validation.Status)
+	target.ValidationError = strings.TrimSpace(validation.ErrorMessage)
+	target.PayloadChecksum = strings.TrimSpace(validation.Checksum)
+	target.PayloadValidatedAt = strings.TrimSpace(validation.ValidatedAt)
+	records[version] = target
+
 	if err := s.saveSMTPPolicyVersionMap(ctx, records, nextActiveVersion); err != nil {
 		return SMTPPolicyVersionRecord{}, err
 	}
 
 	entry := buildSMTPPolicyRolloutRecord("promote", version, canaryPercent, triggeredBy, notes, now)
+	entry.ValidationStatus = target.ValidationStatus
+	entry.PayloadChecksum = target.PayloadChecksum
+	entry.PayloadValidatedAt = target.PayloadValidatedAt
 	if historyErr := s.appendSMTPPolicyRolloutHistory(ctx, entry); historyErr != nil {
 		return SMTPPolicyVersionRecord{}, historyErr
 	}
 
 	return target, nil
+}
+
+func (s *Store) ValidateSMTPPolicyVersion(ctx context.Context, version string, triggeredBy string, notes string) (SMTPPolicyVersionRecord, error) {
+	version = normalizePolicyVersion(version)
+	if version == "" {
+		return SMTPPolicyVersionRecord{}, fmt.Errorf("version is required")
+	}
+	if triggeredBy == "" {
+		triggeredBy = "manual"
+	}
+
+	records, activeVersion, err := s.loadSMTPPolicyVersionMap(ctx)
+	if err != nil {
+		return SMTPPolicyVersionRecord{}, err
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	record := records[version]
+	record.Version = version
+	if record.Status == "" {
+		record.Status = "draft"
+	}
+	record.Active = version == activeVersion
+	record.UpdatedAt = now
+	record.UpdatedBy = triggeredBy
+
+	validation, validationErr := s.preflightPolicyPayload(ctx, version, true)
+	if validationErr != nil {
+		record.ValidationStatus = policyValidationStatusInvalid
+		record.ValidationError = validationErr.Error()
+		record.PayloadValidatedAt = now
+		record.PayloadChecksum = ""
+	} else {
+		record.ValidationStatus = policyValidationStatusValid
+		record.ValidationError = ""
+		record.PayloadValidatedAt = validation.ValidatedAt
+		record.PayloadChecksum = validation.Checksum
+	}
+
+	records[version] = record
+	if saveErr := s.saveSMTPPolicyVersionMap(ctx, records, activeVersion); saveErr != nil {
+		return SMTPPolicyVersionRecord{}, saveErr
+	}
+
+	entry := buildSMTPPolicyRolloutRecord("validate", version, record.CanaryPercent, triggeredBy, notes, now)
+	entry.ValidationStatus = record.ValidationStatus
+	entry.PayloadChecksum = record.PayloadChecksum
+	entry.PayloadValidatedAt = record.PayloadValidatedAt
+	if historyErr := s.appendSMTPPolicyRolloutHistory(ctx, entry); historyErr != nil {
+		return SMTPPolicyVersionRecord{}, historyErr
+	}
+
+	if validationErr != nil {
+		return record, validationErr
+	}
+
+	return record, nil
 }
 
 func (s *Store) RollbackSMTPPolicyVersion(ctx context.Context, triggeredBy string, notes string) (SMTPPolicyVersionRecord, error) {
@@ -1014,6 +1118,14 @@ func (s *Store) RollbackSMTPPolicyVersion(ctx context.Context, triggeredBy strin
 	if err != nil {
 		return SMTPPolicyVersionRecord{}, err
 	}
+	targetRecord := records[targetVersion]
+	if s.policyPayloadStrictValidation && normalizePolicyValidationStatus(targetRecord.ValidationStatus) != policyValidationStatusValid {
+		return SMTPPolicyVersionRecord{}, fmt.Errorf("rollback target is not validated")
+	}
+
+	if _, err := s.preflightPolicyPayload(ctx, targetVersion, s.policyPayloadStrictValidation); err != nil {
+		return SMTPPolicyVersionRecord{}, err
+	}
 
 	record, err := s.PromoteSMTPPolicyVersion(ctx, targetVersion, targetCanary, triggeredBy, notes)
 	if err != nil {
@@ -1028,6 +1140,9 @@ func (s *Store) RollbackSMTPPolicyVersion(ctx context.Context, triggeredBy strin
 	}
 
 	entry := buildSMTPPolicyRolloutRecord("rollback", targetVersion, targetCanary, triggeredBy, notes, record.RolledBackAt)
+	entry.ValidationStatus = record.ValidationStatus
+	entry.PayloadChecksum = record.PayloadChecksum
+	entry.PayloadValidatedAt = record.PayloadValidatedAt
 	if historyErr := s.appendSMTPPolicyRolloutHistory(ctx, entry); historyErr != nil {
 		return SMTPPolicyVersionRecord{}, historyErr
 	}
@@ -1056,6 +1171,9 @@ func (s *Store) GetSMTPPolicyRolloutHistory(ctx context.Context, limit int) ([]S
 		}
 		entry.Action = normalizePolicyAction(entry.Action)
 		entry.CanaryPercent = normalizeCanaryPercent(entry.CanaryPercent)
+		entry.ValidationStatus = normalizePolicyValidationStatus(entry.ValidationStatus)
+		entry.PayloadChecksum = strings.TrimSpace(entry.PayloadChecksum)
+		entry.PayloadValidatedAt = strings.TrimSpace(entry.PayloadValidatedAt)
 		history = append(history, entry)
 	}
 
@@ -1091,6 +1209,10 @@ func (s *Store) loadSMTPPolicyVersionMap(ctx context.Context) (map[string]SMTPPo
 		record.Version = normalizedVersion
 		record.Status = normalizePolicyVersionStatus(record.Status)
 		record.CanaryPercent = normalizeCanaryPercent(record.CanaryPercent)
+		record.ValidationStatus = normalizePolicyValidationStatus(record.ValidationStatus)
+		record.ValidationError = strings.TrimSpace(record.ValidationError)
+		record.PayloadChecksum = strings.TrimSpace(record.PayloadChecksum)
+		record.PayloadValidatedAt = strings.TrimSpace(record.PayloadValidatedAt)
 		record.Active = normalizedVersion == activeVersion
 		records[normalizedVersion] = record
 	}
@@ -1118,6 +1240,10 @@ func buildSMTPPolicyVersionList(values map[string]string, activeVersion string) 
 		}
 		record.Status = normalizePolicyVersionStatus(record.Status)
 		record.CanaryPercent = normalizeCanaryPercent(record.CanaryPercent)
+		record.ValidationStatus = normalizePolicyValidationStatus(record.ValidationStatus)
+		record.ValidationError = strings.TrimSpace(record.ValidationError)
+		record.PayloadChecksum = strings.TrimSpace(record.PayloadChecksum)
+		record.PayloadValidatedAt = strings.TrimSpace(record.PayloadValidatedAt)
 		record.Active = strings.EqualFold(record.Version, normalizedActiveVersion)
 
 		items = append(items, record)
@@ -1213,6 +1339,10 @@ func (s *Store) saveSMTPPolicyVersionMap(ctx context.Context, records map[string
 		}
 		record.Status = normalizePolicyVersionStatus(record.Status)
 		record.CanaryPercent = normalizeCanaryPercent(record.CanaryPercent)
+		record.ValidationStatus = normalizePolicyValidationStatus(record.ValidationStatus)
+		record.ValidationError = strings.TrimSpace(record.ValidationError)
+		record.PayloadChecksum = strings.TrimSpace(record.PayloadChecksum)
+		record.PayloadValidatedAt = strings.TrimSpace(record.PayloadValidatedAt)
 		record.Active = record.Version == activeVersion
 		payload, err := json.Marshal(record)
 		if err != nil {
@@ -1239,6 +1369,10 @@ func (s *Store) upsertSMTPPolicyVersionRecord(ctx context.Context, record SMTPPo
 
 	record.Status = normalizePolicyVersionStatus(record.Status)
 	record.CanaryPercent = normalizeCanaryPercent(record.CanaryPercent)
+	record.ValidationStatus = normalizePolicyValidationStatus(record.ValidationStatus)
+	record.ValidationError = strings.TrimSpace(record.ValidationError)
+	record.PayloadChecksum = strings.TrimSpace(record.PayloadChecksum)
+	record.PayloadValidatedAt = strings.TrimSpace(record.PayloadValidatedAt)
 	payload, err := json.Marshal(record)
 	if err != nil {
 		return err
@@ -1258,6 +1392,43 @@ func (s *Store) appendSMTPPolicyRolloutHistory(ctx context.Context, entry SMTPPo
 	pipe.LTrim(ctx, smtpPolicyHistoryKey, 0, 199)
 	_, err = pipe.Exec(ctx)
 	return err
+}
+
+func (s *Store) preflightPolicyPayload(ctx context.Context, version string, enforce bool) (PolicyPayloadValidation, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	result := PolicyPayloadValidation{
+		Version:     normalizePolicyVersion(version),
+		ValidatedAt: now,
+		Status:      policyValidationStatusPending,
+	}
+
+	if !enforce {
+		return result, nil
+	}
+	if s.policyPayloadValidator == nil {
+		result.Status = policyValidationStatusInvalid
+		result.ErrorMessage = "policy payload validator is not configured"
+		return result, fmt.Errorf(result.ErrorMessage)
+	}
+
+	validation, err := s.policyPayloadValidator.ValidateVersion(ctx, version)
+	if err != nil {
+		validation.Status = policyValidationStatusInvalid
+		if strings.TrimSpace(validation.ValidatedAt) == "" {
+			validation.ValidatedAt = now
+		}
+		return validation, err
+	}
+
+	validation.Status = normalizePolicyValidationStatus(validation.Status)
+	if validation.Status == policyValidationStatusPending {
+		validation.Status = policyValidationStatusValid
+	}
+	if strings.TrimSpace(validation.ValidatedAt) == "" {
+		validation.ValidatedAt = now
+	}
+
+	return validation, nil
 }
 
 func incidentKey(key string) string {
@@ -1299,10 +1470,21 @@ func normalizePolicyVersionStatus(status string) string {
 
 func normalizePolicyAction(action string) string {
 	switch strings.ToLower(strings.TrimSpace(action)) {
-	case "promote", "rollback":
+	case "promote", "rollback", "validate":
 		return strings.ToLower(strings.TrimSpace(action))
 	default:
 		return "promote"
+	}
+}
+
+func normalizePolicyValidationStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case policyValidationStatusValid:
+		return policyValidationStatusValid
+	case policyValidationStatusInvalid:
+		return policyValidationStatusInvalid
+	default:
+		return policyValidationStatusPending
 	}
 }
 
@@ -1326,6 +1508,7 @@ func staleWorkerDeleteKeys(workerID string) []string {
 		workerKey(workerID, "stage_metrics"),
 		workerKey(workerID, "smtp_metrics"),
 		workerKey(workerID, "provider_metrics"),
+		workerKey(workerID, "routing_metrics"),
 		workerKey(workerID, "pool_health_hint"),
 		workerKey(workerID, "pool"),
 		workerKey(workerID, "desired_state"),

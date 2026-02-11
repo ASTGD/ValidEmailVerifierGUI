@@ -18,8 +18,12 @@ Use this runbook to start and stop all local dev services in this repo.
 1. `cd services/go-control-plane`
 2. `cp .env.example .env`
 3. Edit `.env` (token, Redis, optional MySQL settings)
-4. `go run .`
-5. Open `http://localhost:9091/verifier-engine-room/overview`
+4. For policy safety coupling, set:
+   - `LARAVEL_API_BASE_URL=http://localhost:8082`
+   - `LARAVEL_VERIFIER_TOKEN=<verifier-service-token>`
+   - `POLICY_PAYLOAD_STRICT_VALIDATION_ENABLED=true`
+5. `go run .`
+6. Open `http://localhost:9091/verifier-engine-room/overview`
 
 **Go worker**
 1. `cd engine-worker-go`
@@ -86,6 +90,26 @@ Notes:
 - `./vendor/bin/sail artisan ops:queue-prune --dry-run`
 - `./vendor/bin/sail artisan horizon:status`
 - `./vendor/bin/sail artisan horizon:supervisors`
+
+## Go policy rollout checks
+
+- Validate Laravel policy version metadata from admin:
+  - `Operations -> SMTP Policy Versions -> Validate Payload`
+- Go control-plane policy endpoints (token auth):
+  - `GET /api/policies/versions`
+  - `POST /api/policies/validate`
+  - `POST /api/policies/promote`
+  - `POST /api/policies/rollback`
+
+## Go reliability drills
+
+- Drill script:
+  - `cd services/go-control-plane && ./scripts/run_reliability_drill.sh control-plane-unreachable`
+  - `cd services/go-control-plane && ./scripts/run_reliability_drill.sh redis-degradation`
+  - `cd services/go-control-plane && ./scripts/run_reliability_drill.sh provider-tempfail-spike`
+  - `cd services/go-control-plane && ./scripts/run_reliability_drill.sh worker-pool-outage`
+- Record outcomes with:
+  - `docs/GO_RELIABILITY_DRILL_REPORT_TEMPLATE.md`
 
 ## SG6 pilot checks
 

@@ -196,6 +196,17 @@ func (w *Worker) Run(ctx context.Context) error {
 			continue
 		}
 
+		w.telemetry.recordClaimRouting(claimRoutingSnapshot{
+			ProcessingStage:  claim.Data.ProcessingStage,
+			RetryAttempt:     claim.Data.RetryAttempt,
+			LastWorkerIDs:    claim.Data.LastWorkerIDs,
+			WorkerID:         w.cfg.WorkerID,
+			PreferredPool:    claim.Data.PreferredPool,
+			WorkerPool:       stringFromMeta(w.cfg.Server.Meta, "pool"),
+			RoutingProvider:  strings.ToLower(strings.TrimSpace(claim.Data.RoutingProvider)),
+			ProviderAffinity: strings.ToLower(strings.TrimSpace(stringFromMeta(w.cfg.Server.Meta, "provider_affinity"))),
+		})
+
 		w.wg.Add(1)
 		w.incrementActive()
 		go func(claim *api.ClaimNextResponse) {
@@ -1053,6 +1064,7 @@ func (w *Worker) sendHeartbeats(ctx context.Context) {
 			StageMetrics:    snapshot.stageMetrics,
 			SMTPMetrics:     snapshot.smtpMetrics,
 			ProviderMetrics: snapshot.providerMetrics,
+			RoutingMetrics:  snapshot.routingMetrics,
 		}
 
 		response, err := w.cfg.ControlPlaneClient.Heartbeat(ctx, payload)

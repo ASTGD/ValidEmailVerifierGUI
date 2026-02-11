@@ -77,6 +77,7 @@ func TestUIRoutesRejectCrossOriginPosts(t *testing.T) {
 		"/ui/settings",
 		"/ui/providers/gmail/mode",
 		"/ui/providers/policies/reload",
+		"/ui/policies/validate",
 		"/ui/policies/promote",
 		"/ui/policies/rollback",
 		"/verifier-engine-room/workers/worker-1/pause",
@@ -89,6 +90,7 @@ func TestUIRoutesRejectCrossOriginPosts(t *testing.T) {
 		"/verifier-engine-room/settings",
 		"/verifier-engine-room/providers/gmail/mode",
 		"/verifier-engine-room/providers/policies/reload",
+		"/verifier-engine-room/policies/validate",
 		"/verifier-engine-room/policies/promote",
 		"/verifier-engine-room/policies/rollback",
 	}

@@ -87,6 +87,37 @@
 <section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
     <div class="flex items-center justify-between">
         <div>
+            <h2 class="text-lg font-semibold">Shard Routing Quality</h2>
+            <p class="text-sm text-slate-400">Anti-affinity and provider routing effectiveness from worker telemetry.</p>
+        </div>
+    </div>
+    <div class="mt-5 grid gap-4 md:grid-cols-5">
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Retry Claims</p>
+            <p id="routing-retry-claims" class="mt-2 text-2xl font-semibold">{{ .RoutingQuality.RetryClaimsTotal }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Anti-Affinity Success</p>
+            <p id="routing-anti-affinity-rate" class="mt-2 text-2xl font-semibold">{{ printf "%.2f" .RoutingQuality.AntiAffinitySuccessRate }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Provider Affinity Hit</p>
+            <p id="routing-provider-affinity-rate" class="mt-2 text-2xl font-semibold">{{ printf "%.2f" .RoutingQuality.ProviderAffinityHitRate }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Retry Fallback</p>
+            <p id="routing-fallback-rate" class="mt-2 text-2xl font-semibold">{{ printf "%.2f" .RoutingQuality.RetryFallbackRate }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Top Pool Share</p>
+            <p id="routing-top-pool-share" class="mt-2 text-2xl font-semibold">{{ printf "%.2f" .RoutingQuality.TopPoolShare }}</p>
+        </div>
+    </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
             <h2 class="text-lg font-semibold">Probe SLO Snapshot</h2>
             <p class="text-sm text-slate-400">Average SMTP probe quality signals from active workers.</p>
         </div>
@@ -250,6 +281,11 @@
             const probeUnknownRate = document.getElementById('probe-unknown-rate');
             const probeTempfailRate = document.getElementById('probe-tempfail-rate');
             const probeRejectRate = document.getElementById('probe-reject-rate');
+            const routingRetryClaims = document.getElementById('routing-retry-claims');
+            const routingAntiAffinityRate = document.getElementById('routing-anti-affinity-rate');
+            const routingProviderAffinityRate = document.getElementById('routing-provider-affinity-rate');
+            const routingFallbackRate = document.getElementById('routing-fallback-rate');
+            const routingTopPoolShare = document.getElementById('routing-top-pool-share');
             const fallbackWorkers = document.getElementById('laravel-fallback-workers');
             const policyVersion = document.getElementById('policy-version');
             const liveUpdated = document.getElementById('live-updated');
@@ -262,6 +298,11 @@
             if (probeUnknownRate) probeUnknownRate.textContent = Number(payload.probe_unknown_rate || 0).toFixed(2);
             if (probeTempfailRate) probeTempfailRate.textContent = Number(payload.probe_tempfail_rate || 0).toFixed(2);
             if (probeRejectRate) probeRejectRate.textContent = Number(payload.probe_reject_rate || 0).toFixed(2);
+            if (routingRetryClaims) routingRetryClaims.textContent = Number(payload.routing_quality?.retry_claims_total || 0);
+            if (routingAntiAffinityRate) routingAntiAffinityRate.textContent = Number(payload.routing_quality?.anti_affinity_success_rate || 0).toFixed(2);
+            if (routingProviderAffinityRate) routingProviderAffinityRate.textContent = Number(payload.routing_quality?.provider_affinity_hit_rate || 0).toFixed(2);
+            if (routingFallbackRate) routingFallbackRate.textContent = Number(payload.routing_quality?.retry_fallback_rate || 0).toFixed(2);
+            if (routingTopPoolShare) routingTopPoolShare.textContent = Number(payload.routing_quality?.top_pool_share || 0).toFixed(2);
             if (fallbackWorkers) fallbackWorkers.textContent = Number(payload.laravel_fallback_workers || 0);
             if (policyVersion) policyVersion.textContent = payload.active_policy_version || 'baseline';
             if (liveUpdated) liveUpdated.textContent = `Updated ${new Date(payload.timestamp).toLocaleTimeString()}`;

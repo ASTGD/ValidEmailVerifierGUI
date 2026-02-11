@@ -28,6 +28,7 @@ func main() {
 	}
 
 	store := NewStore(rdb, cfg.HeartbeatTTL)
+	store.SetPolicyPayloadValidator(NewLaravelPolicyPayloadValidator(cfg), cfg.PolicyPayloadStrictValidationEnabled)
 	instanceID := cfg.InstanceID
 	if instanceID == "" {
 		host, _ := os.Hostname()
@@ -64,6 +65,9 @@ func main() {
 
 	autoScaleService := NewAutoScaleService(store, cfg, instanceID)
 	autoScaleService.Start()
+
+	policyAutopilotService := NewPolicyCanaryAutopilotService(store, cfg, instanceID)
+	policyAutopilotService.Start()
 
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("server error: %v", err)

@@ -25,6 +25,7 @@ type ControlPlaneStats struct {
 	Settings                RuntimeSettings
 	ProviderHealth          []ProviderHealthSummary
 	ProviderPolicies        ProviderPoliciesData
+	RoutingQuality          RoutingQualitySummary
 }
 
 func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStats, error) {
@@ -76,6 +77,7 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 	var screeningProcessed int64
 	var probeProcessed int64
 	laravelFallbackWorkers := 0
+	routingQuality := RoutingQualitySummary{}
 	for _, worker := range workers {
 		if hasWorkerTag(worker.Tags, "laravel_heartbeat:true") {
 			laravelFallbackWorkers++
@@ -94,6 +96,14 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 				probeProcessed += worker.StageMetrics.SMTPProbe.Processed
 			}
 		}
+		if worker.RoutingMetrics != nil {
+			routingQuality.RetryClaimsTotal += worker.RoutingMetrics.RetryClaimsTotal
+			routingQuality.RetryAntiAffinitySuccessTotal += worker.RoutingMetrics.RetryAntiAffinitySuccessTotal
+			routingQuality.SameWorkerAvoidTotal += worker.RoutingMetrics.SameWorkerAvoidTotal
+			routingQuality.SamePoolAvoidTotal += worker.RoutingMetrics.SamePoolAvoidTotal
+			routingQuality.ProviderAffinityHitTotal += worker.RoutingMetrics.ProviderAffinityHitTotal
+			routingQuality.FallbackClaimTotal += worker.RoutingMetrics.FallbackClaimTotal
+		}
 	}
 
 	unknownAvg := 0.0
@@ -104,6 +114,26 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 		unknownAvg = unknownTotal / denominator
 		tempfailAvg = tempfailTotal / denominator
 		rejectAvg = rejectTotal / denominator
+	}
+
+	if routingQuality.RetryClaimsTotal > 0 {
+		routingQuality.AntiAffinitySuccessRate = float64(routingQuality.RetryAntiAffinitySuccessTotal) / float64(routingQuality.RetryClaimsTotal)
+	}
+
+	routingClaimsTotal := routingQuality.ProviderAffinityHitTotal + routingQuality.FallbackClaimTotal
+	if routingClaimsTotal > 0 {
+		routingQuality.ProviderAffinityHitRate = float64(routingQuality.ProviderAffinityHitTotal) / float64(routingClaimsTotal)
+		routingQuality.RetryFallbackRate = float64(routingQuality.FallbackClaimTotal) / float64(routingClaimsTotal)
+	}
+
+	if desiredTotal > 0 {
+		topPoolDesired := 0
+		for _, pool := range pools {
+			if pool.Desired > topPoolDesired {
+				topPoolDesired = pool.Desired
+			}
+		}
+		routingQuality.TopPoolShare = float64(topPoolDesired) / float64(desiredTotal)
 	}
 
 	defaults := defaultRuntimeSettings(s.cfg)
@@ -164,11 +194,13 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 			PolicyEngineEnabled:  settings.ProviderPolicyEngineEnabled,
 			AdaptiveRetryEnabled: settings.AdaptiveRetryEnabled,
 			AutoProtectEnabled:   settings.ProviderAutoprotectEnabled,
+			AutopilotEnabled:     s.cfg.PolicyCanaryAutopilotEnabled,
 			ActiveVersion:        activePolicyVersion,
 			LastReloadAt:         providerPolicyState.LastReloadAt,
 			ReloadCount:          providerPolicyState.ReloadCount,
 			Modes:                providerModes,
 		},
+		RoutingQuality: routingQuality,
 	}, nil
 }
 

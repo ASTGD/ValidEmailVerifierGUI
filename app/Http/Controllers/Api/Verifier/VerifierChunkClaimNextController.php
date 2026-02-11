@@ -124,6 +124,8 @@ class VerifierChunkClaimNextController
                 'routing_provider' => $chunk->routing_provider,
                 'preferred_pool' => $chunk->preferred_pool,
                 'max_probe_attempts' => $chunk->max_probe_attempts,
+                'retry_attempt' => $chunk->retry_attempt,
+                'last_worker_ids' => is_array($chunk->last_worker_ids) ? array_values($chunk->last_worker_ids) : [],
                 'lease_expires_at' => $chunk->claim_expires_at?->toIso8601String(),
                 'input' => [
                     'disk' => $chunk->input_disk,
