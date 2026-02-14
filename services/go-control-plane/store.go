@@ -202,6 +202,24 @@ func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (stri
 		routingMetricsJSON = payload
 	}
 
+	sessionMetricsJSON := []byte("{}")
+	if req.SessionMetrics != nil {
+		payload, marshalErr := json.Marshal(req.SessionMetrics)
+		if marshalErr != nil {
+			return "", marshalErr
+		}
+		sessionMetricsJSON = payload
+	}
+
+	reasonTagCountsJSON := []byte("{}")
+	if len(req.ReasonTagCounts) > 0 {
+		payload, marshalErr := json.Marshal(req.ReasonTagCounts)
+		if marshalErr != nil {
+			return "", marshalErr
+		}
+		reasonTagCountsJSON = payload
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	pipe := s.rdb.Pipeline()
@@ -216,6 +234,8 @@ func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (stri
 	pipe.Set(ctx, workerKey(req.WorkerID, "smtp_metrics"), smtpMetricsJSON, s.heartbeatTTL)
 	pipe.Set(ctx, workerKey(req.WorkerID, "provider_metrics"), providerMetricsJSON, s.heartbeatTTL)
 	pipe.Set(ctx, workerKey(req.WorkerID, "routing_metrics"), routingMetricsJSON, s.heartbeatTTL)
+	pipe.Set(ctx, workerKey(req.WorkerID, "session_metrics"), sessionMetricsJSON, s.heartbeatTTL)
+	pipe.Set(ctx, workerKey(req.WorkerID, "reason_tag_counters"), reasonTagCountsJSON, s.heartbeatTTL)
 	if req.PoolHealthHint != nil {
 		pipe.Set(ctx, workerKey(req.WorkerID, "pool_health_hint"), *req.PoolHealthHint, s.heartbeatTTL)
 	}
@@ -582,6 +602,22 @@ func (s *Store) GetWorkers(ctx context.Context) ([]WorkerSummary, error) {
 			}
 		}
 
+		var sessionMetrics *SessionMetrics
+		if payload, payloadErr := s.rdb.Get(ctx, workerKey(id, "session_metrics")).Result(); payloadErr == nil && payload != "" {
+			parsed := SessionMetrics{}
+			if unmarshalErr := json.Unmarshal([]byte(payload), &parsed); unmarshalErr == nil {
+				sessionMetrics = &parsed
+			}
+		}
+
+		reasonTagCounts := map[string]int64{}
+		if payload, payloadErr := s.rdb.Get(ctx, workerKey(id, "reason_tag_counters")).Result(); payloadErr == nil && payload != "" {
+			parsed := map[string]int64{}
+			if unmarshalErr := json.Unmarshal([]byte(payload), &parsed); unmarshalErr == nil {
+				reasonTagCounts = parsed
+			}
+		}
+
 		poolHealthHint := 0.0
 		if payload, payloadErr := s.rdb.Get(ctx, workerKey(id, "pool_health_hint")).Result(); payloadErr == nil && payload != "" {
 			if parsed, parseErr := strconv.ParseFloat(payload, 64); parseErr == nil {
@@ -607,6 +643,8 @@ func (s *Store) GetWorkers(ctx context.Context) ([]WorkerSummary, error) {
 			SMTPMetrics:     smtpMetrics,
 			ProviderMetrics: providerMetrics,
 			RoutingMetrics:  routingMetrics,
+			SessionMetrics:  sessionMetrics,
+			ReasonTagCounts: reasonTagCounts,
 			PoolHealthHint:  poolHealthHint,
 		})
 	}
@@ -1448,7 +1486,7 @@ func normalizeProviderName(provider string) string {
 func normalizeProviderMode(mode string) string {
 	mode = strings.ToLower(strings.TrimSpace(mode))
 	switch mode {
-	case "normal", "cautious", "drain":
+	case "normal", "cautious", "drain", "quarantine", "degraded_probe":
 		return mode
 	default:
 		return ""
@@ -1509,6 +1547,8 @@ func staleWorkerDeleteKeys(workerID string) []string {
 		workerKey(workerID, "smtp_metrics"),
 		workerKey(workerID, "provider_metrics"),
 		workerKey(workerID, "routing_metrics"),
+		workerKey(workerID, "session_metrics"),
+		workerKey(workerID, "reason_tag_counters"),
 		workerKey(workerID, "pool_health_hint"),
 		workerKey(workerID, "pool"),
 		workerKey(workerID, "desired_state"),

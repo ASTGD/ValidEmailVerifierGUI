@@ -285,3 +285,35 @@ func TestResolvePolicyRuntimeUsesActiveVersionPayload(t *testing.T) {
 		t.Fatalf("expected runtime policy engine version v2.9.0, got %s", runtime.replyPolicyEngine.Version)
 	}
 }
+
+func TestProviderModeForRuntimeDefaultsAndRecognizesExtendedModes(t *testing.T) {
+	t.Parallel()
+
+	w := &Worker{}
+	if mode := w.providerModeForRuntime("gmail"); mode != "normal" {
+		t.Fatalf("expected default provider mode normal, got %q", mode)
+	}
+
+	w.policy = policyState{
+		providerModes: map[string]string{
+			"gmail": "quarantine",
+		},
+	}
+
+	if mode := w.providerModeForRuntime("gmail"); mode != "quarantine" {
+		t.Fatalf("expected provider mode quarantine, got %q", mode)
+	}
+}
+
+func TestReasonTagFromExtractsTagMetadata(t *testing.T) {
+	t.Parallel()
+
+	reason := "smtp_tempfail:decision=retryable;confidence=medium;tag=greylist;provider=gmail"
+	if tag := reasonTagFrom(reason); tag != "greylist" {
+		t.Fatalf("expected greylist tag, got %q", tag)
+	}
+
+	if tag := reasonTagFrom("smtp_tempfail"); tag != "" {
+		t.Fatalf("expected empty tag for base reason only, got %q", tag)
+	}
+}

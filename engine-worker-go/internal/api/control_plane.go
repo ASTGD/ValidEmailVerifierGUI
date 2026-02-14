@@ -58,6 +58,13 @@ type ControlPlaneRoutingMetrics struct {
 	FallbackClaimTotal            int64 `json:"fallback_claim_total,omitempty"`
 }
 
+type ControlPlaneSessionMetrics struct {
+	ConnectionReuseRate       float64 `json:"connection_reuse_rate,omitempty"`
+	SessionRetrySameConnTotal int64   `json:"session_retry_same_conn_total,omitempty"`
+	SessionRetryNewConnTotal  int64   `json:"session_retry_new_conn_total,omitempty"`
+	ThrottleAppliedTotal      int64   `json:"throttle_applied_total,omitempty"`
+}
+
 type ControlPlaneHeartbeatRequest struct {
 	WorkerID        string                       `json:"worker_id"`
 	Host            string                       `json:"host,omitempty"`
@@ -74,6 +81,8 @@ type ControlPlaneHeartbeatRequest struct {
 	SMTPMetrics     *ControlPlaneSMTPMetrics     `json:"smtp_metrics,omitempty"`
 	ProviderMetrics []ControlPlaneProviderMetric `json:"provider_metrics,omitempty"`
 	RoutingMetrics  *ControlPlaneRoutingMetrics  `json:"routing_metrics,omitempty"`
+	SessionMetrics  *ControlPlaneSessionMetrics  `json:"session_metrics,omitempty"`
+	ReasonTagCounts map[string]int64             `json:"reason_tag_counters,omitempty"`
 	PoolHealthHint  *float64                     `json:"pool_health_hint,omitempty"`
 }
 
@@ -84,11 +93,24 @@ type ControlPlaneHeartbeatResponse struct {
 
 type ControlPlaneProviderPoliciesResponse struct {
 	Data struct {
-		PolicyEngineEnabled  bool   `json:"policy_engine_enabled"`
-		AdaptiveRetryEnabled bool   `json:"adaptive_retry_enabled"`
-		AutoProtectEnabled   bool   `json:"auto_protect_enabled"`
-		ActiveVersion        string `json:"active_version"`
+		PolicyEngineEnabled  bool                                 `json:"policy_engine_enabled"`
+		AdaptiveRetryEnabled bool                                 `json:"adaptive_retry_enabled"`
+		AutoProtectEnabled   bool                                 `json:"auto_protect_enabled"`
+		ActiveVersion        string                               `json:"active_version"`
+		Modes                []ControlPlaneProviderModeState      `json:"modes,omitempty"`
+		ModeSemantics        map[string]ControlPlaneModeSemantics `json:"mode_semantics,omitempty"`
 	} `json:"data"`
+}
+
+type ControlPlaneProviderModeState struct {
+	Provider string `json:"provider"`
+	Mode     string `json:"mode"`
+}
+
+type ControlPlaneModeSemantics struct {
+	ProbeEnabled                bool    `json:"probe_enabled"`
+	MaxConcurrencyMultiplier    float64 `json:"max_concurrency_multiplier,omitempty"`
+	ConnectsPerMinuteMultiplier float64 `json:"connects_per_minute_multiplier,omitempty"`
 }
 
 func NewControlPlaneClient(baseURL, token string) *ControlPlaneClient {

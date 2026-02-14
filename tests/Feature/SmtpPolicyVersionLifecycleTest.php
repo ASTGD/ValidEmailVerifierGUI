@@ -19,16 +19,64 @@ class SmtpPolicyVersionLifecycleTest extends TestCase
             'status' => 'draft',
             'is_active' => false,
             'policy_payload' => [
+                'schema_version' => 'v3',
                 'enabled' => true,
                 'version' => 'v3.1.0',
+                'modes' => [
+                    'normal' => [
+                        'probe_enabled' => true,
+                        'max_concurrency_multiplier' => 1,
+                        'connects_per_minute_multiplier' => 1,
+                    ],
+                    'cautious' => [
+                        'probe_enabled' => true,
+                        'max_concurrency_multiplier' => 0.7,
+                        'connects_per_minute_multiplier' => 0.6,
+                    ],
+                    'drain' => [
+                        'probe_enabled' => false,
+                        'max_concurrency_multiplier' => 0,
+                        'connects_per_minute_multiplier' => 0,
+                    ],
+                    'quarantine' => [
+                        'probe_enabled' => false,
+                        'max_concurrency_multiplier' => 0,
+                        'connects_per_minute_multiplier' => 0,
+                    ],
+                    'degraded_probe' => [
+                        'probe_enabled' => true,
+                        'max_concurrency_multiplier' => 0.5,
+                        'connects_per_minute_multiplier' => 0.5,
+                    ],
+                ],
                 'profiles' => [
                     'generic' => [
+                        'enhanced_rules' => [
+                            [
+                                'rule_id' => 'generic-enhanced-47-retry',
+                                'enhanced_prefixes' => ['4.7.'],
+                                'decision_class' => 'retryable',
+                                'category' => 'risky',
+                                'reason' => 'smtp_tempfail',
+                                'reason_code' => 'smtp_tempfail',
+                                'rule_tag' => 'greylist',
+                                'confidence_hint' => 'medium',
+                                'provider_scope' => 'generic',
+                            ],
+                        ],
                         'retry' => [
                             'default_seconds' => 60,
                             'tempfail_seconds' => 90,
                             'greylist_seconds' => 180,
                             'policy_blocked_seconds' => 300,
                             'unknown_seconds' => 75,
+                        ],
+                        'session' => [
+                            'max_concurrency' => 2,
+                            'connects_per_minute' => 30,
+                            'reuse_connection_for_retries' => true,
+                            'retry_jitter_percent' => 15,
+                            'ehlo_profile' => 'default',
                         ],
                     ],
                 ],
@@ -44,6 +92,8 @@ class SmtpPolicyVersionLifecycleTest extends TestCase
 
         $this->assertSame([], $errors);
         $this->assertSame('valid', $record->validation_status);
+        $this->assertSame('v3', $record->schema_version);
+        $this->assertNotNull($record->mode_semantics_hash);
         $this->assertNotNull($record->validated_at);
         $this->assertSame('admin@example.com', $record->validated_by);
         $this->assertDatabaseHas(AdminAuditLog::class, [

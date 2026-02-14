@@ -21,7 +21,8 @@ type workerTelemetry struct {
 	smtpUnknown  int64
 	smtpCatchAll int64
 
-	provider map[string]*providerCounters
+	provider          map[string]*providerCounters
+	reasonTagCounters map[string]int64
 
 	retryClaimsTotal              int64
 	retryAntiAffinitySuccessTotal int64
@@ -29,6 +30,10 @@ type workerTelemetry struct {
 	samePoolAvoidTotal            int64
 	providerAffinityHitTotal      int64
 	fallbackClaimTotal            int64
+
+	sessionRetrySameConnTotal int64
+	sessionRetryNewConnTotal  int64
+	throttleAppliedTotal      int64
 }
 
 type providerCounters struct {
@@ -44,11 +49,14 @@ type telemetrySnapshot struct {
 	smtpMetrics     *api.ControlPlaneSMTPMetrics
 	providerMetrics []api.ControlPlaneProviderMetric
 	routingMetrics  *api.ControlPlaneRoutingMetrics
+	sessionMetrics  *api.ControlPlaneSessionMetrics
+	reasonTagCounts map[string]int64
 }
 
 func newWorkerTelemetry() *workerTelemetry {
 	return &workerTelemetry{
-		provider: map[string]*providerCounters{},
+		provider:          map[string]*providerCounters{},
+		reasonTagCounters: map[string]int64{},
 	}
 }
 
@@ -83,6 +91,16 @@ func (t *workerTelemetry) recordChunkSuccess(
 		counters.Unknown += int64(outputs.RiskyCount)
 		counters.Tempfail += int64(outputs.baseReasonCount("smtp_tempfail"))
 		counters.CatchAll += int64(outputs.baseReasonPrefixCount("catch_all"))
+		for reasonTag, count := range outputs.ReasonTags {
+			normalizedTag := strings.ToLower(strings.TrimSpace(reasonTag))
+			if normalizedTag == "" {
+				continue
+			}
+			t.reasonTagCounters[normalizedTag] += int64(count)
+		}
+		if tempfailCount := outputs.baseReasonCount("smtp_tempfail"); tempfailCount > 0 {
+			t.throttleAppliedTotal += int64(tempfailCount)
+		}
 	default:
 		t.screeningProcessed += int64(outputs.EmailCount)
 	}
@@ -130,6 +148,7 @@ func (t *workerTelemetry) recordClaimRouting(snapshot claimRoutingSnapshot) {
 	}
 
 	t.retryClaimsTotal++
+	t.sessionRetryNewConnTotal++
 
 	sameWorkerAvoided := false
 	if len(snapshot.LastWorkerIDs) > 0 {
@@ -209,7 +228,27 @@ func (t *workerTelemetry) snapshot() telemetrySnapshot {
 			ProviderAffinityHitTotal:      t.providerAffinityHitTotal,
 			FallbackClaimTotal:            t.fallbackClaimTotal,
 		},
+		sessionMetrics: &api.ControlPlaneSessionMetrics{
+			ConnectionReuseRate:       0,
+			SessionRetrySameConnTotal: t.sessionRetrySameConnTotal,
+			SessionRetryNewConnTotal:  t.sessionRetryNewConnTotal,
+			ThrottleAppliedTotal:      t.throttleAppliedTotal,
+		},
+		reasonTagCounts: cloneReasonTagCounters(t.reasonTagCounters),
 	}
+}
+
+func cloneReasonTagCounters(source map[string]int64) map[string]int64 {
+	if len(source) == 0 {
+		return map[string]int64{}
+	}
+
+	cloned := make(map[string]int64, len(source))
+	for key, value := range source {
+		cloned[key] = value
+	}
+
+	return cloned
 }
 
 func normalizeProviderName(provider string) string {

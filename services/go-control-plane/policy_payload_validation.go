@@ -164,6 +164,14 @@ func validatePolicyPayloadSchema(version string, payload json.RawMessage) (strin
 		return "", fmt.Errorf("policy payload version does not match requested version")
 	}
 
+	schemaVersion := "v2"
+	if value, ok := root["schema_version"].(string); ok && strings.TrimSpace(value) != "" {
+		schemaVersion = strings.ToLower(strings.TrimSpace(value))
+	}
+	if schemaVersion != "v2" && schemaVersion != "v3" {
+		return "", fmt.Errorf("policy payload schema_version must be v2 or v3")
+	}
+
 	profiles, ok := root["profiles"].(map[string]any)
 	if !ok {
 		return "", fmt.Errorf("policy payload missing required object profiles")
@@ -184,6 +192,45 @@ func validatePolicyPayloadSchema(version string, payload json.RawMessage) (strin
 		}
 		if !isJSONNumber(value) {
 			return "", fmt.Errorf("policy payload retry field %s must be numeric", key)
+		}
+	}
+
+	if schemaVersion == "v3" {
+		session, ok := genericProfile["session"].(map[string]any)
+		if !ok {
+			return "", fmt.Errorf("policy payload missing required profiles.generic.session block")
+		}
+		for _, key := range []string{
+			"max_concurrency",
+			"connects_per_minute",
+			"reuse_connection_for_retries",
+			"retry_jitter_percent",
+			"ehlo_profile",
+		} {
+			if _, exists := session[key]; !exists {
+				return "", fmt.Errorf("policy payload missing session field %s", key)
+			}
+		}
+
+		modes, ok := root["modes"].(map[string]any)
+		if !ok {
+			return "", fmt.Errorf("policy payload missing required modes object for v3")
+		}
+		requiredModes := []string{"normal", "cautious", "drain", "quarantine", "degraded_probe"}
+		for _, mode := range requiredModes {
+			modeConfig, ok := modes[mode].(map[string]any)
+			if !ok {
+				return "", fmt.Errorf("policy payload missing required modes.%s object", mode)
+			}
+			for _, field := range []string{
+				"probe_enabled",
+				"max_concurrency_multiplier",
+				"connects_per_minute_multiplier",
+			} {
+				if _, exists := modeConfig[field]; !exists {
+					return "", fmt.Errorf("policy payload missing required modes.%s.%s field", mode, field)
+				}
+			}
 		}
 	}
 

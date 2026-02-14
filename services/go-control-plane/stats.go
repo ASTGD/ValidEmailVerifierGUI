@@ -199,6 +199,7 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 			LastReloadAt:         providerPolicyState.LastReloadAt,
 			ReloadCount:          providerPolicyState.ReloadCount,
 			Modes:                providerModes,
+			ModeSemantics:        defaultProviderModeSemantics(),
 		},
 		RoutingQuality: routingQuality,
 	}, nil

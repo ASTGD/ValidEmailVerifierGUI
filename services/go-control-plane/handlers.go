@@ -249,6 +249,24 @@ func (s *Server) handleProviderPolicies(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, ProviderPoliciesResponse{Data: stats.ProviderPolicies})
 }
 
+func (s *Server) handleProviderModeSemantics(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": defaultProviderModeSemantics(),
+	})
+}
+
+func (s *Server) handleProviderRoutingQuality(w http.ResponseWriter, r *http.Request) {
+	stats, err := s.collectControlPlaneStats(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": stats.RoutingQuality,
+	})
+}
+
 func (s *Server) handleProviderPoliciesReload(w http.ResponseWriter, r *http.Request) {
 	state, err := s.store.MarkProviderPoliciesReloaded(r.Context())
 	if err != nil {

@@ -94,3 +94,68 @@ func TestHasManualProviderOverride(t *testing.T) {
 		t.Fatal("expected normal mode override not to block autopilot")
 	}
 }
+
+func TestEvaluateProviderPolicyCanaryRollbackRequiresMinimumWorkers(t *testing.T) {
+	baseline := map[string]policyCanaryKPI{
+		"gmail": {
+			UnknownRate:      0.10,
+			TempfailRecovery: 0.90,
+			PolicyBlockRate:  0.05,
+			Workers:          3,
+		},
+	}
+	current := map[string]policyCanaryKPI{
+		"gmail": {
+			UnknownRate:      0.40,
+			TempfailRecovery: 0.60,
+			PolicyBlockRate:  0.20,
+			Workers:          1,
+		},
+	}
+
+	provider, reason := evaluateProviderPolicyCanaryRollback(
+		baseline,
+		current,
+		0.05,
+		0.10,
+		0.10,
+		2,
+	)
+	if provider != "" || reason != "" {
+		t.Fatalf("expected no rollback due to insufficient workers, got provider=%q reason=%q", provider, reason)
+	}
+}
+
+func TestEvaluateProviderPolicyCanaryRollbackReturnsProviderReason(t *testing.T) {
+	baseline := map[string]policyCanaryKPI{
+		"gmail": {
+			UnknownRate:      0.10,
+			TempfailRecovery: 0.90,
+			PolicyBlockRate:  0.05,
+			Workers:          3,
+		},
+	}
+	current := map[string]policyCanaryKPI{
+		"gmail": {
+			UnknownRate:      0.25,
+			TempfailRecovery: 0.72,
+			PolicyBlockRate:  0.05,
+			Workers:          3,
+		},
+	}
+
+	provider, reason := evaluateProviderPolicyCanaryRollback(
+		baseline,
+		current,
+		0.05,
+		0.10,
+		0.10,
+		1,
+	)
+	if provider != "gmail" {
+		t.Fatalf("expected gmail rollback provider, got %q", provider)
+	}
+	if reason == "" {
+		t.Fatal("expected rollback reason for provider regression")
+	}
+}

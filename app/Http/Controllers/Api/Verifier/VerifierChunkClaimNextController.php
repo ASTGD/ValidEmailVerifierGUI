@@ -245,16 +245,20 @@ class VerifierChunkClaimNextController
         ?string $providerAffinity
     ): int {
         $score = 0;
+        $weights = $this->probeRoutingWeights();
 
         $chunkProvider = $this->normalizeProvider($chunk->routing_provider);
         $chunkPreferredPool = $this->normalizeString($chunk->preferred_pool);
+        if ($chunkPreferredPool === null && $chunkProvider !== null) {
+            $chunkPreferredPool = $this->providerPreferredPoolFromConfig($chunkProvider);
+        }
 
         if ($providerAffinity !== null && $chunkProvider !== null && $providerAffinity === $chunkProvider) {
-            $score += 40;
+            $score += $weights['affinity'];
         }
 
         if ($workerPool !== null && $chunkPreferredPool !== null && $workerPool === $chunkPreferredPool) {
-            $score += 30;
+            $score += $weights['preferred_pool'];
         }
 
         if ((bool) config('engine.probe_rotation_retry_enabled', true)) {
@@ -265,16 +269,61 @@ class VerifierChunkClaimNextController
             )));
 
             if (in_array($workerId, $normalizedLastWorkerIds, true)) {
-                $score -= 60;
+                $score -= $weights['anti_affinity'];
             }
         }
 
         $retryAttempt = max(0, (int) $chunk->retry_attempt);
         if ($retryAttempt > 0) {
-            $score += 10;
+            $score += $weights['retry_bonus'];
         }
 
         return $score;
+    }
+
+    /**
+     * @return array{affinity:int,anti_affinity:int,preferred_pool:int,retry_bonus:int}
+     */
+    private function probeRoutingWeights(): array
+    {
+        $weights = config('engine.probe_routing_weights', []);
+
+        return [
+            'affinity' => max(0, (int) data_get($weights, 'affinity', 40)),
+            'anti_affinity' => max(0, (int) data_get($weights, 'anti_affinity', 60)),
+            'preferred_pool' => max(0, (int) data_get($weights, 'preferred_pool', 30)),
+            'retry_bonus' => max(0, (int) data_get($weights, 'retry_bonus', 10)),
+        ];
+    }
+
+    private function providerPreferredPoolFromConfig(string $provider): ?string
+    {
+        $provider = strtolower(trim($provider));
+        if ($provider === '') {
+            return null;
+        }
+
+        $raw = (string) config('engine.probe_provider_preferred_pools', '');
+        if ($raw === '') {
+            return null;
+        }
+
+        foreach (explode(',', $raw) as $entry) {
+            [$entryProvider, $pool] = array_pad(explode(':', trim($entry), 2), 2, null);
+            if ($entryProvider === null || $pool === null) {
+                continue;
+            }
+
+            if (strtolower(trim($entryProvider)) !== $provider) {
+                continue;
+            }
+
+            $normalizedPool = trim($pool);
+
+            return $normalizedPool === '' ? null : $normalizedPool;
+        }
+
+        return null;
     }
 
     private function normalizeProvider(mixed $value): ?string

@@ -250,3 +250,42 @@ func TestClassifySMTPPolicyEngineUsesProviderSpecificMicrosoftRule(t *testing.T)
 		t.Fatalf("expected retry strategy, got %q", result.RetryStrategy)
 	}
 }
+
+func TestClassifySMTPPolicyEnginePropagatesRuleTagAndConfidenceHint(t *testing.T) {
+	engine := DefaultProviderReplyPolicyEngine()
+	profile := engine.Profiles["generic"]
+	profile.MessageRules = []ProviderReplyRule{
+		{
+			RuleID:          "generic-msg-policy-blocked-test",
+			MessageContains: []string{"blocked by local policy"},
+			DecisionClass:   DecisionPolicyBlocked,
+			Category:        CategoryRisky,
+			Reason:          "smtp_tempfail",
+			ReasonCode:      "smtp_policy_blocked",
+			RuleTag:         "policy_blocked",
+			ConfidenceHint:  "high",
+			ProviderScope:   "generic",
+		},
+	}
+	engine.Profiles["generic"] = profile
+
+	reply := smtpReply{
+		Code:         554,
+		EnhancedCode: "5.5.0",
+		Message:      "blocked by local policy",
+	}
+
+	result := classifySMTPRcptReply(reply, "generic", "mx.example.test", true, engine, true)
+	if result.ReasonTag != "policy_blocked" {
+		t.Fatalf("expected reason tag policy_blocked, got %q", result.ReasonTag)
+	}
+	if result.DecisionConfidence != "high" {
+		t.Fatalf("expected confidence hint high from policy rule, got %q", result.DecisionConfidence)
+	}
+	if result.Evidence == nil {
+		t.Fatal("expected evidence payload")
+	}
+	if result.Evidence.ReasonTag != "policy_blocked" {
+		t.Fatalf("expected evidence reason tag policy_blocked, got %q", result.Evidence.ReasonTag)
+	}
+}

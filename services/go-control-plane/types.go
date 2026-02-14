@@ -44,6 +44,13 @@ type RoutingMetrics struct {
 	FallbackClaimTotal            int64 `json:"fallback_claim_total,omitempty"`
 }
 
+type SessionMetrics struct {
+	ConnectionReuseRate       float64 `json:"connection_reuse_rate,omitempty"`
+	SessionRetrySameConnTotal int64   `json:"session_retry_same_conn_total,omitempty"`
+	SessionRetryNewConnTotal  int64   `json:"session_retry_new_conn_total,omitempty"`
+	ThrottleAppliedTotal      int64   `json:"throttle_applied_total,omitempty"`
+}
+
 type HeartbeatRequest struct {
 	WorkerID        string           `json:"worker_id"`
 	Host            string           `json:"host,omitempty"`
@@ -60,6 +67,8 @@ type HeartbeatRequest struct {
 	SMTPMetrics     *SMTPMetrics     `json:"smtp_metrics,omitempty"`
 	ProviderMetrics []ProviderMetric `json:"provider_metrics,omitempty"`
 	RoutingMetrics  *RoutingMetrics  `json:"routing_metrics,omitempty"`
+	SessionMetrics  *SessionMetrics  `json:"session_metrics,omitempty"`
+	ReasonTagCounts map[string]int64 `json:"reason_tag_counters,omitempty"`
 	PoolHealthHint  *float64         `json:"pool_health_hint,omitempty"`
 }
 
@@ -86,6 +95,8 @@ type WorkerSummary struct {
 	SMTPMetrics     *SMTPMetrics     `json:"smtp_metrics,omitempty"`
 	ProviderMetrics []ProviderMetric `json:"provider_metrics,omitempty"`
 	RoutingMetrics  *RoutingMetrics  `json:"routing_metrics,omitempty"`
+	SessionMetrics  *SessionMetrics  `json:"session_metrics,omitempty"`
+	ReasonTagCounts map[string]int64 `json:"reason_tag_counters,omitempty"`
 	PoolHealthHint  float64          `json:"pool_health_hint,omitempty"`
 }
 
@@ -171,14 +182,15 @@ type ProviderPolicyState struct {
 }
 
 type ProviderPoliciesData struct {
-	PolicyEngineEnabled  bool                `json:"policy_engine_enabled"`
-	AdaptiveRetryEnabled bool                `json:"adaptive_retry_enabled"`
-	AutoProtectEnabled   bool                `json:"auto_protect_enabled"`
-	AutopilotEnabled     bool                `json:"autopilot_enabled,omitempty"`
-	ActiveVersion        string              `json:"active_version,omitempty"`
-	LastReloadAt         string              `json:"last_reload_at,omitempty"`
-	ReloadCount          int                 `json:"reload_count"`
-	Modes                []ProviderModeState `json:"modes"`
+	PolicyEngineEnabled  bool                             `json:"policy_engine_enabled"`
+	AdaptiveRetryEnabled bool                             `json:"adaptive_retry_enabled"`
+	AutoProtectEnabled   bool                             `json:"auto_protect_enabled"`
+	AutopilotEnabled     bool                             `json:"autopilot_enabled,omitempty"`
+	ActiveVersion        string                           `json:"active_version,omitempty"`
+	LastReloadAt         string                           `json:"last_reload_at,omitempty"`
+	ReloadCount          int                              `json:"reload_count"`
+	Modes                []ProviderModeState              `json:"modes"`
+	ModeSemantics        map[string]ProviderModeSemantics `json:"mode_semantics,omitempty"`
 }
 
 type ProviderPoliciesResponse struct {
@@ -245,4 +257,10 @@ type RoutingQualitySummary struct {
 	ProviderAffinityHitRate       float64 `json:"provider_affinity_hit_rate"`
 	RetryFallbackRate             float64 `json:"retry_fallback_rate"`
 	TopPoolShare                  float64 `json:"top_pool_share"`
+}
+
+type ProviderModeSemantics struct {
+	ProbeEnabled                bool    `json:"probe_enabled"`
+	MaxConcurrencyMultiplier    float64 `json:"max_concurrency_multiplier,omitempty"`
+	ConnectsPerMinuteMultiplier float64 `json:"connects_per_minute_multiplier,omitempty"`
 }

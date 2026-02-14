@@ -19,9 +19,12 @@ type Result struct {
 	Reason             string
 	DecisionClass      string
 	ReasonCode         string
+	ReasonTag          string
 	SMTPCode           int
 	EnhancedCode       string
 	ProviderProfile    string
+	ProviderMode       string
+	SessionStrategyID  string
 	RetryAfterSecond   int
 	PolicyVersion      string
 	MatchedRuleID      string
@@ -46,6 +49,10 @@ type Config struct {
 	MailFromAddress             string
 	PerDomainConcurrency        int
 	SMTPRateLimitPerMinute      int
+	RetryJitterPercent          int
+	ReuseConnectionForRetries   bool
+	EHLOProfile                 string
+	ProviderModes               map[string]string
 	DisposableDomains           map[string]struct{}
 	RoleAccounts                map[string]struct{}
 	RoleAccountsBehavior        string

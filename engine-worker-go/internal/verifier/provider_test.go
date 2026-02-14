@@ -70,3 +70,34 @@ func TestWithProviderProfile(t *testing.T) {
 		t.Fatalf("expected provider profile gmail, got %q", typed.ProviderProfile)
 	}
 }
+
+func TestApplyProviderOverridesUsesSessionPolicyAndModeMultipliers(t *testing.T) {
+	config := Config{
+		PerDomainConcurrency:      3,
+		SMTPRateLimitPerMinute:    60,
+		ProviderReplyPolicyEngine: DefaultProviderReplyPolicyEngine(),
+		ProviderModes: map[string]string{
+			"gmail": "cautious",
+		},
+	}
+
+	policy := ProviderPolicy{
+		Name:    "gmail",
+		Enabled: true,
+	}
+
+	updated := applyProviderOverrides(config, policy)
+
+	if updated.PerDomainConcurrency != 1 {
+		t.Fatalf("expected cautious multiplier to reduce gmail concurrency to 1, got %d", updated.PerDomainConcurrency)
+	}
+	if updated.SMTPRateLimitPerMinute != 12 {
+		t.Fatalf("expected cautious multiplier to reduce gmail connects/min to 12, got %d", updated.SMTPRateLimitPerMinute)
+	}
+	if updated.RetryJitterPercent <= 0 {
+		t.Fatalf("expected retry jitter to be configured, got %d", updated.RetryJitterPercent)
+	}
+	if updated.EHLOProfile == "" {
+		t.Fatal("expected EHLO profile to be populated from provider session policy")
+	}
+}

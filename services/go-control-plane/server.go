@@ -55,6 +55,8 @@ func (s *Server) Router() http.Handler {
 		router.Get("/api/slo", s.handleSLO)
 		router.Get("/api/providers/health", s.handleProvidersHealth)
 		router.Get("/api/providers/quality", s.handleProvidersQuality)
+		router.Get("/api/providers/modes/semantics", s.handleProviderModeSemantics)
+		router.Get("/api/providers/routing/quality", s.handleProviderRoutingQuality)
 		router.Get("/api/providers/policies", s.handleProviderPolicies)
 		router.Post("/api/providers/{provider}/mode", s.handleProviderMode)
 		router.Post("/api/providers/policies/reload", s.handleProviderPoliciesReload)
