@@ -27,6 +27,7 @@ type OverviewData struct {
 	LaravelFallbackWorkers int
 	ProviderHealth         []ProviderHealthSummary
 	ProviderPolicies       ProviderPoliciesData
+	RoutingQuality         RoutingQualitySummary
 	Pools                  []PoolSummary
 	ChartLabels            []string
 	ChartOnline            []int
@@ -63,12 +64,19 @@ type AlertsPageData struct {
 
 type SettingsPageData struct {
 	BasePageData
-	Saved            bool
-	Settings         RuntimeSettings
-	ProviderHealth   []ProviderHealthSummary
-	ProviderPolicies ProviderPoliciesData
-	PolicyVersions   []SMTPPolicyVersionRecord
-	PolicyRollouts   []SMTPPolicyRolloutRecord
+	Saved                                     bool
+	Settings                                  RuntimeSettings
+	ProviderHealth                            []ProviderHealthSummary
+	ProviderPolicies                          ProviderPoliciesData
+	PolicyVersions                            []SMTPPolicyVersionRecord
+	PolicyRollouts                            []SMTPPolicyRolloutRecord
+	PolicyPayloadStrictValidationEnabled      bool
+	PolicyCanaryAutopilotEnabled              bool
+	PolicyCanaryWindowMinutes                 int
+	PolicyCanaryRequiredHealthWindows         int
+	PolicyCanaryUnknownRegressionThreshold    float64
+	PolicyCanaryTempfailRecoveryDropThreshold float64
+	PolicyCanaryPolicyBlockSpikeThreshold     float64
 }
 
 type LivePayload struct {
@@ -86,6 +94,7 @@ type LivePayload struct {
 	LaravelFallbackWorkers int                     `json:"laravel_fallback_workers"`
 	ActivePolicyVersion    string                  `json:"active_policy_version"`
 	ProviderHealth         []ProviderHealthSummary `json:"provider_health,omitempty"`
+	RoutingQuality         RoutingQualitySummary   `json:"routing_quality"`
 	AlertsEnabled          bool                    `json:"alerts_enabled"`
 	AutoActionsEnabled     bool                    `json:"auto_actions_enabled"`
 	AutoscaleEnabled       bool                    `json:"autoscale_enabled"`
@@ -152,6 +161,7 @@ func (s *Server) handleUIOverview(w http.ResponseWriter, r *http.Request) {
 		LaravelFallbackWorkers: stats.LaravelFallbackWorkers,
 		ProviderHealth:         stats.ProviderHealth,
 		ProviderPolicies:       stats.ProviderPolicies,
+		RoutingQuality:         stats.RoutingQuality,
 		Pools:                  stats.Pools,
 		ChartLabels:            labels,
 		ChartOnline:            online,
@@ -288,12 +298,19 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 			ContentTemplate: "settings",
 			BasePath:        "/verifier-engine-room",
 		},
-		Saved:            r.URL.Query().Get("saved") == "1",
-		Settings:         settings,
-		ProviderHealth:   providerHealth,
-		ProviderPolicies: providerPolicies,
-		PolicyVersions:   []SMTPPolicyVersionRecord{},
-		PolicyRollouts:   []SMTPPolicyRolloutRecord{},
+		Saved:                                     r.URL.Query().Get("saved") == "1",
+		Settings:                                  settings,
+		ProviderHealth:                            providerHealth,
+		ProviderPolicies:                          providerPolicies,
+		PolicyVersions:                            []SMTPPolicyVersionRecord{},
+		PolicyRollouts:                            []SMTPPolicyRolloutRecord{},
+		PolicyPayloadStrictValidationEnabled:      s.cfg.PolicyPayloadStrictValidationEnabled,
+		PolicyCanaryAutopilotEnabled:              s.cfg.PolicyCanaryAutopilotEnabled,
+		PolicyCanaryWindowMinutes:                 s.cfg.PolicyCanaryWindowMinutes,
+		PolicyCanaryRequiredHealthWindows:         s.cfg.PolicyCanaryRequiredHealthWindows,
+		PolicyCanaryUnknownRegressionThreshold:    s.cfg.PolicyCanaryUnknownRegressionThreshold,
+		PolicyCanaryTempfailRecoveryDropThreshold: s.cfg.PolicyCanaryTempfailRecoveryDropThreshold,
+		PolicyCanaryPolicyBlockSpikeThreshold:     s.cfg.PolicyCanaryPolicyBlockSpikeThreshold,
 	}
 
 	if versions, _, versionsErr := s.store.ListSMTPPolicyVersions(r.Context()); versionsErr == nil {
@@ -431,6 +448,27 @@ func (s *Server) handleUIProviderPoliciesReload(w http.ResponseWriter, r *http.R
 	http.Redirect(w, r, "/verifier-engine-room/settings?saved=1", http.StatusSeeOther)
 }
 
+func (s *Server) handleUIPolicyValidate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid form")
+		return
+	}
+
+	version := strings.TrimSpace(r.FormValue("policy_version"))
+	if version == "" {
+		writeError(w, http.StatusBadRequest, "policy_version is required")
+		return
+	}
+
+	notes := strings.TrimSpace(r.FormValue("notes"))
+	if _, err := s.store.ValidateSMTPPolicyVersion(r.Context(), version, uiTriggeredBy(r), notes); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+
+	http.Redirect(w, r, "/verifier-engine-room/settings?saved=1", http.StatusSeeOther)
+}
+
 func (s *Server) handleUIPolicyPromote(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid form")
@@ -454,7 +492,7 @@ func (s *Server) handleUIPolicyPromote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	notes := strings.TrimSpace(r.FormValue("notes"))
-	if _, err := s.store.PromoteSMTPPolicyVersion(r.Context(), version, canaryPercent, "ui", notes); err != nil {
+	if _, err := s.store.PromoteSMTPPolicyVersion(r.Context(), version, canaryPercent, uiTriggeredBy(r), notes); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -469,12 +507,26 @@ func (s *Server) handleUIPolicyRollback(w http.ResponseWriter, r *http.Request) 
 	}
 
 	notes := strings.TrimSpace(r.FormValue("notes"))
-	if _, err := s.store.RollbackSMTPPolicyVersion(r.Context(), "ui", notes); err != nil {
+	if _, err := s.store.RollbackSMTPPolicyVersion(r.Context(), uiTriggeredBy(r), notes); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	http.Redirect(w, r, "/verifier-engine-room/settings?saved=1", http.StatusSeeOther)
+}
+
+func uiTriggeredBy(r *http.Request) string {
+	username, _, ok := r.BasicAuth()
+	if !ok {
+		return "ui"
+	}
+
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return "ui"
+	}
+
+	return username
 }
 
 func (s *Server) handleUIEvents(w http.ResponseWriter, r *http.Request) {
@@ -540,6 +592,7 @@ func (s *Server) pushLiveEvent(w http.ResponseWriter, r *http.Request) {
 		LaravelFallbackWorkers: stats.LaravelFallbackWorkers,
 		ActivePolicyVersion:    stats.ProviderPolicies.ActiveVersion,
 		ProviderHealth:         stats.ProviderHealth,
+		RoutingQuality:         stats.RoutingQuality,
 		AlertsEnabled:          stats.Settings.AlertsEnabled,
 		AutoActionsEnabled:     stats.Settings.AutoActionsEnabled,
 		AutoscaleEnabled:       stats.Settings.AutoscaleEnabled,

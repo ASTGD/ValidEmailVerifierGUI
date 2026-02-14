@@ -35,6 +35,15 @@ type ProviderMetric struct {
 	PolicyBlockRate float64 `json:"policy_block_rate,omitempty"`
 }
 
+type RoutingMetrics struct {
+	RetryClaimsTotal              int64 `json:"retry_claims_total,omitempty"`
+	RetryAntiAffinitySuccessTotal int64 `json:"retry_anti_affinity_success_total,omitempty"`
+	SameWorkerAvoidTotal          int64 `json:"same_worker_avoid_total,omitempty"`
+	SamePoolAvoidTotal            int64 `json:"same_pool_avoid_total,omitempty"`
+	ProviderAffinityHitTotal      int64 `json:"provider_affinity_hit_total,omitempty"`
+	FallbackClaimTotal            int64 `json:"fallback_claim_total,omitempty"`
+}
+
 type HeartbeatRequest struct {
 	WorkerID        string           `json:"worker_id"`
 	Host            string           `json:"host,omitempty"`
@@ -50,6 +59,7 @@ type HeartbeatRequest struct {
 	StageMetrics    *StageMetrics    `json:"stage_metrics,omitempty"`
 	SMTPMetrics     *SMTPMetrics     `json:"smtp_metrics,omitempty"`
 	ProviderMetrics []ProviderMetric `json:"provider_metrics,omitempty"`
+	RoutingMetrics  *RoutingMetrics  `json:"routing_metrics,omitempty"`
 	PoolHealthHint  *float64         `json:"pool_health_hint,omitempty"`
 }
 
@@ -75,6 +85,7 @@ type WorkerSummary struct {
 	StageMetrics    *StageMetrics    `json:"stage_metrics,omitempty"`
 	SMTPMetrics     *SMTPMetrics     `json:"smtp_metrics,omitempty"`
 	ProviderMetrics []ProviderMetric `json:"provider_metrics,omitempty"`
+	RoutingMetrics  *RoutingMetrics  `json:"routing_metrics,omitempty"`
 	PoolHealthHint  float64          `json:"pool_health_hint,omitempty"`
 }
 
@@ -163,6 +174,7 @@ type ProviderPoliciesData struct {
 	PolicyEngineEnabled  bool                `json:"policy_engine_enabled"`
 	AdaptiveRetryEnabled bool                `json:"adaptive_retry_enabled"`
 	AutoProtectEnabled   bool                `json:"auto_protect_enabled"`
+	AutopilotEnabled     bool                `json:"autopilot_enabled,omitempty"`
 	ActiveVersion        string              `json:"active_version,omitempty"`
 	LastReloadAt         string              `json:"last_reload_at,omitempty"`
 	ReloadCount          int                 `json:"reload_count"`
@@ -191,14 +203,18 @@ type ProviderQualityResponse struct {
 }
 
 type SMTPPolicyVersionRecord struct {
-	Version       string `json:"version"`
-	Status        string `json:"status"`
-	Active        bool   `json:"active"`
-	CanaryPercent int    `json:"canary_percent"`
-	UpdatedAt     string `json:"updated_at,omitempty"`
-	PromotedAt    string `json:"promoted_at,omitempty"`
-	RolledBackAt  string `json:"rolled_back_at,omitempty"`
-	UpdatedBy     string `json:"updated_by,omitempty"`
+	Version            string `json:"version"`
+	Status             string `json:"status"`
+	Active             bool   `json:"active"`
+	CanaryPercent      int    `json:"canary_percent"`
+	ValidationStatus   string `json:"validation_status,omitempty"`
+	ValidationError    string `json:"validation_error,omitempty"`
+	PayloadChecksum    string `json:"payload_checksum,omitempty"`
+	PayloadValidatedAt string `json:"payload_validated_at,omitempty"`
+	UpdatedAt          string `json:"updated_at,omitempty"`
+	PromotedAt         string `json:"promoted_at,omitempty"`
+	RolledBackAt       string `json:"rolled_back_at,omitempty"`
+	UpdatedBy          string `json:"updated_by,omitempty"`
 }
 
 type SMTPPolicyVersionsResponse struct {
@@ -207,10 +223,26 @@ type SMTPPolicyVersionsResponse struct {
 }
 
 type SMTPPolicyRolloutRecord struct {
-	Action        string `json:"action"`
-	Version       string `json:"version"`
-	CanaryPercent int    `json:"canary_percent"`
-	TriggeredBy   string `json:"triggered_by,omitempty"`
-	Notes         string `json:"notes,omitempty"`
-	CreatedAt     string `json:"created_at"`
+	Action             string `json:"action"`
+	Version            string `json:"version"`
+	CanaryPercent      int    `json:"canary_percent"`
+	TriggeredBy        string `json:"triggered_by,omitempty"`
+	Notes              string `json:"notes,omitempty"`
+	ValidationStatus   string `json:"validation_status,omitempty"`
+	PayloadChecksum    string `json:"payload_checksum,omitempty"`
+	PayloadValidatedAt string `json:"payload_validated_at,omitempty"`
+	CreatedAt          string `json:"created_at"`
+}
+
+type RoutingQualitySummary struct {
+	RetryClaimsTotal              int64   `json:"retry_claims_total"`
+	RetryAntiAffinitySuccessTotal int64   `json:"retry_anti_affinity_success_total"`
+	SameWorkerAvoidTotal          int64   `json:"same_worker_avoid_total"`
+	SamePoolAvoidTotal            int64   `json:"same_pool_avoid_total"`
+	ProviderAffinityHitTotal      int64   `json:"provider_affinity_hit_total"`
+	FallbackClaimTotal            int64   `json:"fallback_claim_total"`
+	AntiAffinitySuccessRate       float64 `json:"anti_affinity_success_rate"`
+	ProviderAffinityHitRate       float64 `json:"provider_affinity_hit_rate"`
+	RetryFallbackRate             float64 `json:"retry_fallback_rate"`
+	TopPoolShare                  float64 `json:"top_pool_share"`
 }

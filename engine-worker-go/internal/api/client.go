@@ -34,16 +34,18 @@ type ClaimNextRequest struct {
 
 type ClaimNextResponse struct {
 	Data struct {
-		ChunkID                  string `json:"chunk_id"`
-		JobID                    string `json:"job_id"`
-		ChunkNo                  int    `json:"chunk_no"`
-		VerificationMode         string `json:"verification_mode"`
-		ProcessingStage          string `json:"processing_stage"`
-		WorkerCapabilityRequired string `json:"worker_capability_required"`
-		RoutingProvider          string `json:"routing_provider"`
-		PreferredPool            string `json:"preferred_pool"`
-		MaxProbeAttempts         int    `json:"max_probe_attempts"`
-		LeaseExpiresAt           string `json:"lease_expires_at"`
+		ChunkID                  string   `json:"chunk_id"`
+		JobID                    string   `json:"job_id"`
+		ChunkNo                  int      `json:"chunk_no"`
+		VerificationMode         string   `json:"verification_mode"`
+		ProcessingStage          string   `json:"processing_stage"`
+		WorkerCapabilityRequired string   `json:"worker_capability_required"`
+		RoutingProvider          string   `json:"routing_provider"`
+		PreferredPool            string   `json:"preferred_pool"`
+		MaxProbeAttempts         int      `json:"max_probe_attempts"`
+		RetryAttempt             int      `json:"retry_attempt"`
+		LastWorkerIDs            []string `json:"last_worker_ids"`
+		LeaseExpiresAt           string   `json:"lease_expires_at"`
 		Input                    struct {
 			Disk string `json:"disk"`
 			Key  string `json:"key"`

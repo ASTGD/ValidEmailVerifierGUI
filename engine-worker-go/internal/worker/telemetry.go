@@ -22,6 +22,13 @@ type workerTelemetry struct {
 	smtpCatchAll int64
 
 	provider map[string]*providerCounters
+
+	retryClaimsTotal              int64
+	retryAntiAffinitySuccessTotal int64
+	sameWorkerAvoidTotal          int64
+	samePoolAvoidTotal            int64
+	providerAffinityHitTotal      int64
+	fallbackClaimTotal            int64
 }
 
 type providerCounters struct {
@@ -36,6 +43,7 @@ type telemetrySnapshot struct {
 	stageMetrics    *api.ControlPlaneStageMetrics
 	smtpMetrics     *api.ControlPlaneSMTPMetrics
 	providerMetrics []api.ControlPlaneProviderMetric
+	routingMetrics  *api.ControlPlaneRoutingMetrics
 }
 
 func newWorkerTelemetry() *workerTelemetry {
@@ -92,6 +100,62 @@ func (t *workerTelemetry) recordChunkFailure(stage string) {
 	t.screeningErrors++
 }
 
+type claimRoutingSnapshot struct {
+	ProcessingStage  string
+	RetryAttempt     int
+	LastWorkerIDs    []string
+	WorkerID         string
+	PreferredPool    string
+	WorkerPool       string
+	RoutingProvider  string
+	ProviderAffinity string
+}
+
+func (t *workerTelemetry) recordClaimRouting(snapshot claimRoutingSnapshot) {
+	if strings.ToLower(strings.TrimSpace(snapshot.ProcessingStage)) != "smtp_probe" {
+		return
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if snapshot.ProviderAffinity != "" && snapshot.RoutingProvider == snapshot.ProviderAffinity {
+		t.providerAffinityHitTotal++
+	} else {
+		t.fallbackClaimTotal++
+	}
+
+	if snapshot.RetryAttempt <= 0 {
+		return
+	}
+
+	t.retryClaimsTotal++
+
+	sameWorkerAvoided := false
+	if len(snapshot.LastWorkerIDs) > 0 {
+		sameWorkerAvoided = true
+		for _, workerID := range snapshot.LastWorkerIDs {
+			if strings.TrimSpace(workerID) == snapshot.WorkerID {
+				sameWorkerAvoided = false
+				break
+			}
+		}
+	}
+	if sameWorkerAvoided {
+		t.sameWorkerAvoidTotal++
+	}
+
+	samePoolAvoided := false
+	if snapshot.PreferredPool != "" && snapshot.WorkerPool != "" && snapshot.PreferredPool != snapshot.WorkerPool {
+		samePoolAvoided = true
+		t.samePoolAvoidTotal++
+	}
+
+	if sameWorkerAvoided || samePoolAvoided {
+		t.retryAntiAffinitySuccessTotal++
+	}
+}
+
 func (t *workerTelemetry) snapshot() telemetrySnapshot {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -137,6 +201,14 @@ func (t *workerTelemetry) snapshot() telemetrySnapshot {
 		stageMetrics:    stageMetrics,
 		smtpMetrics:     smtpMetrics,
 		providerMetrics: providerMetrics,
+		routingMetrics: &api.ControlPlaneRoutingMetrics{
+			RetryClaimsTotal:              t.retryClaimsTotal,
+			RetryAntiAffinitySuccessTotal: t.retryAntiAffinitySuccessTotal,
+			SameWorkerAvoidTotal:          t.sameWorkerAvoidTotal,
+			SamePoolAvoidTotal:            t.samePoolAvoidTotal,
+			ProviderAffinityHitTotal:      t.providerAffinityHitTotal,
+			FallbackClaimTotal:            t.fallbackClaimTotal,
+		},
 	}
 }
 

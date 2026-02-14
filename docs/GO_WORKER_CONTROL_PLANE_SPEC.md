@@ -1,193 +1,134 @@
-# Go Worker Control Plane Spec (External Service)
+# Go Worker Control Plane Spec (Current Runtime)
 
 ## Purpose
-Provide a lightweight control plane for Go workers that owns:
-- Worker registration and heartbeat status
-- Desired-state commands (pause, resume, drain, stop)
-- Pool scaling targets
-- Telemetry/metrics for the Go dashboard
+The Go control plane is the operational source of truth for Go worker runtime state:
+- Worker and pool liveness (primary heartbeat path)
+- Desired-state control (`running`, `paused`, `draining`, `stopped`)
+- Provider health/mode controls
+- SMTP policy rollout controls (validate/promote/rollback)
+- Probe quality and routing effectiveness telemetry
 
-Laravel remains control-light and only links to this dashboard.
+Laravel remains the policy payload source-of-truth and fallback heartbeat sink.
 
-## Terminology
-- **Worker**: A Go verifier process.
-- **Pool**: Logical grouping (region, IP pool, reputation tier, or tag).
-- **Desired state**: Target status assigned by control plane.
+## Source-of-Truth Split
+- **Primary operational heartbeat:** `POST /api/workers/heartbeat` (Go control plane)
+- **Fallback identity/liveness heartbeat:** `POST /api/verifier/heartbeat` (Laravel)
+
+Practical rule:
+- Ops controls, incidents, and pool state come from the Go control plane.
+- Laravel heartbeat is retained as fallback/identity refresh and does not own worker desired-state control.
 
 ## Authentication
-Use a static bearer token (env-based).
-- `CONTROL_PLANE_TOKEN` (stored outside this repo)
+- API: `Authorization: Bearer <CONTROL_PLANE_TOKEN>`
+- UI: HTTP Basic Auth
+  - Username: any non-empty value
+  - Password: `CONTROL_PLANE_TOKEN`
 
-UI and browser endpoints are protected with HTTP Basic Auth as well.
-- Username: any non-empty value
-- Password: `CONTROL_PLANE_TOKEN`
+## Core Endpoints
+### Worker and pool control
+- `POST /api/workers/heartbeat`
+- `GET /api/workers`
+- `POST /api/workers/{id}/pause|resume|drain|stop`
+- `POST /api/workers/{id}/quarantine|unquarantine`
+- `GET /api/pools`
+- `POST /api/pools/{pool}/scale`
 
-Redis connection is configured by env:
-- `REDIS_ADDR` (host:port)
-- `REDIS_PASSWORD`
-- `REDIS_DB`
+### Health/alerts/metrics
+- `GET /api/health/ready`
+- `GET /api/incidents`
+- `GET /api/alerts`
+- `GET /api/slo`
+- `GET /metrics`
 
-Optional MySQL snapshots:
-- `MYSQL_DSN` (e.g., `user:pass@tcp(127.0.0.1:3306)/db?parseTime=true&charset=utf8mb4&loc=UTC`)
-- `SNAPSHOT_INTERVAL_SECONDS` (default 60)
+### Provider controls
+- `GET /api/providers/health`
+- `GET /api/providers/quality`
+- `GET /api/providers/policies`
+- `POST /api/providers/{provider}/mode`
+- `POST /api/providers/policies/reload`
 
-Alerts and notifications:
-- `ALERTS_ENABLED` (true/false)
-- `ALERT_CHECK_INTERVAL_SECONDS` (default 30)
-- `ALERT_HEARTBEAT_GRACE_SECONDS` (default 120)
-- `ALERT_COOLDOWN_SECONDS` (default 300)
-- `ALERT_ERROR_RATE_THRESHOLD` (errors/min threshold)
-- `AUTO_ACTIONS_ENABLED` (true/false)
-- `SLACK_WEBHOOK_URL`
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_TO`
+### Policy lifecycle controls
+- `GET /api/policies/versions`
+- `POST /api/policies/validate`
+- `POST /api/policies/promote`
+- `POST /api/policies/rollback`
 
-Runtime overrides (Redis-backed, no `.env` rewrite):
-- `control_plane:runtime_settings` JSON:
-  - `alerts_enabled`
-  - `auto_actions_enabled`
-  - `alert_error_rate_threshold`
-  - `alert_heartbeat_grace_seconds`
-  - `alert_cooldown_seconds`
+## SMTP Policy Safety Coupling
+Before activation (`promote`/`rollback`), control plane preflights policy payload from Laravel:
+- Fetch: `GET /api/verifier/policy-versions/{version}/payload`
+- Validate required schema fields (minimum contract):
+  - `enabled`
+  - `version`
+  - `profiles.generic.retry` with required retry keys
+- Reject activation if payload is missing/invalid
 
-## Worker States
-- `running`
-- `paused` (no new chunks)
-- `draining` (finish current chunk, then idle)
-- `stopped`
+Rollout records persist validation metadata:
+- `validation_status`
+- `payload_checksum`
+- `payload_validated_at`
 
-## API Endpoints
+## Rotation Observability Telemetry
+Workers send routing counters in heartbeat payload:
+- `retry_claims_total`
+- `retry_anti_affinity_success_total`
+- `same_worker_avoid_total`
+- `same_pool_avoid_total`
+- `provider_affinity_hit_total`
+- `fallback_claim_total`
 
-### POST /api/workers/heartbeat
-Registers or updates worker state.
+Control plane aggregates these into routing-quality KPIs and exposes them in UI and Prometheus metrics.
 
-Request:
-```json
-{
-  "worker_id": "worker-01",
-  "host": "node-a",
-  "ip_address": "x.x.x.x",
-  "version": "1.2.3",
-  "pool": "default",
-  "tags": ["us-east", "warm"],
-  "status": "running",
-  "current_job_id": "uuid-or-null",
-  "current_chunk_id": "uuid-or-null",
-  "metrics": {
-    "emails_per_sec": 120,
-    "errors_per_min": 2,
-    "cache_hit_rate": 0.45,
-    "avg_latency_ms": 140
-  }
-}
-```
+## Canary Autopilot (KPI Closed Loop)
+Autopilot can progress canary rollout automatically:
+- Step ladder: `5 -> 25 -> 50 -> 100`
+- Progression requires consecutive healthy windows
+- Automatic rollback gates on KPI regression:
+  - unknown-rate regression
+  - tempfail-recovery drop
+  - policy-block spike
+- Manual override wins:
+  - if explicit manual provider mode override is active, autopilot does not mutate rollout state
 
-Response:
-```json
-{
-  "desired_state": "running",
-  "commands": []
-}
-```
+## Key Environment Variables
+### Required
+- `PORT`
+- `CONTROL_PLANE_TOKEN`
+- `REDIS_ADDR`
 
-### GET /api/workers
-Returns worker list.
+### Policy payload coupling
+- `LARAVEL_API_BASE_URL`
+- `LARAVEL_VERIFIER_TOKEN`
+- `POLICY_PAYLOAD_STRICT_VALIDATION_ENABLED=true`
 
-Response:
-```json
-{
-  "data": [
-    {
-      "worker_id": "worker-01",
-      "host": "node-a",
-      "pool": "default",
-      "status": "running",
-      "last_heartbeat_at": "2026-02-05T12:34:56Z",
-      "current_job_id": "uuid-or-null"
-    }
-  ]
-}
-```
+### Autopilot
+- `POLICY_CANARY_AUTOPILOT_ENABLED=false`
+- `POLICY_CANARY_WINDOW_MINUTES=15`
+- `POLICY_CANARY_REQUIRED_HEALTH_WINDOWS=4`
+- `POLICY_CANARY_UNKNOWN_REGRESSION_THRESHOLD=0.05`
+- `POLICY_CANARY_TEMPFAIL_RECOVERY_DROP_THRESHOLD=0.10`
+- `POLICY_CANARY_POLICY_BLOCK_SPIKE_THRESHOLD=0.10`
 
-### POST /api/workers/{worker_id}/pause
-### POST /api/workers/{worker_id}/resume
-### POST /api/workers/{worker_id}/drain
-### POST /api/workers/{worker_id}/stop
-Sets desired state for a worker.
+### Multi-instance safety / operations
+- `LEADER_LOCK_ENABLED=true`
+- `LEADER_LOCK_TTL_SECONDS=45`
+- `STALE_WORKER_TTL_SECONDS=86400`
+- `STUCK_DESIRED_GRACE_SECONDS=600`
 
-Response:
-```json
-{ "desired_state": "paused" }
-```
+## Redis Keys (Operational)
+- `worker:{id}:status|heartbeat|last_seen|meta|metrics|stage_metrics|smtp_metrics|provider_metrics|routing_metrics`
+- `worker:{id}:desired_state|desired_state_updated|quarantined|pool`
+- `workers:active`, `workers:known`, `pools:known`
+- `pool:{pool}:desired_count`
+- `control_plane:incident:*`, `control_plane:incidents:*`
+- `control_plane:provider_modes`
+- `control_plane:provider_policy_state`
+- `control_plane:smtp_policy_versions`
+- `control_plane:smtp_policy_active`
+- `control_plane:smtp_policy_rollout_history`
 
-### GET /api/pools
-Returns pool summary.
+## Reliability Drills
+Run drill scenarios from:
+- `services/go-control-plane/scripts/run_reliability_drill.sh`
 
-Response:
-```json
-{
-  "data": [
-    { "pool": "default", "online": 3, "desired": 5 }
-  ]
-}
-```
-
-### POST /api/pools/{pool}/scale
-Sets desired count for a pool.
-
-Request:
-```json
-{ "desired": 5 }
-```
-
-Response:
-```json
-{ "pool": "default", "desired": 5 }
-```
-
-### GET /metrics
-Prometheus text exposition (auth required).
-Includes worker counts, pool counts, desired totals, and worker/aggregate error-rate gauges.
-
-### GET /verifier-engine-room/events
-SSE stream for live UI updates (auth required).
-
-### GET /verifier-engine-room/alerts
-UI page showing recent alerts from `go_alerts` (auth required).
-
-### GET|POST /verifier-engine-room/settings
-UI page to read/write runtime alert settings to Redis (auth required).
-
-## Redis Schema (Suggested)
-- `worker:{id}:state` -> current state (string)
-- `worker:{id}:desired` -> desired state (string)
-- `worker:{id}:heartbeat` -> timestamp (ISO-8601)
-- `worker:{id}:metrics` -> JSON blob (short-lived)
-- `pool:{name}:desired` -> desired worker count
-- `pool:{name}:online` -> computed count (optional cache)
-
-Snapshot storage (MySQL, optional):
-- `go_worker_snapshots`
-- `go_pool_snapshots`
-
-Alert storage (MySQL, optional):
-- `go_alerts`
-
-TTL: heartbeat/metrics keys expire after N seconds to detect offline workers.
-
-## Worker Agent Loop (Simplified)
-1) On startup, POST `/heartbeat`.
-2) Every N seconds:
-   - POST `/heartbeat`.
-   - Apply desired state:
-     - `paused`: do not claim new chunks
-     - `draining`: finish current chunk, then idle
-     - `stopped`: shutdown
-
-## Metrics Strategy
-Expose metrics via:
-- `/api/workers` payload (simple), or
-- Prometheus endpoint on the control plane (preferred for Grafana).
-
-## Laravel Integration
-Laravel only links to the Go dashboard and shows read-only summary stats if needed.
-No Laravel-side control actions are required.
+Use template:
+- `docs/GO_RELIABILITY_DRILL_REPORT_TEMPLATE.md`

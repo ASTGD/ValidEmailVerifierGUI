@@ -87,6 +87,46 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("# TYPE go_control_plane_probe_reject_rate_avg gauge\n")
 	fmt.Fprintf(&b, "go_control_plane_probe_reject_rate_avg %s\n", formatPromFloat(stats.ProbeRejectRate))
 
+	b.WriteString("# HELP go_control_plane_routing_retry_claims_total Retry claims observed from worker routing telemetry.\n")
+	b.WriteString("# TYPE go_control_plane_routing_retry_claims_total gauge\n")
+	fmt.Fprintf(&b, "go_control_plane_routing_retry_claims_total %d\n", stats.RoutingQuality.RetryClaimsTotal)
+
+	b.WriteString("# HELP go_control_plane_routing_retry_anti_affinity_success_total Retry claims that avoided previous worker/pool.\n")
+	b.WriteString("# TYPE go_control_plane_routing_retry_anti_affinity_success_total gauge\n")
+	fmt.Fprintf(&b, "go_control_plane_routing_retry_anti_affinity_success_total %d\n", stats.RoutingQuality.RetryAntiAffinitySuccessTotal)
+
+	b.WriteString("# HELP go_control_plane_routing_same_worker_avoid_total Retry claims that avoided same worker.\n")
+	b.WriteString("# TYPE go_control_plane_routing_same_worker_avoid_total gauge\n")
+	fmt.Fprintf(&b, "go_control_plane_routing_same_worker_avoid_total %d\n", stats.RoutingQuality.SameWorkerAvoidTotal)
+
+	b.WriteString("# HELP go_control_plane_routing_same_pool_avoid_total Retry claims that avoided same pool.\n")
+	b.WriteString("# TYPE go_control_plane_routing_same_pool_avoid_total gauge\n")
+	fmt.Fprintf(&b, "go_control_plane_routing_same_pool_avoid_total %d\n", stats.RoutingQuality.SamePoolAvoidTotal)
+
+	b.WriteString("# HELP go_control_plane_routing_provider_affinity_hit_total Claims that matched provider affinity.\n")
+	b.WriteString("# TYPE go_control_plane_routing_provider_affinity_hit_total gauge\n")
+	fmt.Fprintf(&b, "go_control_plane_routing_provider_affinity_hit_total %d\n", stats.RoutingQuality.ProviderAffinityHitTotal)
+
+	b.WriteString("# HELP go_control_plane_routing_fallback_claim_total Claims that used fallback routing.\n")
+	b.WriteString("# TYPE go_control_plane_routing_fallback_claim_total gauge\n")
+	fmt.Fprintf(&b, "go_control_plane_routing_fallback_claim_total %d\n", stats.RoutingQuality.FallbackClaimTotal)
+
+	b.WriteString("# HELP go_control_plane_routing_anti_affinity_success_rate Anti-affinity success rate on retries.\n")
+	b.WriteString("# TYPE go_control_plane_routing_anti_affinity_success_rate gauge\n")
+	fmt.Fprintf(&b, "go_control_plane_routing_anti_affinity_success_rate %s\n", formatPromFloat(stats.RoutingQuality.AntiAffinitySuccessRate))
+
+	b.WriteString("# HELP go_control_plane_routing_provider_affinity_hit_rate Provider affinity hit rate.\n")
+	b.WriteString("# TYPE go_control_plane_routing_provider_affinity_hit_rate gauge\n")
+	fmt.Fprintf(&b, "go_control_plane_routing_provider_affinity_hit_rate %s\n", formatPromFloat(stats.RoutingQuality.ProviderAffinityHitRate))
+
+	b.WriteString("# HELP go_control_plane_routing_retry_fallback_rate Retry fallback rate.\n")
+	b.WriteString("# TYPE go_control_plane_routing_retry_fallback_rate gauge\n")
+	fmt.Fprintf(&b, "go_control_plane_routing_retry_fallback_rate %s\n", formatPromFloat(stats.RoutingQuality.RetryFallbackRate))
+
+	b.WriteString("# HELP go_control_plane_routing_top_pool_share Highest desired-capacity pool share.\n")
+	b.WriteString("# TYPE go_control_plane_routing_top_pool_share gauge\n")
+	fmt.Fprintf(&b, "go_control_plane_routing_top_pool_share %s\n", formatPromFloat(stats.RoutingQuality.TopPoolShare))
+
 	b.WriteString("# HELP go_control_plane_provider_tempfail_rate Provider tempfail rate.\n")
 	b.WriteString("# TYPE go_control_plane_provider_tempfail_rate gauge\n")
 	b.WriteString("# HELP go_control_plane_provider_reject_rate Provider reject rate.\n")

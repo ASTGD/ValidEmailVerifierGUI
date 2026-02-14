@@ -121,6 +121,10 @@ func TestStaleWorkerDeleteKeysIncludePoolAndLastSeen(t *testing.T) {
 	if !containsString(keys, expectedProviderMetrics) {
 		t.Fatalf("expected stale delete keys to include %q", expectedProviderMetrics)
 	}
+	expectedRoutingMetrics := workerKey(workerID, "routing_metrics")
+	if !containsString(keys, expectedRoutingMetrics) {
+		t.Fatalf("expected stale delete keys to include %q", expectedRoutingMetrics)
+	}
 }
 
 func TestNormalizeProviderMode(t *testing.T) {
@@ -338,6 +342,51 @@ func TestBuildSMTPPolicyRolloutRecordSupportsPromoteAndRollbackActions(t *testin
 	rollback := buildSMTPPolicyRolloutRecord("rollback", "v2", 100, "ops", "restore previous", "2026-01-03T03:04:05Z")
 	if rollback.Action != "rollback" || rollback.Version != "v2" {
 		t.Fatalf("unexpected rollback rollout entry: %+v", rollback)
+	}
+
+	validate := buildSMTPPolicyRolloutRecord("validate", "v2", 100, "ops", "validate payload", "2026-01-03T03:14:05Z")
+	if validate.Action != "validate" || validate.Version != "v2" {
+		t.Fatalf("unexpected validate rollout entry: %+v", validate)
+	}
+}
+
+func TestNormalizePolicyValidationStatus(t *testing.T) {
+	if value := normalizePolicyValidationStatus("valid"); value != policyValidationStatusValid {
+		t.Fatalf("expected valid, got %q", value)
+	}
+	if value := normalizePolicyValidationStatus("invalid"); value != policyValidationStatusInvalid {
+		t.Fatalf("expected invalid, got %q", value)
+	}
+	if value := normalizePolicyValidationStatus("unknown"); value != policyValidationStatusPending {
+		t.Fatalf("expected pending fallback, got %q", value)
+	}
+}
+
+func TestStorePreflightPolicyPayloadRequiresValidatorWhenEnforced(t *testing.T) {
+	store := &Store{
+		policyPayloadStrictValidation: true,
+	}
+
+	result, err := store.preflightPolicyPayload(context.Background(), "v2.1.0", true)
+	if err == nil {
+		t.Fatal("expected validation error when validator is missing")
+	}
+	if result.Status != policyValidationStatusInvalid {
+		t.Fatalf("expected invalid status, got %q", result.Status)
+	}
+}
+
+func TestStorePreflightPolicyPayloadAllowsPendingWhenNotEnforced(t *testing.T) {
+	store := &Store{
+		policyPayloadStrictValidation: false,
+	}
+
+	result, err := store.preflightPolicyPayload(context.Background(), "v2.1.0", false)
+	if err != nil {
+		t.Fatalf("expected no error when preflight enforcement is disabled, got %v", err)
+	}
+	if result.Status != policyValidationStatusPending {
+		t.Fatalf("expected pending status, got %q", result.Status)
 	}
 }
 

@@ -311,6 +311,36 @@ func (s *Server) handlePolicyPromote(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handlePolicyValidate(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		Version     string `json:"version"`
+		TriggeredBy string `json:"triggered_by"`
+		Notes       string `json:"notes"`
+	}
+
+	if err := decodeJSON(r, &payload); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if strings.TrimSpace(payload.TriggeredBy) == "" {
+		payload.TriggeredBy = "api"
+	}
+
+	record, err := s.store.ValidateSMTPPolicyVersion(r.Context(), payload.Version, payload.TriggeredBy, payload.Notes)
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]interface{}{
+			"error": err.Error(),
+			"data":  record,
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": record,
+	})
+}
+
 func (s *Server) handlePolicyRollback(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		TriggeredBy string `json:"triggered_by"`

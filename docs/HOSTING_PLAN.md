@@ -61,6 +61,23 @@ Required queue observability jobs:
 4. If SG6 guardrails auto-pause a campaign, investigate bounce/defer spikes before resuming.
 5. Keep SG6 campaign retries scoped to SG6 recipients only (never requeue finalize/smtp lanes).
 
+## Go Control-Plane Policy Safety Checklist
+1. Configure policy payload coupling:
+   - `LARAVEL_API_BASE_URL`
+   - `LARAVEL_VERIFIER_TOKEN`
+   - `POLICY_PAYLOAD_STRICT_VALIDATION_ENABLED=true`
+2. Validate policy payload from Laravel admin (`Operations -> SMTP Policy Versions`).
+3. In Go settings, run `Validate Policy`, then `Promote Policy`.
+4. Verify rollout metadata includes validation state/checksum.
+5. If quality regresses, execute rollback immediately from Go settings.
+
+## Go Reliability Recovery Sequence
+1. Check control-plane readiness: `GET /api/health/ready`.
+2. Verify worker control path is alive: `GET /api/workers`.
+3. If control-plane process is unhealthy, restart service and re-check readiness.
+4. Confirm incident lifecycle updates to recovered.
+5. Run one drill scenario from `services/go-control-plane/scripts/run_reliability_drill.sh` and document results.
+
 ## Security
 - Restrict Go dashboard with IP allowlist or basic auth.
 - Ensure admin-only access to Horizon and internal ops pages.

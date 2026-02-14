@@ -93,6 +93,7 @@ class VerifierPolicyApiTest extends TestCase
             'version' => 'v2.9.0',
             'status' => 'active',
             'is_active' => true,
+            'validation_status' => 'valid',
             'policy_payload' => [
                 'enabled' => true,
                 'version' => 'v2.9.0',
@@ -118,6 +119,7 @@ class VerifierPolicyApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.version', 'v2.9.0')
             ->assertJsonPath('data.is_active', true)
+            ->assertJsonPath('data.validation_status', 'valid')
             ->assertJsonPath('data.policy_payload.version', 'v2.9.0');
     }
 
@@ -136,6 +138,37 @@ class VerifierPolicyApiTest extends TestCase
             ->assertNotFound();
 
         $this->getJson(route('api.verifier.policy-versions.payload', ['version' => 'v2-missing']))
+            ->assertNotFound();
+    }
+
+    public function test_policy_version_payload_endpoint_rejects_invalid_validation_status(): void
+    {
+        $this->actingAsVerifier();
+
+        SmtpPolicyVersion::query()->create([
+            'version' => 'v2-invalid',
+            'status' => 'draft',
+            'validation_status' => 'invalid',
+            'is_active' => false,
+            'policy_payload' => [
+                'enabled' => true,
+                'version' => 'v2-invalid',
+                'profiles' => [
+                    'generic' => [
+                        'name' => 'generic',
+                        'retry' => [
+                            'default_seconds' => 60,
+                            'tempfail_seconds' => 90,
+                            'greylist_seconds' => 180,
+                            'policy_blocked_seconds' => 300,
+                            'unknown_seconds' => 75,
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $this->getJson(route('api.verifier.policy-versions.payload', ['version' => 'v2-invalid']))
             ->assertNotFound();
     }
 }

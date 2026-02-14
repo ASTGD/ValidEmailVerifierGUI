@@ -49,6 +49,15 @@ type ControlPlaneProviderMetric struct {
 	PolicyBlockRate float64 `json:"policy_block_rate,omitempty"`
 }
 
+type ControlPlaneRoutingMetrics struct {
+	RetryClaimsTotal              int64 `json:"retry_claims_total,omitempty"`
+	RetryAntiAffinitySuccessTotal int64 `json:"retry_anti_affinity_success_total,omitempty"`
+	SameWorkerAvoidTotal          int64 `json:"same_worker_avoid_total,omitempty"`
+	SamePoolAvoidTotal            int64 `json:"same_pool_avoid_total,omitempty"`
+	ProviderAffinityHitTotal      int64 `json:"provider_affinity_hit_total,omitempty"`
+	FallbackClaimTotal            int64 `json:"fallback_claim_total,omitempty"`
+}
+
 type ControlPlaneHeartbeatRequest struct {
 	WorkerID        string                       `json:"worker_id"`
 	Host            string                       `json:"host,omitempty"`
@@ -64,6 +73,7 @@ type ControlPlaneHeartbeatRequest struct {
 	StageMetrics    *ControlPlaneStageMetrics    `json:"stage_metrics,omitempty"`
 	SMTPMetrics     *ControlPlaneSMTPMetrics     `json:"smtp_metrics,omitempty"`
 	ProviderMetrics []ControlPlaneProviderMetric `json:"provider_metrics,omitempty"`
+	RoutingMetrics  *ControlPlaneRoutingMetrics  `json:"routing_metrics,omitempty"`
 	PoolHealthHint  *float64                     `json:"pool_health_hint,omitempty"`
 }
 

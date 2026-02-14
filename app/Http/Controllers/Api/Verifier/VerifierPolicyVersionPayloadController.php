@@ -22,11 +22,16 @@ class VerifierPolicyVersionPayloadController
             abort(404);
         }
 
+        if ((string) ($policyVersion->validation_status ?? 'pending') !== 'valid') {
+            abort(404);
+        }
+
         return response()->json([
             'data' => [
                 'version' => $policyVersion->version,
                 'is_active' => (bool) $policyVersion->is_active,
                 'status' => (string) $policyVersion->status,
+                'validation_status' => (string) ($policyVersion->validation_status ?? 'pending'),
                 'policy_payload' => $policyVersion->policy_payload,
             ],
         ]);
