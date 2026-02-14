@@ -408,8 +408,23 @@ func applySessionContextResult(result Result, providerMode string, sessionStrate
 	if strings.TrimSpace(result.Evidence.ConfidenceHint) == "" {
 		result.Evidence.ConfidenceHint = result.DecisionConfidence
 	}
+	if strings.TrimSpace(result.Evidence.EvidenceStrength) == "" {
+		result.Evidence.EvidenceStrength = normalizedEvidenceStrength(result.Evidence.ConfidenceHint)
+	}
 	if strings.TrimSpace(result.Evidence.ReasonTag) == "" {
 		result.Evidence.ReasonTag = result.ReasonTag
+	}
+	if strings.TrimSpace(result.Evidence.MXHost) == "" {
+		result.Evidence.MXHost = result.MXHost
+	}
+	if result.Evidence.AttemptNumber <= 0 {
+		result.Evidence.AttemptNumber = result.AttemptNumber
+	}
+	if strings.TrimSpace(result.Evidence.AttemptRoute) == "" {
+		result.Evidence.AttemptRoute = result.AttemptRoute
+	}
+	if strings.TrimSpace(result.EvidenceStrength) == "" {
+		result.EvidenceStrength = result.Evidence.EvidenceStrength
 	}
 
 	return result

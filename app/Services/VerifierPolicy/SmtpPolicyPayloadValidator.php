@@ -4,6 +4,16 @@ namespace App\Services\VerifierPolicy;
 
 class SmtpPolicyPayloadValidator
 {
+    private const ALLOWED_RULE_TAGS = [
+        'greylist',
+        'rate_limit',
+        'mailbox_full',
+        'policy_blocked',
+        'mailbox_not_found',
+        'auth_required',
+        'unknown_transient',
+    ];
+
     /**
      * @return array<int, string>
      */
@@ -11,8 +21,8 @@ class SmtpPolicyPayloadValidator
     {
         $errors = [];
         $schemaVersion = strtolower(trim((string) ($payload['schema_version'] ?? 'v2')));
-        if (! in_array($schemaVersion, ['v2', 'v3'], true)) {
-            $errors[] = 'Payload field "schema_version" must be either v2 or v3.';
+        if (! in_array($schemaVersion, ['v2', 'v3', 'v4'], true)) {
+            $errors[] = 'Payload field "schema_version" must be either v2, v3, or v4.';
         }
 
         if (! array_key_exists('enabled', $payload) || ! is_bool($payload['enabled'])) {
@@ -59,7 +69,7 @@ class SmtpPolicyPayloadValidator
             }
         }
 
-        if ($schemaVersion === 'v3') {
+        if (in_array($schemaVersion, ['v3', 'v4'], true)) {
             $errors = array_merge($errors, $this->validateV3Rules($profiles));
             $errors = array_merge($errors, $this->validateV3Modes($payload));
         }
@@ -118,6 +128,17 @@ class SmtpPolicyPayloadValidator
                                 $field
                             );
                         }
+                    }
+
+                    $ruleTag = strtolower(trim((string) ($rule['rule_tag'] ?? '')));
+                    if ($ruleTag !== '' && ! in_array($ruleTag, self::ALLOWED_RULE_TAGS, true)) {
+                        $errors[] = sprintf(
+                            'Payload rule field "profiles.%s.%s.%d.rule_tag" has unsupported value "%s".',
+                            $profileName,
+                            $ruleCollection,
+                            $ruleIndex,
+                            $ruleTag
+                        );
                     }
                 }
             }

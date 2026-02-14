@@ -7,14 +7,18 @@ import (
 )
 
 type ReplyEvidence struct {
-	ReasonCode      string `json:"reason_code,omitempty"`
-	ReasonTag       string `json:"reason_tag,omitempty"`
-	SMTPCode        int    `json:"smtp_code,omitempty"`
-	EnhancedCode    string `json:"enhanced_code,omitempty"`
-	ProviderProfile string `json:"provider_profile,omitempty"`
-	DecisionClass   string `json:"decision_class,omitempty"`
-	ConfidenceHint  string `json:"confidence_hint,omitempty"`
-	SessionStrategy string `json:"session_strategy_id,omitempty"`
+	ReasonCode       string `json:"reason_code,omitempty"`
+	ReasonTag        string `json:"reason_tag,omitempty"`
+	MXHost           string `json:"mx_host,omitempty"`
+	AttemptNumber    int    `json:"attempt_number,omitempty"`
+	AttemptRoute     string `json:"attempt_route,omitempty"`
+	EvidenceStrength string `json:"evidence_strength,omitempty"`
+	SMTPCode         int    `json:"smtp_code,omitempty"`
+	EnhancedCode     string `json:"enhanced_code,omitempty"`
+	ProviderProfile  string `json:"provider_profile,omitempty"`
+	DecisionClass    string `json:"decision_class,omitempty"`
+	ConfidenceHint   string `json:"confidence_hint,omitempty"`
+	SessionStrategy  string `json:"session_strategy_id,omitempty"`
 }
 
 type ProviderReplyPolicyEngine struct {
@@ -74,8 +78,8 @@ type ProviderModeRule struct {
 func DefaultProviderReplyPolicyEngine() *ProviderReplyPolicyEngine {
 	engine := ProviderReplyPolicyEngine{
 		Enabled:       true,
-		Version:       "v3",
-		SchemaVersion: "v3",
+		Version:       "v4",
+		SchemaVersion: "v4",
 		Profiles:      defaultProviderReplyProfiles(),
 		Modes:         defaultProviderModeRules(),
 	}
@@ -101,8 +105,8 @@ func ParseProviderReplyPolicyEngineJSON(raw string) (*ProviderReplyPolicyEngine,
 
 func normalizeProviderReplyPolicyEngine(engine ProviderReplyPolicyEngine) ProviderReplyPolicyEngine {
 	defaults := ProviderReplyPolicyEngine{
-		Version:       "v3",
-		SchemaVersion: "v3",
+		Version:       "v4",
+		SchemaVersion: "v4",
 		Profiles:      defaultProviderReplyProfiles(),
 		Modes:         defaultProviderModeRules(),
 	}
@@ -204,6 +208,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:         CategoryInvalid,
 					Reason:           "rcpt_rejected",
 					ReasonCode:       "mailbox_not_found",
+					RuleTag:          "mailbox_not_found",
 				},
 				{
 					RuleID:           "generic-enhanced-57-policy-blocked",
@@ -212,6 +217,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:         CategoryRisky,
 					Reason:           "smtp_tempfail",
 					ReasonCode:       "smtp_policy_blocked",
+					RuleTag:          "policy_blocked",
 				},
 				{
 					RuleID:           "generic-enhanced-42-44-retry",
@@ -220,6 +226,16 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:         CategoryRisky,
 					Reason:           "smtp_tempfail",
 					ReasonCode:       "smtp_tempfail",
+					RuleTag:          "unknown_transient",
+				},
+				{
+					RuleID:           "generic-enhanced-422-mailbox-full",
+					EnhancedPrefixes: []string{"4.2.2"},
+					DecisionClass:    DecisionRetryable,
+					Category:         CategoryRisky,
+					Reason:           "smtp_tempfail",
+					ReasonCode:       "mailbox_full",
+					RuleTag:          "mailbox_full",
 				},
 			},
 			SMTPCodeRules: []ProviderReplyRule{
@@ -230,6 +246,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:      CategoryRisky,
 					Reason:        "smtp_tempfail",
 					ReasonCode:    "smtp_tempfail",
+					RuleTag:       "unknown_transient",
 				},
 				{
 					RuleID:        "generic-smtp-550-553-undeliverable",
@@ -238,6 +255,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:      CategoryInvalid,
 					Reason:        "rcpt_rejected",
 					ReasonCode:    "rcpt_rejected",
+					RuleTag:       "mailbox_not_found",
 				},
 			},
 			MessageRules: []ProviderReplyRule{
@@ -249,6 +267,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Reason:           "smtp_tempfail",
 					ReasonCode:       "smtp_tempfail",
 					RetryAfterSecond: 180,
+					RuleTag:          "greylist",
 				},
 				{
 					RuleID:          "generic-msg-policy-blocked",
@@ -257,6 +276,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:        CategoryRisky,
 					Reason:          "smtp_tempfail",
 					ReasonCode:      "smtp_policy_blocked",
+					RuleTag:         "policy_blocked",
 				},
 				{
 					RuleID:          "generic-msg-mailbox-not-found",
@@ -265,6 +285,25 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:        CategoryInvalid,
 					Reason:          "rcpt_rejected",
 					ReasonCode:      "mailbox_not_found",
+					RuleTag:         "mailbox_not_found",
+				},
+				{
+					RuleID:          "generic-msg-mailbox-full",
+					MessageContains: []string{"mailbox full", "quota exceeded", "mailbox over quota"},
+					DecisionClass:   DecisionRetryable,
+					Category:        CategoryRisky,
+					Reason:          "smtp_tempfail",
+					ReasonCode:      "mailbox_full",
+					RuleTag:         "mailbox_full",
+				},
+				{
+					RuleID:          "generic-msg-auth-required",
+					MessageContains: []string{"authentication required", "auth required", "sender verify failed"},
+					DecisionClass:   DecisionPolicyBlocked,
+					Category:        CategoryRisky,
+					Reason:          "smtp_tempfail",
+					ReasonCode:      "smtp_policy_blocked",
+					RuleTag:         "auth_required",
 				},
 			},
 			Retry: ProviderRetryPolicy{
@@ -292,6 +331,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:         CategoryRisky,
 					Reason:           "smtp_tempfail",
 					ReasonCode:       "smtp_tempfail",
+					RuleTag:          "rate_limit",
 				},
 			},
 			SMTPCodeRules: []ProviderReplyRule{
@@ -302,6 +342,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:      CategoryRisky,
 					Reason:        "smtp_tempfail",
 					ReasonCode:    "smtp_tempfail",
+					RuleTag:       "rate_limit",
 				},
 			},
 			MessageRules: []ProviderReplyRule{
@@ -312,6 +353,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:        CategoryRisky,
 					Reason:          "smtp_tempfail",
 					ReasonCode:      "smtp_tempfail",
+					RuleTag:         "rate_limit",
 				},
 			},
 			Retry: ProviderRetryPolicy{
@@ -339,6 +381,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:         CategoryRisky,
 					Reason:           "smtp_tempfail",
 					ReasonCode:       "smtp_tempfail",
+					RuleTag:          "rate_limit",
 				},
 			},
 			SMTPCodeRules: []ProviderReplyRule{
@@ -349,6 +392,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:      CategoryRisky,
 					Reason:        "smtp_tempfail",
 					ReasonCode:    "smtp_tempfail",
+					RuleTag:       "rate_limit",
 				},
 			},
 			MessageRules: []ProviderReplyRule{
@@ -359,6 +403,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:        CategoryRisky,
 					Reason:          "smtp_tempfail",
 					ReasonCode:      "smtp_tempfail",
+					RuleTag:         "rate_limit",
 				},
 			},
 			Retry: ProviderRetryPolicy{
@@ -386,6 +431,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:         CategoryRisky,
 					Reason:           "smtp_tempfail",
 					ReasonCode:       "smtp_tempfail",
+					RuleTag:          "rate_limit",
 				},
 			},
 			SMTPCodeRules: []ProviderReplyRule{
@@ -396,6 +442,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:      CategoryRisky,
 					Reason:        "smtp_tempfail",
 					ReasonCode:    "smtp_tempfail",
+					RuleTag:       "rate_limit",
 				},
 			},
 			MessageRules: []ProviderReplyRule{
@@ -406,6 +453,7 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 					Category:        CategoryRisky,
 					Reason:          "smtp_tempfail",
 					ReasonCode:      "smtp_tempfail",
+					RuleTag:         "rate_limit",
 				},
 			},
 			Retry: ProviderRetryPolicy{
@@ -529,6 +577,8 @@ func inferRuleTag(reasonCode string, decisionClass string) string {
 		return "policy_blocked"
 	case strings.Contains(reasonCode, "mailbox_not_found"):
 		return "mailbox_not_found"
+	case strings.Contains(reasonCode, "auth"):
+		return "auth_required"
 	case strings.Contains(reasonCode, "rate_limit"):
 		return "rate_limit"
 	case decisionClass == DecisionPolicyBlocked:
@@ -536,7 +586,7 @@ func inferRuleTag(reasonCode string, decisionClass string) string {
 	case decisionClass == DecisionUndeliverable:
 		return "mailbox_not_found"
 	default:
-		return "rate_limit"
+		return "unknown_transient"
 	}
 }
 

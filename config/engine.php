@@ -116,6 +116,8 @@ return [
     'smtp_ai_suggestion_enabled' => (bool) env('SMTP_AI_SUGGESTION_ENABLED', false),
     'smtp_ai_unknown_rate_threshold' => (float) env('SMTP_AI_UNKNOWN_RATE_THRESHOLD', 0.20),
     'smtp_ai_min_samples' => (int) env('SMTP_AI_MIN_SAMPLES', 500),
+    'smtp_ai_min_truth_samples' => (int) env('SMTP_AI_MIN_TRUTH_SAMPLES', 50),
+    'smtp_ai_precision_floor' => (float) env('SMTP_AI_PRECISION_FLOOR', 0.85),
     'probe_preferred_pools' => env('PROBE_PREFERRED_POOLS', ''),
     'probe_provider_preferred_pools' => env('PROBE_PROVIDER_PREFERRED_POOLS', ''),
     'probe_routing_weights' => [

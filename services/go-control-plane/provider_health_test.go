@@ -179,6 +179,73 @@ func TestProviderQualityFromHealth(t *testing.T) {
 	}
 }
 
+func TestProviderQualityDriftFromHealth(t *testing.T) {
+	health := []ProviderHealthSummary{
+		{
+			Provider:          "gmail",
+			Mode:              "normal",
+			Status:            "critical",
+			TempfailRate:      0.60,
+			UnknownRate:       0.32,
+			PolicyBlockedRate: 0.06,
+			Workers:           2,
+		},
+	}
+
+	drift := providerQualityDriftFromHealth(health, providerHealthThresholds{
+		TempfailWarn:     0.30,
+		TempfailCritical: 0.55,
+		RejectWarn:       0.20,
+		RejectCritical:   0.40,
+		UnknownWarn:      0.20,
+		UnknownCritical:  0.35,
+	})
+	if len(drift) != 1 {
+		t.Fatalf("expected one drift record, got %d", len(drift))
+	}
+
+	record := drift[0]
+	if record.Provider != "gmail" {
+		t.Fatalf("expected gmail provider drift record, got %q", record.Provider)
+	}
+	if record.DriftRecommendation != "rollback_candidate" {
+		t.Fatalf("expected rollback_candidate recommendation, got %q", record.DriftRecommendation)
+	}
+	if record.UnknownDelta <= 0 {
+		t.Fatalf("expected positive unknown delta, got %.4f", record.UnknownDelta)
+	}
+}
+
+func TestProviderRetryEffectivenessFromHealth(t *testing.T) {
+	health := []ProviderHealthSummary{
+		{
+			Provider:      "yahoo",
+			Mode:          "cautious",
+			Status:        "warning",
+			TempfailRate:  0.25,
+			UnknownRate:   0.10,
+			AvgRetryAfter: 180,
+			Workers:       4,
+		},
+	}
+
+	effectiveness := providerRetryEffectivenessFromHealth(health)
+	if len(effectiveness) != 1 {
+		t.Fatalf("expected one retry-effectiveness record, got %d", len(effectiveness))
+	}
+
+	record := effectiveness[0]
+	if record.Provider != "yahoo" {
+		t.Fatalf("expected yahoo provider, got %q", record.Provider)
+	}
+	if record.TempfailRecoveryPct <= 0 {
+		t.Fatalf("expected positive tempfail recovery percent, got %.2f", record.TempfailRecoveryPct)
+	}
+	if record.AvgRetryAfter != 180 {
+		t.Fatalf("expected avg retry after 180, got %.2f", record.AvgRetryAfter)
+	}
+}
+
 func findProvider(items []ProviderHealthSummary, provider string) *ProviderHealthSummary {
 	for i := range items {
 		if items[i].Provider == provider {

@@ -20,6 +20,10 @@ type Result struct {
 	DecisionClass      string
 	ReasonCode         string
 	ReasonTag          string
+	MXHost             string
+	AttemptNumber      int
+	AttemptRoute       string
+	EvidenceStrength   string
 	SMTPCode           int
 	EnhancedCode       string
 	ProviderProfile    string

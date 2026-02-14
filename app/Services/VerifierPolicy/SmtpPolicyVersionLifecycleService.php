@@ -69,7 +69,7 @@ class SmtpPolicyVersionLifecycleService
     {
         $schemaVersion = strtolower(trim((string) ($payload['schema_version'] ?? '')));
 
-        return $schemaVersion === 'v3' ? 'v3' : 'v2';
+        return in_array($schemaVersion, ['v3', 'v4'], true) ? $schemaVersion : 'v2';
     }
 
     /**

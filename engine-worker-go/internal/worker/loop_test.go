@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"engine-worker-go/internal/api"
@@ -315,5 +316,34 @@ func TestReasonTagFromExtractsTagMetadata(t *testing.T) {
 
 	if tag := reasonTagFrom("smtp_tempfail"); tag != "" {
 		t.Fatalf("expected empty tag for base reason only, got %q", tag)
+	}
+}
+
+func TestReasonWithEvidenceIncludesAttemptMetadata(t *testing.T) {
+	t.Parallel()
+
+	reason := reasonWithEvidence(verifier.Result{
+		Reason:             "smtp_tempfail",
+		DecisionClass:      verifier.DecisionRetryable,
+		DecisionConfidence: "medium",
+		ReasonTag:          "greylist",
+		ProviderProfile:    "gmail",
+		MXHost:             "mx.gmail.test",
+		AttemptNumber:      2,
+		AttemptRoute:       "mx:mx.gmail.test",
+		EvidenceStrength:   "medium",
+	})
+
+	if !strings.Contains(reason, "mx=mx.gmail.test") {
+		t.Fatalf("expected reason metadata to include mx host, got %q", reason)
+	}
+	if !strings.Contains(reason, "attempt=2") {
+		t.Fatalf("expected reason metadata to include attempt number, got %q", reason)
+	}
+	if !strings.Contains(reason, "route=mx:mx.gmail.test") {
+		t.Fatalf("expected reason metadata to include attempt route, got %q", reason)
+	}
+	if !strings.Contains(reason, "evidence=medium") {
+		t.Fatalf("expected reason metadata to include evidence strength, got %q", reason)
 	}
 }
