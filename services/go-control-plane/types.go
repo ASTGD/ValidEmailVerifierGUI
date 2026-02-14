@@ -214,6 +214,40 @@ type ProviderQualityResponse struct {
 	Data []ProviderQualitySummary `json:"data"`
 }
 
+type ProviderQualityDriftSummary struct {
+	Provider            string  `json:"provider"`
+	Status              string  `json:"status"`
+	UnknownRate         float64 `json:"unknown_rate"`
+	UnknownBaseline     float64 `json:"unknown_baseline"`
+	UnknownDelta        float64 `json:"unknown_delta"`
+	TempfailRate        float64 `json:"tempfail_rate"`
+	TempfailBaseline    float64 `json:"tempfail_baseline"`
+	TempfailDelta       float64 `json:"tempfail_delta"`
+	PolicyBlockedRate   float64 `json:"policy_blocked_rate"`
+	Mode                string  `json:"mode"`
+	Workers             int     `json:"workers"`
+	DriftRecommendation string  `json:"drift_recommendation"`
+}
+
+type ProviderQualityDriftResponse struct {
+	Data []ProviderQualityDriftSummary `json:"data"`
+}
+
+type ProviderRetryEffectivenessSummary struct {
+	Provider            string  `json:"provider"`
+	Mode                string  `json:"mode"`
+	Status              string  `json:"status"`
+	TempfailRate        float64 `json:"tempfail_rate"`
+	TempfailRecoveryPct float64 `json:"tempfail_recovery_pct"`
+	RetryWastePct       float64 `json:"retry_waste_pct"`
+	AvgRetryAfter       float64 `json:"avg_retry_after"`
+	Workers             int     `json:"workers"`
+}
+
+type ProviderRetryEffectivenessResponse struct {
+	Data []ProviderRetryEffectivenessSummary `json:"data"`
+}
+
 type SMTPPolicyVersionRecord struct {
 	Version            string `json:"version"`
 	Status             string `json:"status"`

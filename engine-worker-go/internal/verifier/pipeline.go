@@ -163,6 +163,10 @@ func (p *PipelineVerifier) checkSMTP(ctx context.Context, domain, email string, 
 		if best.Category == "" || rankCategory(attemptResult.Category) > rankCategory(best.Category) {
 			best = attemptResult
 		}
+
+		if !shouldAttemptNextMX(attemptResult) {
+			return attemptResult
+		}
 	}
 
 	if best.Category == "" {
@@ -185,6 +189,7 @@ func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host, emai
 
 	for attempt := 0; attempt <= retries; attempt++ {
 		result := p.smtpChecker.Check(ctx, host, email)
+		result = applyAttemptEvidence(result, host, attempt+1)
 
 		if result.Category == CategoryValid {
 			return result
@@ -204,6 +209,54 @@ func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host, emai
 	}
 
 	return last
+}
+
+func shouldAttemptNextMX(result Result) bool {
+	switch result.DecisionClass {
+	case DecisionRetryable, DecisionUnknown:
+		return true
+	}
+
+	switch strings.TrimSpace(result.Reason) {
+	case "smtp_timeout", "smtp_connect_timeout", "smtp_tempfail":
+		return true
+	default:
+		return false
+	}
+}
+
+func applyAttemptEvidence(result Result, mxHost string, attemptNumber int) Result {
+	mxHost = strings.TrimSpace(mxHost)
+	if mxHost != "" && strings.TrimSpace(result.MXHost) == "" {
+		result.MXHost = mxHost
+	}
+	if attemptNumber > 0 && result.AttemptNumber <= 0 {
+		result.AttemptNumber = attemptNumber
+	}
+	if strings.TrimSpace(result.AttemptRoute) == "" && mxHost != "" {
+		result.AttemptRoute = "mx:" + mxHost
+	}
+	if strings.TrimSpace(result.EvidenceStrength) == "" {
+		result.EvidenceStrength = normalizedEvidenceStrength(result.DecisionConfidence)
+	}
+
+	if result.Evidence == nil {
+		result.Evidence = &ReplyEvidence{}
+	}
+	if strings.TrimSpace(result.Evidence.MXHost) == "" {
+		result.Evidence.MXHost = result.MXHost
+	}
+	if result.Evidence.AttemptNumber <= 0 {
+		result.Evidence.AttemptNumber = result.AttemptNumber
+	}
+	if strings.TrimSpace(result.Evidence.AttemptRoute) == "" {
+		result.Evidence.AttemptRoute = result.AttemptRoute
+	}
+	if strings.TrimSpace(result.Evidence.EvidenceStrength) == "" {
+		result.Evidence.EvidenceStrength = result.EvidenceStrength
+	}
+
+	return result
 }
 
 type parsedEmail struct {

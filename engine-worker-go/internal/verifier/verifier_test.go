@@ -24,9 +24,14 @@ func (f *fakeResolver) LookupMX(ctx context.Context, domain string) ([]*net.MX, 
 
 type fakeSMTP struct {
 	results map[string]Result
+	calls   map[string]int
 }
 
 func (f *fakeSMTP) Check(ctx context.Context, host, email string) Result {
+	if f.calls == nil {
+		f.calls = map[string]int{}
+	}
+	f.calls[host]++
 	if result, ok := f.results[host]; ok {
 		return result
 	}
@@ -129,6 +134,12 @@ func TestPipelineSMTPFallbackToSecondMX(t *testing.T) {
 	if res.Category != CategoryValid {
 		t.Fatalf("expected valid via second MX, got %s/%s", res.Category, res.Reason)
 	}
+	if smtp.calls["mx1.multi.local"] != 1 {
+		t.Fatalf("expected first MX to be checked once, got %d", smtp.calls["mx1.multi.local"])
+	}
+	if smtp.calls["mx2.multi.local"] != 1 {
+		t.Fatalf("expected second MX to be checked once, got %d", smtp.calls["mx2.multi.local"])
+	}
 }
 
 func TestPipelineMaxAttemptsStopsEarly(t *testing.T) {
@@ -146,6 +157,77 @@ func TestPipelineMaxAttemptsStopsEarly(t *testing.T) {
 	res := v.Verify(context.Background(), "user@limit.local")
 	if res.Category != CategoryRisky || res.Reason != "smtp_timeout" {
 		t.Fatalf("expected risky after first MX, got %s/%s", res.Category, res.Reason)
+	}
+	if smtp.calls["mx2.limit.local"] != 0 {
+		t.Fatalf("expected second MX to be skipped when max attempts is one, got %d calls", smtp.calls["mx2.limit.local"])
+	}
+}
+
+func TestPipelineStopsAfterUndeliverableWithoutSecondMXFallback(t *testing.T) {
+	resolver := &fakeResolver{records: map[string][]*net.MX{
+		"terminal.local": {
+			{Host: "mx1.terminal.local", Pref: 10},
+			{Host: "mx2.terminal.local", Pref: 20},
+		},
+	}}
+	smtp := &fakeSMTP{results: map[string]Result{
+		"mx1.terminal.local": {
+			Category:      CategoryInvalid,
+			Reason:        "rcpt_rejected",
+			DecisionClass: DecisionUndeliverable,
+		},
+		"mx2.terminal.local": {
+			Category:      CategoryValid,
+			Reason:        "smtp_connect_ok",
+			DecisionClass: DecisionDeliverable,
+		},
+	}}
+
+	v := newVerifier(resolver, smtp, 2)
+	res := v.Verify(context.Background(), "user@terminal.local")
+	if res.Category != CategoryInvalid {
+		t.Fatalf("expected first terminal undeliverable result to stop fallback, got %s/%s", res.Category, res.Reason)
+	}
+	if smtp.calls["mx2.terminal.local"] != 0 {
+		t.Fatalf("expected second MX to be skipped after terminal undeliverable, got %d calls", smtp.calls["mx2.terminal.local"])
+	}
+}
+
+func TestPipelineAddsAttemptEvidenceMetadata(t *testing.T) {
+	resolver := &fakeResolver{records: map[string][]*net.MX{
+		"evidence.local": {{Host: "mx.evidence.local", Pref: 10}},
+	}}
+	smtp := &fakeSMTP{results: map[string]Result{
+		"mx.evidence.local": {
+			Category:           CategoryRisky,
+			Reason:             "smtp_tempfail",
+			DecisionClass:      DecisionRetryable,
+			DecisionConfidence: "medium",
+		},
+	}}
+
+	v := newVerifier(resolver, smtp, 1)
+	res := v.Verify(context.Background(), "user@evidence.local")
+	if res.MXHost != "mx.evidence.local" {
+		t.Fatalf("expected mx host metadata, got %q", res.MXHost)
+	}
+	if res.AttemptNumber != 1 {
+		t.Fatalf("expected attempt number 1, got %d", res.AttemptNumber)
+	}
+	if res.AttemptRoute != "mx:mx.evidence.local" {
+		t.Fatalf("expected attempt route metadata, got %q", res.AttemptRoute)
+	}
+	if res.EvidenceStrength != "medium" {
+		t.Fatalf("expected evidence strength medium, got %q", res.EvidenceStrength)
+	}
+	if res.Evidence == nil {
+		t.Fatal("expected evidence payload to be initialized")
+	}
+	if res.Evidence.MXHost != "mx.evidence.local" {
+		t.Fatalf("expected evidence mx host metadata, got %q", res.Evidence.MXHost)
+	}
+	if res.Evidence.AttemptNumber != 1 {
+		t.Fatalf("expected evidence attempt number 1, got %d", res.Evidence.AttemptNumber)
 	}
 }
 

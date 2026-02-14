@@ -213,6 +213,30 @@ func (s *Server) handleProvidersQuality(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, ProviderQualityResponse{Data: providerQualityFromHealth(stats.ProviderHealth)})
 }
 
+func (s *Server) handleProvidersQualityDrift(w http.ResponseWriter, r *http.Request) {
+	stats, err := s.collectControlPlaneStats(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, ProviderQualityDriftResponse{
+		Data: providerQualityDriftFromHealth(stats.ProviderHealth, thresholdsFromConfig(s.cfg)),
+	})
+}
+
+func (s *Server) handleProvidersRetryEffectiveness(w http.ResponseWriter, r *http.Request) {
+	stats, err := s.collectControlPlaneStats(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, ProviderRetryEffectivenessResponse{
+		Data: providerRetryEffectivenessFromHealth(stats.ProviderHealth),
+	})
+}
+
 func (s *Server) handleProviderMode(w http.ResponseWriter, r *http.Request) {
 	provider := chi.URLParam(r, "provider")
 	if provider == "" {
@@ -256,6 +280,18 @@ func (s *Server) handleProviderModeSemantics(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) handleProviderRoutingQuality(w http.ResponseWriter, r *http.Request) {
+	stats, err := s.collectControlPlaneStats(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": stats.RoutingQuality,
+	})
+}
+
+func (s *Server) handleProbeRoutingEffectiveness(w http.ResponseWriter, r *http.Request) {
 	stats, err := s.collectControlPlaneStats(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -457,4 +493,76 @@ func providerQualityFromHealth(health []ProviderHealthSummary) []ProviderQuality
 	}
 
 	return quality
+}
+
+func providerRetryEffectivenessFromHealth(health []ProviderHealthSummary) []ProviderRetryEffectivenessSummary {
+	effectiveness := make([]ProviderRetryEffectivenessSummary, 0, len(health))
+
+	for _, provider := range health {
+		tempfailRecovery := 1.0 - provider.UnknownRate
+		if tempfailRecovery < 0 {
+			tempfailRecovery = 0
+		}
+		if tempfailRecovery > 1 {
+			tempfailRecovery = 1
+		}
+
+		retryWaste := provider.UnknownRate
+		if retryWaste < 0 {
+			retryWaste = 0
+		}
+		if retryWaste > 1 {
+			retryWaste = 1
+		}
+
+		effectiveness = append(effectiveness, ProviderRetryEffectivenessSummary{
+			Provider:            provider.Provider,
+			Mode:                provider.Mode,
+			Status:              provider.Status,
+			TempfailRate:        provider.TempfailRate,
+			TempfailRecoveryPct: tempfailRecovery * 100,
+			RetryWastePct:       retryWaste * 100,
+			AvgRetryAfter:       provider.AvgRetryAfter,
+			Workers:             provider.Workers,
+		})
+	}
+
+	return effectiveness
+}
+
+func providerQualityDriftFromHealth(
+	health []ProviderHealthSummary,
+	thresholds providerHealthThresholds,
+) []ProviderQualityDriftSummary {
+	drift := make([]ProviderQualityDriftSummary, 0, len(health))
+
+	for _, provider := range health {
+		unknownDelta := provider.UnknownRate - thresholds.UnknownWarn
+		tempfailDelta := provider.TempfailRate - thresholds.TempfailWarn
+		recommendation := "stable"
+
+		if provider.Status == "warning" || provider.Status == "critical" {
+			recommendation = "set_cautious"
+		}
+		if provider.Status == "critical" {
+			recommendation = "rollback_candidate"
+		}
+
+		drift = append(drift, ProviderQualityDriftSummary{
+			Provider:            provider.Provider,
+			Status:              provider.Status,
+			UnknownRate:         provider.UnknownRate,
+			UnknownBaseline:     thresholds.UnknownWarn,
+			UnknownDelta:        unknownDelta,
+			TempfailRate:        provider.TempfailRate,
+			TempfailBaseline:    thresholds.TempfailWarn,
+			TempfailDelta:       tempfailDelta,
+			PolicyBlockedRate:   provider.PolicyBlockedRate,
+			Mode:                provider.Mode,
+			Workers:             provider.Workers,
+			DriftRecommendation: recommendation,
+		})
+	}
+
+	return drift
 }

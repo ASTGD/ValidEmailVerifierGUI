@@ -27,6 +27,16 @@ var requiredRetryFields = []string{
 	"unknown_seconds",
 }
 
+var allowedRuleTags = map[string]struct{}{
+	"greylist":          {},
+	"rate_limit":        {},
+	"mailbox_full":      {},
+	"policy_blocked":    {},
+	"mailbox_not_found": {},
+	"auth_required":     {},
+	"unknown_transient": {},
+}
+
 type PolicyPayloadValidation struct {
 	Version       string
 	Checksum      string
@@ -168,8 +178,8 @@ func validatePolicyPayloadSchema(version string, payload json.RawMessage) (strin
 	if value, ok := root["schema_version"].(string); ok && strings.TrimSpace(value) != "" {
 		schemaVersion = strings.ToLower(strings.TrimSpace(value))
 	}
-	if schemaVersion != "v2" && schemaVersion != "v3" {
-		return "", fmt.Errorf("policy payload schema_version must be v2 or v3")
+	if schemaVersion != "v2" && schemaVersion != "v3" && schemaVersion != "v4" {
+		return "", fmt.Errorf("policy payload schema_version must be v2, v3, or v4")
 	}
 
 	profiles, ok := root["profiles"].(map[string]any)
@@ -195,10 +205,10 @@ func validatePolicyPayloadSchema(version string, payload json.RawMessage) (strin
 		}
 	}
 
-	if schemaVersion == "v3" {
+	if schemaVersion == "v3" || schemaVersion == "v4" {
 		session, ok := genericProfile["session"].(map[string]any)
 		if !ok {
-			return "", fmt.Errorf("policy payload missing required profiles.generic.session block")
+			return "", fmt.Errorf("policy payload missing required profiles.generic.session block for %s", schemaVersion)
 		}
 		for _, key := range []string{
 			"max_concurrency",
@@ -214,7 +224,7 @@ func validatePolicyPayloadSchema(version string, payload json.RawMessage) (strin
 
 		modes, ok := root["modes"].(map[string]any)
 		if !ok {
-			return "", fmt.Errorf("policy payload missing required modes object for v3")
+			return "", fmt.Errorf("policy payload missing required modes object for %s", schemaVersion)
 		}
 		requiredModes := []string{"normal", "cautious", "drain", "quarantine", "degraded_probe"}
 		for _, mode := range requiredModes {
@@ -229,6 +239,47 @@ func validatePolicyPayloadSchema(version string, payload json.RawMessage) (strin
 			} {
 				if _, exists := modeConfig[field]; !exists {
 					return "", fmt.Errorf("policy payload missing required modes.%s.%s field", mode, field)
+				}
+			}
+		}
+
+		for profileName, profileValue := range profiles {
+			profileMap, ok := profileValue.(map[string]any)
+			if !ok {
+				continue
+			}
+			for _, collection := range []string{"enhanced_rules", "smtp_code_rules", "message_rules"} {
+				rules, ok := profileMap[collection].([]any)
+				if !ok {
+					continue
+				}
+				for index, ruleValue := range rules {
+					rule, ok := ruleValue.(map[string]any)
+					if !ok {
+						continue
+					}
+					for _, field := range []string{"rule_tag", "confidence_hint", "provider_scope"} {
+						value, exists := rule[field]
+						if !exists || strings.TrimSpace(fmt.Sprintf("%v", value)) == "" {
+							return "", fmt.Errorf(
+								"policy payload missing required profiles.%s.%s.%d.%s field",
+								profileName,
+								collection,
+								index,
+								field,
+							)
+						}
+					}
+					ruleTag := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", rule["rule_tag"])))
+					if _, ok := allowedRuleTags[ruleTag]; !ok {
+						return "", fmt.Errorf(
+							"policy payload profiles.%s.%s.%d.rule_tag has unsupported value %q",
+							profileName,
+							collection,
+							index,
+							ruleTag,
+						)
+					}
 				}
 			}
 		}

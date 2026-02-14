@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\SmtpConfidenceCalibration;
 use App\Models\SmtpPolicyActionAudit;
 use App\Models\SmtpPolicySuggestion;
 use App\Models\SmtpProbeQualityRollup;
@@ -29,6 +30,8 @@ class GenerateSmtpPolicySuggestionsCommand extends Command
         $providerFilter = strtolower(trim((string) $this->option('provider')));
         $minSamples = max(1, (int) config('engine.smtp_ai_min_samples', 500));
         $unknownThreshold = max(0.01, (float) config('engine.smtp_ai_unknown_rate_threshold', 0.20));
+        $minTruthSamples = max(1, (int) config('engine.smtp_ai_min_truth_samples', 50));
+        $precisionFloor = max(0.01, min(1.0, (float) config('engine.smtp_ai_precision_floor', 0.85)));
 
         $query = SmtpProbeQualityRollup::query()
             ->whereDate('rollup_date', '>=', now()->subDays($windowDays)->toDateString());
@@ -72,13 +75,20 @@ class GenerateSmtpPolicySuggestionsCommand extends Command
             $tempfailRate = $sampleCount > 0 ? $tempfailCount / $sampleCount : 0.0;
             $policyBlockedRate = $sampleCount > 0 ? $policyBlockedCount / $sampleCount : 0.0;
 
-            if ($unknownRate < $unknownThreshold) {
+            $truthSummary = $this->latestTruthCalibration($provider);
+            $hasPrecisionRegression = $truthSummary['sample_count'] >= $minTruthSamples
+                && $truthSummary['precision_rate'] > 0
+                && $truthSummary['precision_rate'] < $precisionFloor;
+            $hasUnknownRegression = $unknownRate >= $unknownThreshold;
+
+            if (! $hasUnknownRegression && ! $hasPrecisionRegression) {
                 continue;
             }
 
+            $suggestionType = $hasUnknownRegression ? 'unknown_rate_regression' : 'confidence_regression';
             $suggestionPayload = [
                 'provider' => $provider,
-                'reason' => 'unknown_rate_regression',
+                'reason' => $suggestionType,
                 'recommended_actions' => [
                     'set_provider_mode' => 'cautious',
                     'increase_tempfail_backoff_percent' => 15,
@@ -87,8 +97,14 @@ class GenerateSmtpPolicySuggestionsCommand extends Command
                 'target_thresholds' => [
                     'unknown_rate' => $unknownThreshold,
                     'min_samples' => $minSamples,
+                    'precision_floor' => $precisionFloor,
+                    'min_truth_samples' => $minTruthSamples,
                 ],
             ];
+            if ($hasPrecisionRegression) {
+                $suggestionPayload['recommended_actions']['review_confidence_calibration'] = true;
+                $suggestionPayload['recommended_actions']['tighten_deliverable_rules'] = true;
+            }
 
             $supportingMetrics = [
                 'sample_count' => $sampleCount,
@@ -99,6 +115,10 @@ class GenerateSmtpPolicySuggestionsCommand extends Command
                 'tempfail_rate' => round($tempfailRate, 6),
                 'policy_blocked_rate' => round($policyBlockedRate, 6),
                 'window_days' => $windowDays,
+                'truth_sample_count' => $truthSummary['sample_count'],
+                'truth_precision_rate' => $truthSummary['precision_rate'],
+                'truth_match_count' => $truthSummary['match_count'],
+                'truth_unknown_count' => $truthSummary['unknown_count'],
             ];
 
             if ($this->option('dry-run')) {
@@ -115,7 +135,7 @@ class GenerateSmtpPolicySuggestionsCommand extends Command
             $suggestion = SmtpPolicySuggestion::query()->create([
                 'provider' => $provider,
                 'status' => 'draft',
-                'suggestion_type' => 'unknown_rate_regression',
+                'suggestion_type' => $suggestionType,
                 'source_window' => sprintf('%dd', $windowDays),
                 'suggestion_payload' => $suggestionPayload,
                 'supporting_metrics' => $supportingMetrics,
@@ -172,5 +192,33 @@ class GenerateSmtpPolicySuggestionsCommand extends Command
         $this->info(sprintf('Generated %d SMTP policy suggestion draft(s).', $generated));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * @return array{sample_count:int,match_count:int,unknown_count:int,precision_rate:float}
+     */
+    private function latestTruthCalibration(string $provider): array
+    {
+        $row = SmtpConfidenceCalibration::query()
+            ->where('provider', $provider)
+            ->latest('rollup_date')
+            ->latest('updated_at')
+            ->first();
+
+        if (! $row) {
+            return [
+                'sample_count' => 0,
+                'match_count' => 0,
+                'unknown_count' => 0,
+                'precision_rate' => 0.0,
+            ];
+        }
+
+        return [
+            'sample_count' => (int) $row->sample_count,
+            'match_count' => (int) $row->match_count,
+            'unknown_count' => (int) $row->unknown_count,
+            'precision_rate' => (float) $row->precision_rate,
+        ];
     }
 }

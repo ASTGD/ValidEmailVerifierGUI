@@ -374,6 +374,7 @@ func smtpResult(category, reason, reasonCode, reasonTag, decisionClass string, r
 	if strings.TrimSpace(reasonTag) == "" && strings.TrimSpace(decisionClass) != DecisionDeliverable {
 		reasonTag = inferRuleTag(reasonCode, decisionClass)
 	}
+	confidence := normalizedEvidenceStrength(decisionConfidenceFor(decisionClass, category, reply))
 	result := Result{
 		Category:           category,
 		Reason:             reason,
@@ -384,16 +385,18 @@ func smtpResult(category, reason, reasonCode, reasonTag, decisionClass string, r
 		EnhancedCode:       reply.EnhancedCode,
 		ProviderProfile:    profile,
 		RetryAfterSecond:   retryAfter,
-		DecisionConfidence: decisionConfidenceFor(decisionClass, category, reply),
+		DecisionConfidence: confidence,
+		EvidenceStrength:   confidence,
 		RetryStrategy:      retryStrategyForDecision(decisionClass, reasonCode, reply),
 		Evidence: &ReplyEvidence{
-			ReasonCode:      reasonCode,
-			ReasonTag:       reasonTag,
-			SMTPCode:        reply.Code,
-			EnhancedCode:    reply.EnhancedCode,
-			ProviderProfile: profile,
-			DecisionClass:   decisionClass,
-			ConfidenceHint:  decisionConfidenceFor(decisionClass, category, reply),
+			ReasonCode:       reasonCode,
+			ReasonTag:        reasonTag,
+			EvidenceStrength: confidence,
+			SMTPCode:         reply.Code,
+			EnhancedCode:     reply.EnhancedCode,
+			ProviderProfile:  profile,
+			DecisionClass:    decisionClass,
+			ConfidenceHint:   confidence,
 		},
 	}
 
@@ -450,8 +453,10 @@ func withConfidenceHint(value string) func(*Result) {
 		}
 
 		result.DecisionConfidence = value
+		result.EvidenceStrength = value
 		if result.Evidence != nil {
 			result.Evidence.ConfidenceHint = value
+			result.Evidence.EvidenceStrength = value
 		}
 	}
 }
@@ -500,6 +505,16 @@ func decisionConfidenceFor(decisionClass string, category string, reply smtpRepl
 		if category == CategoryValid || category == CategoryInvalid {
 			return "medium"
 		}
+		return "low"
+	}
+}
+
+func normalizedEvidenceStrength(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "low", "medium", "high":
+		return value
+	default:
 		return "low"
 	}
 }

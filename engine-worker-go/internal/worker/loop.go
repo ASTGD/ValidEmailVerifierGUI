@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -614,6 +615,18 @@ func reasonWithEvidence(result verifier.Result) string {
 	}
 	if provider := strings.TrimSpace(result.ProviderProfile); provider != "" {
 		segments = append(segments, "provider="+provider)
+	}
+	if mxHost := strings.TrimSpace(result.MXHost); mxHost != "" {
+		segments = append(segments, "mx="+mxHost)
+	}
+	if result.AttemptNumber > 0 {
+		segments = append(segments, "attempt="+strconv.Itoa(result.AttemptNumber))
+	}
+	if route := strings.TrimSpace(result.AttemptRoute); route != "" {
+		segments = append(segments, "route="+route)
+	}
+	if evidenceStrength := strings.TrimSpace(result.EvidenceStrength); evidenceStrength != "" {
+		segments = append(segments, "evidence="+evidenceStrength)
 	}
 
 	if len(segments) == 0 {
