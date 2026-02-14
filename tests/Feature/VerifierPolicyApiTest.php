@@ -91,6 +91,7 @@ class VerifierPolicyApiTest extends TestCase
 
         SmtpPolicyVersion::query()->create([
             'version' => 'v2.9.0',
+            'schema_version' => 'v2',
             'status' => 'active',
             'is_active' => true,
             'validation_status' => 'valid',
@@ -120,6 +121,7 @@ class VerifierPolicyApiTest extends TestCase
             ->assertJsonPath('data.version', 'v2.9.0')
             ->assertJsonPath('data.is_active', true)
             ->assertJsonPath('data.validation_status', 'valid')
+            ->assertJsonPath('data.schema_version', 'v2')
             ->assertJsonPath('data.policy_payload.version', 'v2.9.0');
     }
 

@@ -106,6 +106,7 @@ func classifySMTPSessionReply(
 			CategoryRisky,
 			"smtp_tempfail",
 			"smtp_tempfail",
+			"",
 			DecisionRetryable,
 			reply,
 			profile,
@@ -123,6 +124,7 @@ func classifySMTPSessionReply(
 				CategoryRisky,
 				"smtp_tempfail",
 				"smtp_policy_blocked",
+				"policy_blocked",
 				DecisionPolicyBlocked,
 				reply,
 				profile,
@@ -135,6 +137,7 @@ func classifySMTPSessionReply(
 				CategoryRisky,
 				"smtp_tempfail",
 				"smtp_mailfrom_rejected",
+				"smtp_tempfail",
 				DecisionRetryable,
 				reply,
 				profile,
@@ -152,6 +155,7 @@ func classifySMTPSessionReply(
 			CategoryInvalid,
 			"smtp_unavailable",
 			"smtp_unavailable",
+			"mailbox_not_found",
 			DecisionUndeliverable,
 			reply,
 			profile,
@@ -162,6 +166,7 @@ func classifySMTPSessionReply(
 			CategoryRisky,
 			"smtp_tempfail",
 			"smtp_unknown",
+			"",
 			DecisionUnknown,
 			reply,
 			profile,
@@ -191,6 +196,7 @@ func classifySMTPRcptReply(
 				CategoryRisky,
 				"catch_all",
 				"catch_all",
+				"rate_limit",
 				DecisionUnknown,
 				reply,
 				profile,
@@ -207,6 +213,7 @@ func classifySMTPRcptReply(
 				CategoryValid,
 				"rcpt_ok",
 				"rcpt_ok",
+				"",
 				DecisionDeliverable,
 				reply,
 				profile,
@@ -217,6 +224,7 @@ func classifySMTPRcptReply(
 			CategoryRisky,
 			"catch_all",
 			"catch_all",
+			"rate_limit",
 			DecisionUnknown,
 			reply,
 			profile,
@@ -227,6 +235,7 @@ func classifySMTPRcptReply(
 			CategoryRisky,
 			"smtp_tempfail",
 			"smtp_tempfail",
+			"",
 			DecisionRetryable,
 			reply,
 			profile,
@@ -244,6 +253,7 @@ func classifySMTPRcptReply(
 				CategoryRisky,
 				"smtp_tempfail",
 				"smtp_policy_blocked",
+				"policy_blocked",
 				DecisionPolicyBlocked,
 				reply,
 				profile,
@@ -256,6 +266,7 @@ func classifySMTPRcptReply(
 				CategoryInvalid,
 				"rcpt_rejected",
 				"mailbox_not_found",
+				"mailbox_not_found",
 				DecisionUndeliverable,
 				reply,
 				profile,
@@ -267,6 +278,7 @@ func classifySMTPRcptReply(
 			CategoryInvalid,
 			"rcpt_rejected",
 			"rcpt_rejected",
+			"mailbox_not_found",
 			DecisionUndeliverable,
 			reply,
 			profile,
@@ -277,6 +289,7 @@ func classifySMTPRcptReply(
 			CategoryRisky,
 			"smtp_tempfail",
 			"smtp_unknown",
+			"",
 			DecisionUnknown,
 			reply,
 			profile,
@@ -347,19 +360,25 @@ func classifySMTPWithPolicyEngine(
 		category,
 		reason,
 		reasonCode,
+		strings.TrimSpace(rule.RuleTag),
 		decisionClass,
 		reply,
 		profile,
 		retryAfter,
 		withPolicyContext(engine, rule),
+		withConfidenceHint(strings.TrimSpace(rule.ConfidenceHint)),
 	), true
 }
 
-func smtpResult(category, reason, reasonCode, decisionClass string, reply smtpReply, profile string, retryAfter int, options ...func(*Result)) Result {
+func smtpResult(category, reason, reasonCode, reasonTag, decisionClass string, reply smtpReply, profile string, retryAfter int, options ...func(*Result)) Result {
+	if strings.TrimSpace(reasonTag) == "" && strings.TrimSpace(decisionClass) != DecisionDeliverable {
+		reasonTag = inferRuleTag(reasonCode, decisionClass)
+	}
 	result := Result{
 		Category:           category,
 		Reason:             reason,
 		ReasonCode:         reasonCode,
+		ReasonTag:          reasonTag,
 		DecisionClass:      decisionClass,
 		SMTPCode:           reply.Code,
 		EnhancedCode:       reply.EnhancedCode,
@@ -369,10 +388,12 @@ func smtpResult(category, reason, reasonCode, decisionClass string, reply smtpRe
 		RetryStrategy:      retryStrategyForDecision(decisionClass, reasonCode, reply),
 		Evidence: &ReplyEvidence{
 			ReasonCode:      reasonCode,
+			ReasonTag:       reasonTag,
 			SMTPCode:        reply.Code,
 			EnhancedCode:    reply.EnhancedCode,
 			ProviderProfile: profile,
 			DecisionClass:   decisionClass,
+			ConfidenceHint:  decisionConfidenceFor(decisionClass, category, reply),
 		},
 	}
 
@@ -405,6 +426,33 @@ func withPolicyContext(engine *ProviderReplyPolicyEngine, rule ProviderReplyRule
 			ruleID = strings.TrimSpace(rule.DecisionClass)
 		}
 		result.MatchedRuleID = ruleID
+		if strings.TrimSpace(rule.RuleTag) != "" {
+			result.ReasonTag = strings.TrimSpace(rule.RuleTag)
+			if result.Evidence != nil {
+				result.Evidence.ReasonTag = result.ReasonTag
+			}
+		}
+	}
+}
+
+func withConfidenceHint(value string) func(*Result) {
+	return func(result *Result) {
+		if result == nil {
+			return
+		}
+
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value == "" {
+			return
+		}
+		if value != "low" && value != "medium" && value != "high" {
+			return
+		}
+
+		result.DecisionConfidence = value
+		if result.Evidence != nil {
+			result.Evidence.ConfidenceHint = value
+		}
 	}
 }
 

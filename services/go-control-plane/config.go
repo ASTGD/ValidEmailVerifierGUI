@@ -62,6 +62,7 @@ type Config struct {
 	PolicyCanaryUnknownRegressionThreshold    float64
 	PolicyCanaryTempfailRecoveryDropThreshold float64
 	PolicyCanaryPolicyBlockSpikeThreshold     float64
+	PolicyCanaryMinProviderWorkers            int
 }
 
 func LoadConfig() (Config, error) {
@@ -375,6 +376,10 @@ func LoadConfig() (Config, error) {
 	cfg.PolicyCanaryPolicyBlockSpikeThreshold = envFloat("POLICY_CANARY_POLICY_BLOCK_SPIKE_THRESHOLD", 0.10)
 	if cfg.PolicyCanaryPolicyBlockSpikeThreshold < 0 {
 		cfg.PolicyCanaryPolicyBlockSpikeThreshold = 0.10
+	}
+	cfg.PolicyCanaryMinProviderWorkers = envInt("POLICY_CANARY_MIN_PROVIDER_WORKERS", 1)
+	if cfg.PolicyCanaryMinProviderWorkers < 1 {
+		cfg.PolicyCanaryMinProviderWorkers = 1
 	}
 
 	if value := os.Getenv("SMTP_PORT"); value != "" {

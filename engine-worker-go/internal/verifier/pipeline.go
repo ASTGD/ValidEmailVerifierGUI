@@ -130,7 +130,7 @@ func (p *PipelineVerifier) lookupMX(ctx context.Context, domain string) ([]*net.
 			return nil, classifyDNSError(err)
 		}
 
-		backoffSleep(ctx, p.config.BackoffBaseMs, attempt, 0)
+		backoffSleep(ctx, p.config.BackoffBaseMs, attempt, 0, p.config.RetryJitterPercent)
 	}
 
 	if lastErr != nil {
@@ -196,7 +196,7 @@ func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host, emai
 			return result
 		}
 
-		backoffSleep(ctx, p.config.BackoffBaseMs, attempt, result.RetryAfterSecond)
+		backoffSleep(ctx, p.config.BackoffBaseMs, attempt, result.RetryAfterSecond, p.config.RetryJitterPercent)
 	}
 
 	if last.Category == "" {
@@ -294,7 +294,7 @@ func isRetryableSMTPResult(result Result) bool {
 	}
 }
 
-func backoffSleep(ctx context.Context, baseMs int, attempt int, retryAfterSeconds int) {
+func backoffSleep(ctx context.Context, baseMs int, attempt int, retryAfterSeconds int, jitterPercent int) {
 	if baseMs <= 0 {
 		baseMs = 200
 	}
@@ -304,6 +304,19 @@ func backoffSleep(ctx context.Context, baseMs int, attempt int, retryAfterSecond
 		retryDelay := time.Duration(retryAfterSeconds) * time.Second
 		if retryDelay > delay {
 			delay = retryDelay
+		}
+	}
+	if jitterPercent > 0 {
+		if jitterPercent > 50 {
+			jitterPercent = 50
+		}
+		jitterWindow := int64(delay) * int64(jitterPercent) / 100
+		if jitterWindow > 0 {
+			shift := time.Duration((time.Now().UnixNano()%(jitterWindow*2+1))-jitterWindow) * time.Nanosecond
+			delay += shift
+			if delay < 0 {
+				delay = 0
+			}
 		}
 	}
 	timer := time.NewTimer(delay)

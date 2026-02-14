@@ -8,6 +8,7 @@ class SmtpPolicyVersion extends Model
 {
     protected $fillable = [
         'version',
+        'schema_version',
         'status',
         'validation_status',
         'validation_errors',
@@ -15,6 +16,7 @@ class SmtpPolicyVersion extends Model
         'validated_by',
         'is_active',
         'policy_payload',
+        'mode_semantics_hash',
         'created_by',
         'promoted_at',
     ];

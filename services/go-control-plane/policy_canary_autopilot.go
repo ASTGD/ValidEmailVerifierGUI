@@ -22,18 +22,25 @@ type PolicyCanaryAutopilotService struct {
 }
 
 type policyCanaryAutopilotState struct {
-	Version                 string  `json:"version"`
-	HealthyWindows          int     `json:"healthy_windows"`
-	BaselineUnknownRate     float64 `json:"baseline_unknown_rate"`
-	BaselineTempfailRecover float64 `json:"baseline_tempfail_recover"`
-	BaselinePolicyBlockRate float64 `json:"baseline_policy_block_rate"`
-	LastEvaluatedAt         string  `json:"last_evaluated_at,omitempty"`
+	Version                 string                     `json:"version"`
+	HealthyWindows          int                        `json:"healthy_windows"`
+	BaselineUnknownRate     float64                    `json:"baseline_unknown_rate"`
+	BaselineTempfailRecover float64                    `json:"baseline_tempfail_recover"`
+	BaselinePolicyBlockRate float64                    `json:"baseline_policy_block_rate"`
+	ProviderBaselines       map[string]policyCanaryKPI `json:"provider_baselines,omitempty"`
+	LastEvaluatedAt         string                     `json:"last_evaluated_at,omitempty"`
 }
 
 type policyCanaryKPI struct {
 	UnknownRate      float64
 	TempfailRecovery float64
 	PolicyBlockRate  float64
+	Workers          int
+}
+
+type policyCanarySnapshot struct {
+	Aggregate policyCanaryKPI
+	Providers map[string]policyCanaryKPI
 }
 
 func NewPolicyCanaryAutopilotService(store *Store, cfg Config, instanceID string) *PolicyCanaryAutopilotService {
@@ -117,7 +124,7 @@ func (s *PolicyCanaryAutopilotService) run() {
 		return
 	}
 
-	kpi, err := s.collectKPI(ctx, modes)
+	snapshot, err := s.collectKPI(ctx, modes)
 	if err != nil {
 		log.Printf("policy-autopilot: failed to collect kpi: %v", err)
 		return
@@ -132,25 +139,59 @@ func (s *PolicyCanaryAutopilotService) run() {
 		state = policyCanaryAutopilotState{
 			Version:                 activeVersion,
 			HealthyWindows:          0,
-			BaselineUnknownRate:     kpi.UnknownRate,
-			BaselineTempfailRecover: kpi.TempfailRecovery,
-			BaselinePolicyBlockRate: kpi.PolicyBlockRate,
+			BaselineUnknownRate:     snapshot.Aggregate.UnknownRate,
+			BaselineTempfailRecover: snapshot.Aggregate.TempfailRecovery,
+			BaselinePolicyBlockRate: snapshot.Aggregate.PolicyBlockRate,
+			ProviderBaselines:       snapshot.Providers,
 		}
 	}
 
 	rollbackReason := evaluatePolicyCanaryRollback(
 		state,
-		kpi,
+		snapshot.Aggregate,
 		s.cfg.PolicyCanaryUnknownRegressionThreshold,
 		s.cfg.PolicyCanaryTempfailRecoveryDropThreshold,
 		s.cfg.PolicyCanaryPolicyBlockSpikeThreshold,
 	)
+	provider, providerRollbackReason := evaluateProviderPolicyCanaryRollback(
+		state.ProviderBaselines,
+		snapshot.Providers,
+		s.cfg.PolicyCanaryUnknownRegressionThreshold,
+		s.cfg.PolicyCanaryTempfailRecoveryDropThreshold,
+		s.cfg.PolicyCanaryPolicyBlockSpikeThreshold,
+		s.cfg.PolicyCanaryMinProviderWorkers,
+	)
+	if providerRollbackReason != "" {
+		currentMode := "normal"
+		if override, ok := modes[provider]; ok {
+			currentMode = normalizeProviderMode(override.Mode)
+		}
+		if currentMode != "cautious" {
+			if _, modeErr := s.store.SetProviderMode(ctx, provider, "cautious", "autopilot"); modeErr != nil {
+				log.Printf("policy-autopilot: failed to set cautious mode for provider %s: %v", provider, modeErr)
+				return
+			}
+			state.HealthyWindows = 0
+			state.LastEvaluatedAt = time.Now().UTC().Format(time.RFC3339)
+			state.ProviderBaselines = snapshot.Providers
+			_ = s.saveState(ctx, state)
+			return
+		}
+		rollbackReason = providerRollbackReason
+	}
+
 	if rollbackReason != "" {
 		if _, rollbackErr := s.store.RollbackSMTPPolicyVersion(ctx, "autopilot", rollbackReason); rollbackErr != nil {
 			log.Printf("policy-autopilot: rollback failed: %v", rollbackErr)
 			return
 		}
 		_ = s.clearState(ctx)
+		return
+	}
+
+	if !hasMinimumProviderTelemetry(snapshot.Providers, s.cfg.PolicyCanaryMinProviderWorkers) {
+		state.LastEvaluatedAt = time.Now().UTC().Format(time.RFC3339)
+		_ = s.saveState(ctx, state)
 		return
 	}
 
@@ -185,9 +226,10 @@ func (s *PolicyCanaryAutopilotService) run() {
 
 	state.Version = activeVersion
 	state.HealthyWindows = 0
-	state.BaselineUnknownRate = kpi.UnknownRate
-	state.BaselineTempfailRecover = kpi.TempfailRecovery
-	state.BaselinePolicyBlockRate = kpi.PolicyBlockRate
+	state.BaselineUnknownRate = snapshot.Aggregate.UnknownRate
+	state.BaselineTempfailRecover = snapshot.Aggregate.TempfailRecovery
+	state.BaselinePolicyBlockRate = snapshot.Aggregate.PolicyBlockRate
+	state.ProviderBaselines = snapshot.Providers
 	state.LastEvaluatedAt = time.Now().UTC().Format(time.RFC3339)
 	_ = s.saveState(ctx, state)
 }
@@ -206,20 +248,24 @@ func (s *PolicyCanaryAutopilotService) shouldRun(ctx context.Context) bool {
 	return ok
 }
 
-func (s *PolicyCanaryAutopilotService) collectKPI(ctx context.Context, modes map[string]ProviderModeState) (policyCanaryKPI, error) {
+func (s *PolicyCanaryAutopilotService) collectKPI(ctx context.Context, modes map[string]ProviderModeState) (policyCanarySnapshot, error) {
 	workers, err := s.store.GetWorkers(ctx)
 	if err != nil {
-		return policyCanaryKPI{}, err
+		return policyCanarySnapshot{}, err
 	}
 
 	health := aggregateProviderHealth(workers, modes, thresholdsFromConfig(s.cfg))
 	if len(health) == 0 {
-		return policyCanaryKPI{}, nil
+		return policyCanarySnapshot{
+			Aggregate: policyCanaryKPI{},
+			Providers: map[string]policyCanaryKPI{},
+		}, nil
 	}
 
 	unknownWeighted := 0.0
 	policyBlockedWeighted := 0.0
 	weightTotal := 0.0
+	providerKPI := make(map[string]policyCanaryKPI, len(health))
 	for _, provider := range health {
 		weight := float64(provider.Workers)
 		if weight < 1 {
@@ -228,9 +274,18 @@ func (s *PolicyCanaryAutopilotService) collectKPI(ctx context.Context, modes map
 		unknownWeighted += provider.UnknownRate * weight
 		policyBlockedWeighted += provider.PolicyBlockedRate * weight
 		weightTotal += weight
+		providerKPI[provider.Provider] = policyCanaryKPI{
+			UnknownRate:      provider.UnknownRate,
+			TempfailRecovery: maxFloat(0, 1-provider.UnknownRate),
+			PolicyBlockRate:  provider.PolicyBlockedRate,
+			Workers:          provider.Workers,
+		}
 	}
 	if weightTotal <= 0 {
-		return policyCanaryKPI{}, nil
+		return policyCanarySnapshot{
+			Aggregate: policyCanaryKPI{},
+			Providers: providerKPI,
+		}, nil
 	}
 
 	unknownRate := unknownWeighted / weightTotal
@@ -240,10 +295,14 @@ func (s *PolicyCanaryAutopilotService) collectKPI(ctx context.Context, modes map
 		tempfailRecovery = 0
 	}
 
-	return policyCanaryKPI{
-		UnknownRate:      unknownRate,
-		TempfailRecovery: tempfailRecovery,
-		PolicyBlockRate:  policyBlockedRate,
+	return policyCanarySnapshot{
+		Aggregate: policyCanaryKPI{
+			UnknownRate:      unknownRate,
+			TempfailRecovery: tempfailRecovery,
+			PolicyBlockRate:  policyBlockedRate,
+			Workers:          len(workers),
+		},
+		Providers: providerKPI,
 	}, nil
 }
 
@@ -336,4 +395,69 @@ func evaluatePolicyCanaryRollback(
 	}
 
 	return ""
+}
+
+func evaluateProviderPolicyCanaryRollback(
+	baseline map[string]policyCanaryKPI,
+	current map[string]policyCanaryKPI,
+	unknownRegressionThreshold float64,
+	tempfailRecoveryDropThreshold float64,
+	policyBlockSpikeThreshold float64,
+	minProviderWorkers int,
+) (string, string) {
+	if minProviderWorkers < 1 {
+		minProviderWorkers = 1
+	}
+
+	for provider, currentKPI := range current {
+		if currentKPI.Workers < minProviderWorkers {
+			continue
+		}
+
+		baseKPI, ok := baseline[provider]
+		if !ok {
+			continue
+		}
+
+		reason := evaluatePolicyCanaryRollback(
+			policyCanaryAutopilotState{
+				BaselineUnknownRate:     baseKPI.UnknownRate,
+				BaselineTempfailRecover: baseKPI.TempfailRecovery,
+				BaselinePolicyBlockRate: baseKPI.PolicyBlockRate,
+			},
+			currentKPI,
+			unknownRegressionThreshold,
+			tempfailRecoveryDropThreshold,
+			policyBlockSpikeThreshold,
+		)
+		if reason == "" {
+			continue
+		}
+
+		return provider, fmt.Sprintf("provider %s regression: %s", provider, reason)
+	}
+
+	return "", ""
+}
+
+func maxFloat(a float64, b float64) float64 {
+	if a > b {
+		return a
+	}
+
+	return b
+}
+
+func hasMinimumProviderTelemetry(providers map[string]policyCanaryKPI, minWorkers int) bool {
+	if minWorkers < 1 {
+		minWorkers = 1
+	}
+
+	for _, kpi := range providers {
+		if kpi.Workers >= minWorkers {
+			return true
+		}
+	}
+
+	return false
 }

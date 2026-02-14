@@ -63,6 +63,7 @@ type policyState struct {
 	policyEngineEnabled  bool
 	adaptiveRetryEnabled bool
 	replyPolicyEngine    *verifier.ProviderReplyPolicyEngine
+	providerModes        map[string]string
 	providerPolicies     []verifier.ProviderPolicy
 	standard             policyConfig
 	enhanced             policyConfig
@@ -91,6 +92,7 @@ type chunkOutputs struct {
 	InvalidCount int
 	RiskyCount   int
 	ReasonCounts map[string]int
+	ReasonTags   map[string]int
 }
 
 func (c *chunkOutputs) baseReasonCount(reason string) int {
@@ -247,6 +249,8 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 	mode := modeForStage(processingStage, claim.Data.VerificationMode)
 	policy, hasPolicy := w.policyForMode(mode)
 	enhancedAllowed := hasPolicy && w.policyEnhancedAllowed() && policy.Enabled
+	routingProvider := normalizeProviderForRuntime(claim.Data.RoutingProvider)
+	providerMode := w.providerModeForRuntime(routingProvider)
 
 	details, err := w.client.ChunkDetails(ctx, chunkID)
 	if err != nil {
@@ -267,7 +271,33 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 	var engineVerifier verifier.Verifier
 
 	if processingStage == "smtp_probe" {
-		if !enhancedAllowed {
+		if providerMode == "quarantine" || providerMode == "drain" {
+			_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
+				"level":   "warning",
+				"event":   "smtp_probe_quarantined",
+				"message": "SMTP probe stage skipped due to provider mode.",
+				"context": map[string]interface{}{
+					"processing_stage":  processingStage,
+					"verification_mode": mode,
+					"provider_mode":     providerMode,
+					"routing_provider":  routingProvider,
+				},
+			})
+			engineVerifier = staticRiskyVerifier{reason: "smtp_probe_quarantine_mode"}
+		} else if providerMode == "degraded_probe" && !w.isTrustedProbeWorker() {
+			_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
+				"level":   "warning",
+				"event":   "smtp_probe_degraded_skip",
+				"message": "SMTP probe stage skipped by degraded-probe mode for non-trusted worker.",
+				"context": map[string]interface{}{
+					"processing_stage":  processingStage,
+					"verification_mode": mode,
+					"provider_mode":     providerMode,
+					"routing_provider":  routingProvider,
+				},
+			})
+			engineVerifier = staticRiskyVerifier{reason: "smtp_probe_degraded_mode"}
+		} else if !enhancedAllowed {
 			_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
 				"level":   "warning",
 				"event":   "smtp_probe_disabled",
@@ -435,6 +465,7 @@ func buildOutputs(ctx context.Context, reader io.Reader, engineVerifier verifier
 
 	output := &chunkOutputs{}
 	output.ReasonCounts = map[string]int{}
+	output.ReasonTags = map[string]int{}
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -451,6 +482,9 @@ func buildOutputs(ctx context.Context, reader io.Reader, engineVerifier verifier
 		reason := reasonWithEvidence(result)
 		baseReason := baseReasonOnly(reason)
 		output.ReasonCounts[baseReason]++
+		if reasonTag := reasonTagFrom(reason); reasonTag != "" {
+			output.ReasonTags[reasonTag]++
+		}
 
 		switch result.Category {
 		case verifier.CategoryInvalid:
@@ -505,6 +539,33 @@ func baseReasonOnly(reason string) string {
 	return normalized
 }
 
+func reasonTagFrom(reason string) string {
+	normalized := strings.TrimSpace(reason)
+	if normalized == "" {
+		return ""
+	}
+
+	separator := strings.Index(normalized, ":")
+	if separator < 0 || separator+1 >= len(normalized) {
+		return ""
+	}
+
+	metadata := strings.Split(normalized[separator+1:], ";")
+	for _, token := range metadata {
+		token = strings.TrimSpace(token)
+		if !strings.HasPrefix(token, "tag=") {
+			continue
+		}
+
+		value := strings.TrimSpace(strings.TrimPrefix(token, "tag="))
+		if value != "" {
+			return value
+		}
+	}
+
+	return ""
+}
+
 func isHeaderLine(line string) bool {
 	lower := strings.ToLower(strings.TrimSpace(line))
 	if lower == "email" {
@@ -541,6 +602,15 @@ func reasonWithEvidence(result verifier.Result) string {
 	}
 	if rule := strings.TrimSpace(result.MatchedRuleID); rule != "" {
 		segments = append(segments, "rule="+rule)
+	}
+	if reasonTag := strings.TrimSpace(result.ReasonTag); reasonTag != "" {
+		segments = append(segments, "tag="+reasonTag)
+	}
+	if mode := strings.TrimSpace(result.ProviderMode); mode != "" {
+		segments = append(segments, "mode="+mode)
+	}
+	if strategyID := strings.TrimSpace(result.SessionStrategyID); strategyID != "" {
+		segments = append(segments, "session="+strategyID)
 	}
 	if provider := strings.TrimSpace(result.ProviderProfile); provider != "" {
 		segments = append(segments, "provider="+provider)
@@ -590,6 +660,7 @@ func (w *Worker) refreshPolicyIfNeeded(ctx context.Context, now time.Time) {
 	state.policyEngineEnabled = runtime.policyEngineEnabled
 	state.adaptiveRetryEnabled = runtime.adaptiveRetryEnabled
 	state.replyPolicyEngine = runtime.replyPolicyEngine
+	state.providerModes = runtime.providerModes
 
 	w.policyMu.Lock()
 	w.policy = state
@@ -603,6 +674,7 @@ type policyRuntimeState struct {
 	policyEngineEnabled  bool
 	adaptiveRetryEnabled bool
 	replyPolicyEngine    *verifier.ProviderReplyPolicyEngine
+	providerModes        map[string]string
 }
 
 func (w *Worker) resolvePolicyRuntime(ctx context.Context, previous policyState) policyRuntimeState {
@@ -611,6 +683,7 @@ func (w *Worker) resolvePolicyRuntime(ctx context.Context, previous policyState)
 		policyEngineEnabled:  w.cfg.BaseVerifierConfig.ProviderPolicyEngineEnabled,
 		adaptiveRetryEnabled: w.cfg.BaseVerifierConfig.AdaptiveRetryEnabled,
 		replyPolicyEngine:    cloneProviderReplyPolicyEngine(w.cfg.BaseVerifierConfig.ProviderReplyPolicyEngine),
+		providerModes:        cloneProviderModes(previous.providerModes),
 	}
 
 	if previous.replyPolicyEngine != nil {
@@ -625,6 +698,9 @@ func (w *Worker) resolvePolicyRuntime(ctx context.Context, previous policyState)
 			result.policyEngineEnabled = policies.Data.PolicyEngineEnabled
 			result.adaptiveRetryEnabled = policies.Data.AdaptiveRetryEnabled
 			result.activeVersion = strings.TrimSpace(policies.Data.ActiveVersion)
+			if parsedModes := providerModesFromControlPlane(policies.Data.Modes); len(parsedModes) > 0 {
+				result.providerModes = parsedModes
+			}
 		}
 	}
 
@@ -727,6 +803,47 @@ func providerPoliciesFrom(policies []api.ProviderPolicy) []verifier.ProviderPoli
 	return output
 }
 
+func providerModesFromControlPlane(modes []api.ControlPlaneProviderModeState) map[string]string {
+	output := map[string]string{}
+
+	for _, mode := range modes {
+		provider := strings.ToLower(strings.TrimSpace(mode.Provider))
+		if provider == "" {
+			continue
+		}
+
+		switch provider {
+		case "gmail", "microsoft", "yahoo", "generic":
+		default:
+			continue
+		}
+
+		normalizedMode := strings.ToLower(strings.TrimSpace(mode.Mode))
+		switch normalizedMode {
+		case "normal", "cautious", "drain", "quarantine", "degraded_probe":
+		default:
+			normalizedMode = "normal"
+		}
+
+		output[provider] = normalizedMode
+	}
+
+	return output
+}
+
+func cloneProviderModes(source map[string]string) map[string]string {
+	if len(source) == 0 {
+		return map[string]string{}
+	}
+
+	cloned := make(map[string]string, len(source))
+	for key, value := range source {
+		cloned[key] = value
+	}
+
+	return cloned
+}
+
 func normalizeProviderDomains(domains []string) []string {
 	output := make([]string, 0, len(domains))
 	seen := map[string]struct{}{}
@@ -815,6 +932,7 @@ func (w *Worker) verifierForMode(mode string, policy policyConfig, hasPolicy boo
 
 	config.ProviderPolicyEngineEnabled = state.policyEngineEnabled
 	config.AdaptiveRetryEnabled = state.adaptiveRetryEnabled
+	config.ProviderModes = cloneProviderModes(state.providerModes)
 	if state.replyPolicyEngine != nil {
 		config.ProviderReplyPolicyEngine = cloneProviderReplyPolicyEngine(state.replyPolicyEngine)
 	} else {
@@ -835,6 +953,8 @@ func (w *Worker) verifierForMode(mode string, policy policyConfig, hasPolicy boo
 				EhloTimeout:              time.Duration(cfg.SMTPEhloTimeout) * time.Millisecond,
 				HeloName:                 cfg.HeloName,
 				MailFromAddress:          cfg.MailFromAddress,
+				ProviderMode:             "normal",
+				SessionStrategyID:        "generic:normal",
 				RateLimiter:              verifier.NewRateLimiter(cfg.SMTPRateLimitPerMinute),
 				CatchAllDetectionEnabled: cfg.CatchAllDetectionEnabled,
 				ReplyPolicyEngine:        cfg.ProviderReplyPolicyEngine,
@@ -849,6 +969,8 @@ func (w *Worker) verifierForMode(mode string, policy policyConfig, hasPolicy boo
 				ReadTimeout:         time.Duration(cfg.SMTPReadTimeout) * time.Millisecond,
 				EhloTimeout:         time.Duration(cfg.SMTPEhloTimeout) * time.Millisecond,
 				HeloName:            cfg.HeloName,
+				ProviderMode:        "normal",
+				SessionStrategyID:   "generic:normal",
 				RateLimiter:         verifier.NewRateLimiter(cfg.SMTPRateLimitPerMinute),
 				ReplyPolicyEngine:   cfg.ProviderReplyPolicyEngine,
 				AdaptiveRetryEnable: cfg.AdaptiveRetryEnabled,
@@ -1029,6 +1151,16 @@ func normalizeProcessingStage(value string) string {
 	return "screening"
 }
 
+func normalizeProviderForRuntime(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch normalized {
+	case "gmail", "microsoft", "yahoo", "generic":
+		return normalized
+	default:
+		return "generic"
+	}
+}
+
 func modeForStage(stage, requestedMode string) string {
 	_ = requestedMode
 	if stage == "smtp_probe" {
@@ -1065,6 +1197,8 @@ func (w *Worker) sendHeartbeats(ctx context.Context) {
 			SMTPMetrics:     snapshot.smtpMetrics,
 			ProviderMetrics: snapshot.providerMetrics,
 			RoutingMetrics:  snapshot.routingMetrics,
+			SessionMetrics:  snapshot.sessionMetrics,
+			ReasonTagCounts: snapshot.reasonTagCounts,
 		}
 
 		response, err := w.cfg.ControlPlaneClient.Heartbeat(ctx, payload)
@@ -1130,6 +1264,33 @@ func (w *Worker) currentDesiredState() string {
 	}
 
 	return state
+}
+
+func (w *Worker) providerModeForRuntime(provider string) string {
+	provider = normalizeProviderForRuntime(provider)
+
+	state := w.policySnapshot()
+	if state.providerModes == nil {
+		return "normal"
+	}
+
+	mode := strings.ToLower(strings.TrimSpace(state.providerModes[provider]))
+	switch mode {
+	case "normal", "cautious", "drain", "quarantine", "degraded_probe":
+		return mode
+	default:
+		return "normal"
+	}
+}
+
+func (w *Worker) isTrustedProbeWorker() bool {
+	trustTier := strings.ToLower(strings.TrimSpace(stringFromMeta(w.cfg.Server.Meta, "trust_tier")))
+	switch trustTier {
+	case "trusted", "premium", "high":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeDesiredState(value string) string {

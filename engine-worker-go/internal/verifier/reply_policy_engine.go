@@ -8,16 +8,21 @@ import (
 
 type ReplyEvidence struct {
 	ReasonCode      string `json:"reason_code,omitempty"`
+	ReasonTag       string `json:"reason_tag,omitempty"`
 	SMTPCode        int    `json:"smtp_code,omitempty"`
 	EnhancedCode    string `json:"enhanced_code,omitempty"`
 	ProviderProfile string `json:"provider_profile,omitempty"`
 	DecisionClass   string `json:"decision_class,omitempty"`
+	ConfidenceHint  string `json:"confidence_hint,omitempty"`
+	SessionStrategy string `json:"session_strategy_id,omitempty"`
 }
 
 type ProviderReplyPolicyEngine struct {
-	Enabled  bool                            `json:"enabled"`
-	Version  string                          `json:"version,omitempty"`
-	Profiles map[string]ProviderReplyProfile `json:"profiles"`
+	Enabled       bool                            `json:"enabled"`
+	Version       string                          `json:"version,omitempty"`
+	SchemaVersion string                          `json:"schema_version,omitempty"`
+	Profiles      map[string]ProviderReplyProfile `json:"profiles"`
+	Modes         map[string]ProviderModeRule     `json:"modes,omitempty"`
 }
 
 type ProviderReplyProfile struct {
@@ -26,6 +31,7 @@ type ProviderReplyProfile struct {
 	SMTPCodeRules []ProviderReplyRule `json:"smtp_code_rules,omitempty"`
 	MessageRules  []ProviderReplyRule `json:"message_rules,omitempty"`
 	Retry         ProviderRetryPolicy `json:"retry"`
+	Session       ProviderSessionRule `json:"session,omitempty"`
 }
 
 type ProviderReplyRule struct {
@@ -37,6 +43,9 @@ type ProviderReplyRule struct {
 	Category         string   `json:"category"`
 	Reason           string   `json:"reason"`
 	ReasonCode       string   `json:"reason_code"`
+	RuleTag          string   `json:"rule_tag,omitempty"`
+	ConfidenceHint   string   `json:"confidence_hint,omitempty"`
+	ProviderScope    string   `json:"provider_scope,omitempty"`
 	RetryAfterSecond int      `json:"retry_after_seconds,omitempty"`
 }
 
@@ -48,11 +57,27 @@ type ProviderRetryPolicy struct {
 	UnknownSeconds      int `json:"unknown_seconds,omitempty"`
 }
 
+type ProviderSessionRule struct {
+	MaxConcurrency            int    `json:"max_concurrency,omitempty"`
+	ConnectsPerMinute         int    `json:"connects_per_minute,omitempty"`
+	ReuseConnectionForRetries bool   `json:"reuse_connection_for_retries"`
+	RetryJitterPercent        int    `json:"retry_jitter_percent,omitempty"`
+	EHLOProfile               string `json:"ehlo_profile,omitempty"`
+}
+
+type ProviderModeRule struct {
+	ProbeEnabled                bool    `json:"probe_enabled"`
+	MaxConcurrencyMultiplier    float64 `json:"max_concurrency_multiplier,omitempty"`
+	ConnectsPerMinuteMultiplier float64 `json:"connects_per_minute_multiplier,omitempty"`
+}
+
 func DefaultProviderReplyPolicyEngine() *ProviderReplyPolicyEngine {
 	engine := ProviderReplyPolicyEngine{
-		Enabled:  true,
-		Version:  "v2",
-		Profiles: defaultProviderReplyProfiles(),
+		Enabled:       true,
+		Version:       "v3",
+		SchemaVersion: "v3",
+		Profiles:      defaultProviderReplyProfiles(),
+		Modes:         defaultProviderModeRules(),
 	}
 
 	normalized := normalizeProviderReplyPolicyEngine(engine)
@@ -75,11 +100,19 @@ func ParseProviderReplyPolicyEngineJSON(raw string) (*ProviderReplyPolicyEngine,
 }
 
 func normalizeProviderReplyPolicyEngine(engine ProviderReplyPolicyEngine) ProviderReplyPolicyEngine {
-	defaults := ProviderReplyPolicyEngine{Version: "v2", Profiles: defaultProviderReplyProfiles()}
+	defaults := ProviderReplyPolicyEngine{
+		Version:       "v3",
+		SchemaVersion: "v3",
+		Profiles:      defaultProviderReplyProfiles(),
+		Modes:         defaultProviderModeRules(),
+	}
 	genericDefaults := defaults.Profiles["generic"]
 	out := engine
 	if out.Profiles == nil {
 		out.Profiles = map[string]ProviderReplyProfile{}
+	}
+	if out.Modes == nil {
+		out.Modes = map[string]ProviderModeRule{}
 	}
 
 	for key, profile := range defaults.Profiles {
@@ -107,7 +140,11 @@ func normalizeProviderReplyPolicyEngine(engine ProviderReplyPolicyEngine) Provid
 				existing.MessageRules = genericDefaults.MessageRules
 			}
 		}
+		existing.EnhancedRules = normalizeProviderReplyRules(existing.EnhancedRules, key)
+		existing.SMTPCodeRules = normalizeProviderReplyRules(existing.SMTPCodeRules, key)
+		existing.MessageRules = normalizeProviderReplyRules(existing.MessageRules, key)
 		existing.Retry = normalizeRetryProfile(existing.Retry, profile.Retry)
+		existing.Session = normalizeSessionProfile(existing.Session, profile.Session)
 		if strings.TrimSpace(existing.Name) == "" {
 			existing.Name = profile.Name
 		}
@@ -121,6 +158,35 @@ func normalizeProviderReplyPolicyEngine(engine ProviderReplyPolicyEngine) Provid
 
 	if strings.TrimSpace(out.Version) == "" {
 		out.Version = defaults.Version
+	}
+	if strings.TrimSpace(out.SchemaVersion) == "" {
+		if hasV3Signals(out) {
+			out.SchemaVersion = "v3"
+		} else {
+			out.SchemaVersion = "v2"
+		}
+	}
+
+	for mode, modeRule := range defaults.Modes {
+		existing, ok := out.Modes[mode]
+		if !ok {
+			out.Modes[mode] = modeRule
+			continue
+		}
+
+		if existing.MaxConcurrencyMultiplier <= 0 {
+			existing.MaxConcurrencyMultiplier = modeRule.MaxConcurrencyMultiplier
+		}
+		if existing.ConnectsPerMinuteMultiplier <= 0 {
+			existing.ConnectsPerMinuteMultiplier = modeRule.ConnectsPerMinuteMultiplier
+		}
+		if mode == "normal" && !existing.ProbeEnabled {
+			existing.ProbeEnabled = true
+		}
+		if mode == "drain" || mode == "quarantine" {
+			existing.ProbeEnabled = false
+		}
+		out.Modes[mode] = existing
 	}
 
 	return out
@@ -208,6 +274,13 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 				PolicyBlockedSecond: 300,
 				UnknownSeconds:      75,
 			},
+			Session: ProviderSessionRule{
+				MaxConcurrency:            2,
+				ConnectsPerMinute:         30,
+				ReuseConnectionForRetries: false,
+				RetryJitterPercent:        15,
+				EHLOProfile:               "default",
+			},
 		},
 		"gmail": {
 			Name: "gmail",
@@ -247,6 +320,13 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 				GreylistSeconds:     240,
 				PolicyBlockedSecond: 480,
 				UnknownSeconds:      120,
+			},
+			Session: ProviderSessionRule{
+				MaxConcurrency:            2,
+				ConnectsPerMinute:         20,
+				ReuseConnectionForRetries: false,
+				RetryJitterPercent:        20,
+				EHLOProfile:               "provider-safe-gmail",
 			},
 		},
 		"microsoft": {
@@ -288,6 +368,13 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 				PolicyBlockedSecond: 600,
 				UnknownSeconds:      120,
 			},
+			Session: ProviderSessionRule{
+				MaxConcurrency:            2,
+				ConnectsPerMinute:         18,
+				ReuseConnectionForRetries: false,
+				RetryJitterPercent:        20,
+				EHLOProfile:               "provider-safe-microsoft",
+			},
 		},
 		"yahoo": {
 			Name: "yahoo",
@@ -328,6 +415,43 @@ func defaultProviderReplyProfiles() map[string]ProviderReplyProfile {
 				PolicyBlockedSecond: 480,
 				UnknownSeconds:      100,
 			},
+			Session: ProviderSessionRule{
+				MaxConcurrency:            2,
+				ConnectsPerMinute:         22,
+				ReuseConnectionForRetries: false,
+				RetryJitterPercent:        15,
+				EHLOProfile:               "provider-safe-yahoo",
+			},
+		},
+	}
+}
+
+func defaultProviderModeRules() map[string]ProviderModeRule {
+	return map[string]ProviderModeRule{
+		"normal": {
+			ProbeEnabled:                true,
+			MaxConcurrencyMultiplier:    1,
+			ConnectsPerMinuteMultiplier: 1,
+		},
+		"cautious": {
+			ProbeEnabled:                true,
+			MaxConcurrencyMultiplier:    0.65,
+			ConnectsPerMinuteMultiplier: 0.6,
+		},
+		"drain": {
+			ProbeEnabled:                false,
+			MaxConcurrencyMultiplier:    0,
+			ConnectsPerMinuteMultiplier: 0,
+		},
+		"quarantine": {
+			ProbeEnabled:                false,
+			MaxConcurrencyMultiplier:    0,
+			ConnectsPerMinuteMultiplier: 0,
+		},
+		"degraded_probe": {
+			ProbeEnabled:                true,
+			MaxConcurrencyMultiplier:    0.4,
+			ConnectsPerMinuteMultiplier: 0.5,
 		},
 	}
 }
@@ -350,6 +474,112 @@ func normalizeRetryProfile(value ProviderRetryPolicy, fallback ProviderRetryPoli
 	}
 
 	return value
+}
+
+func normalizeSessionProfile(value ProviderSessionRule, fallback ProviderSessionRule) ProviderSessionRule {
+	if value.MaxConcurrency <= 0 {
+		value.MaxConcurrency = fallback.MaxConcurrency
+	}
+	if value.ConnectsPerMinute <= 0 {
+		value.ConnectsPerMinute = fallback.ConnectsPerMinute
+	}
+	if value.RetryJitterPercent < 0 {
+		value.RetryJitterPercent = fallback.RetryJitterPercent
+	}
+	if value.RetryJitterPercent > 50 {
+		value.RetryJitterPercent = 50
+	}
+	if strings.TrimSpace(value.EHLOProfile) == "" {
+		value.EHLOProfile = fallback.EHLOProfile
+	}
+
+	return value
+}
+
+func normalizeProviderReplyRules(rules []ProviderReplyRule, provider string) []ProviderReplyRule {
+	output := make([]ProviderReplyRule, 0, len(rules))
+
+	for _, rule := range rules {
+		normalized := rule
+		if strings.TrimSpace(normalized.RuleTag) == "" {
+			normalized.RuleTag = inferRuleTag(normalized.ReasonCode, normalized.DecisionClass)
+		}
+		if strings.TrimSpace(normalized.ConfidenceHint) == "" {
+			normalized.ConfidenceHint = inferConfidenceHint(normalized.DecisionClass, normalized.Category)
+		}
+		if strings.TrimSpace(normalized.ProviderScope) == "" {
+			normalized.ProviderScope = provider
+		}
+		output = append(output, normalized)
+	}
+
+	return output
+}
+
+func inferRuleTag(reasonCode string, decisionClass string) string {
+	reasonCode = strings.ToLower(strings.TrimSpace(reasonCode))
+	decisionClass = strings.ToLower(strings.TrimSpace(decisionClass))
+
+	switch {
+	case strings.Contains(reasonCode, "greylist"):
+		return "greylist"
+	case strings.Contains(reasonCode, "mailbox_full"):
+		return "mailbox_full"
+	case strings.Contains(reasonCode, "policy_blocked"):
+		return "policy_blocked"
+	case strings.Contains(reasonCode, "mailbox_not_found"):
+		return "mailbox_not_found"
+	case strings.Contains(reasonCode, "rate_limit"):
+		return "rate_limit"
+	case decisionClass == DecisionPolicyBlocked:
+		return "policy_blocked"
+	case decisionClass == DecisionUndeliverable:
+		return "mailbox_not_found"
+	default:
+		return "rate_limit"
+	}
+}
+
+func inferConfidenceHint(decisionClass string, category string) string {
+	decisionClass = strings.ToLower(strings.TrimSpace(decisionClass))
+	category = strings.ToLower(strings.TrimSpace(category))
+
+	switch decisionClass {
+	case DecisionDeliverable, DecisionUndeliverable:
+		return "high"
+	case DecisionPolicyBlocked, DecisionRetryable:
+		return "medium"
+	case DecisionUnknown:
+		return "low"
+	default:
+		if category == CategoryValid || category == CategoryInvalid {
+			return "medium"
+		}
+		return "low"
+	}
+}
+
+func hasV3Signals(engine ProviderReplyPolicyEngine) bool {
+	if len(engine.Modes) > 0 {
+		return true
+	}
+
+	for _, profile := range engine.Profiles {
+		if profile.Session.MaxConcurrency > 0 || profile.Session.ConnectsPerMinute > 0 || strings.TrimSpace(profile.Session.EHLOProfile) != "" {
+			return true
+		}
+		for _, rules := range [][]ProviderReplyRule{profile.EnhancedRules, profile.SMTPCodeRules, profile.MessageRules} {
+			for _, rule := range rules {
+				if strings.TrimSpace(rule.RuleTag) != "" ||
+					strings.TrimSpace(rule.ConfidenceHint) != "" ||
+					strings.TrimSpace(rule.ProviderScope) != "" {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 func lookupProviderReplyProfile(engine *ProviderReplyPolicyEngine, provider string) ProviderReplyProfile {
@@ -379,6 +609,42 @@ func lookupProviderReplyProfile(engine *ProviderReplyPolicyEngine, provider stri
 		generic.Name = "generic"
 	}
 	return generic
+}
+
+func lookupProviderModeRule(engine *ProviderReplyPolicyEngine, mode string) ProviderModeRule {
+	normalizedMode := strings.ToLower(strings.TrimSpace(mode))
+	if normalizedMode == "" {
+		normalizedMode = "normal"
+	}
+
+	defaults := defaultProviderModeRules()
+
+	if engine == nil || len(engine.Modes) == 0 {
+		if modeRule, ok := defaults[normalizedMode]; ok {
+			return modeRule
+		}
+		return defaults["normal"]
+	}
+
+	modeRule, ok := engine.Modes[normalizedMode]
+	if !ok {
+		if fallback, ok := defaults[normalizedMode]; ok {
+			return fallback
+		}
+		return defaults["normal"]
+	}
+
+	if modeRule.MaxConcurrencyMultiplier <= 0 {
+		modeRule.MaxConcurrencyMultiplier = defaults[normalizedMode].MaxConcurrencyMultiplier
+	}
+	if modeRule.ConnectsPerMinuteMultiplier <= 0 {
+		modeRule.ConnectsPerMinuteMultiplier = defaults[normalizedMode].ConnectsPerMinuteMultiplier
+	}
+	if normalizedMode == "drain" || normalizedMode == "quarantine" {
+		modeRule.ProbeEnabled = false
+	}
+
+	return modeRule
 }
 
 func matchProviderReplyRule(profile ProviderReplyProfile, reply smtpReply) (ProviderReplyRule, bool) {

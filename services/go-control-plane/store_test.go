@@ -125,11 +125,25 @@ func TestStaleWorkerDeleteKeysIncludePoolAndLastSeen(t *testing.T) {
 	if !containsString(keys, expectedRoutingMetrics) {
 		t.Fatalf("expected stale delete keys to include %q", expectedRoutingMetrics)
 	}
+	expectedSessionMetrics := workerKey(workerID, "session_metrics")
+	if !containsString(keys, expectedSessionMetrics) {
+		t.Fatalf("expected stale delete keys to include %q", expectedSessionMetrics)
+	}
+	expectedReasonTagCounters := workerKey(workerID, "reason_tag_counters")
+	if !containsString(keys, expectedReasonTagCounters) {
+		t.Fatalf("expected stale delete keys to include %q", expectedReasonTagCounters)
+	}
 }
 
 func TestNormalizeProviderMode(t *testing.T) {
 	if mode := normalizeProviderMode("cautious"); mode != "cautious" {
 		t.Fatalf("expected cautious, got %q", mode)
+	}
+	if mode := normalizeProviderMode("quarantine"); mode != "quarantine" {
+		t.Fatalf("expected quarantine, got %q", mode)
+	}
+	if mode := normalizeProviderMode("degraded_probe"); mode != "degraded_probe" {
+		t.Fatalf("expected degraded_probe, got %q", mode)
 	}
 	if mode := normalizeProviderMode("invalid"); mode != "" {
 		t.Fatalf("expected empty mode for invalid input, got %q", mode)

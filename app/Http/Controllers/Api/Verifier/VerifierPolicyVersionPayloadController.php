@@ -32,6 +32,8 @@ class VerifierPolicyVersionPayloadController
                 'is_active' => (bool) $policyVersion->is_active,
                 'status' => (string) $policyVersion->status,
                 'validation_status' => (string) ($policyVersion->validation_status ?? 'pending'),
+                'schema_version' => (string) ($policyVersion->schema_version ?? 'v2'),
+                'mode_semantics_hash' => $policyVersion->mode_semantics_hash,
                 'policy_payload' => $policyVersion->policy_payload,
             ],
         ]);
