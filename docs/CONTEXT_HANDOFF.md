@@ -281,7 +281,7 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 ### 2026-02-05 — Local control plane runtime state (not committed)
 - Control plane running on `http://localhost:9091` with branded UI at `/verifier-engine-room/overview`.
 - Local `services/go-control-plane/.env` contains:
-  - `CONTROL_PLANE_TOKEN=vzxw123!`
+  - `CONTROL_PLANE_TOKEN=<local-secret-not-committed>`
   - `MYSQL_DSN` pointing to Sail MySQL on `127.0.0.1:3307`
   - `SNAPSHOT_INTERVAL_SECONDS=10`
   - `ALERTS_ENABLED=true`, `AUTO_ACTIONS_ENABLED=true`
