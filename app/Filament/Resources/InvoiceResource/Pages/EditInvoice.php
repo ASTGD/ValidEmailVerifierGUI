@@ -249,9 +249,70 @@ class EditInvoice extends EditRecord
 
     protected function afterSave(): void
     {
-        // Recalculate balance after save
         $record = $this->getRecord();
-        $record->balance_due = $record->calculateBalanceDue();
-        $record->saveQuietly();
+        $data = $this->data;
+        $hasChanged = false;
+
+        // 1. Process Manual Payment from "Add Payment" Tab
+        if (!empty($data['payment_amount']) && (float) $data['payment_amount'] > 0) {
+            $amountInCents = (int) ($data['payment_amount'] * 100);
+
+            $success = $record->processPayment(
+                $amountInCents,
+                $data['payment_gateway'] ?? 'Manual',
+                $data['transaction_id_payment'] ?? null
+            );
+
+            if ($success) {
+                if (!empty($data['payment_notes'])) {
+                    $record->notes = ($record->notes ? $record->notes . "\n\n" : '') .
+                        "Payment of \${$data['payment_amount']} via " . ($data['payment_gateway'] ?? 'Manual') . ": " . $data['payment_notes'];
+                    $record->saveQuietly();
+                }
+                $hasChanged = true;
+            }
+        }
+
+        // 2. Apply Credit from "Credit" Tab
+        if (!empty($data['credit_to_apply']) && (float) $data['credit_to_apply'] > 0) {
+            $amountInCents = (int) ($data['credit_to_apply'] * 100);
+            $success = $record->applyCredit($amountInCents);
+            if ($success) {
+                $hasChanged = true;
+            }
+        }
+
+        // Recalculate balance if any payment or credit was processed
+        if ($hasChanged) {
+            $record->refresh();
+            $record->balance_due = $record->calculateBalanceDue();
+            $record->saveQuietly();
+
+            Notification::make()
+                ->title('Financials Updated')
+                ->success()
+                ->body('Manual payments or credits have been successfully applied.')
+                ->send();
+
+            $this->refreshFormData([
+                'balance_due',
+                'status',
+                'paid_at',
+                'credit_applied',
+                'total',
+                'subtotal',
+            ]);
+
+            // Reset manual entry fields
+            $this->data['payment_amount'] = null;
+            $this->data['payment_gateway'] = null;
+            $this->data['transaction_id_payment'] = null;
+            $this->data['payment_notes'] = null;
+            $this->data['credit_to_apply'] = null;
+        } else {
+            // Standard balance sync
+            $record->balance_due = $record->calculateBalanceDue();
+            $record->saveQuietly();
+        }
     }
 }

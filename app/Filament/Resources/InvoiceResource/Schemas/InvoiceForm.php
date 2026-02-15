@@ -151,7 +151,7 @@ class InvoiceForm
                                                                     <span class='text-[11px] font-black text-gray-400 uppercase tracking-widest'><b>Amount :</b></span>
                                                                     <span class='text-xs font-bold text-gray-900'>{$amount} {$currency}</span>
                                                                 </div>
-                                                                " . ($record->transactions->count() > 1 ? "<div class='text-[8px] text-center pt-2 text-blue-500 font-bold uppercase tracking-tighter'>See all " . ($record->transactions->count()) . " records below →</div>" : "") . "
+                                                                 " . ($record->transactions->count() > 1 ? "<div class='text-[8px] text-center pt-2 text-blue-500 font-bold uppercase tracking-tighter'><a href='#detailed-transactions' class='hover:underline'>See all " . ($record->transactions->count()) . " records below ↓</a></div>" : "") . "
                                                             </div>
                                                         ");
                                                     }),
@@ -234,6 +234,52 @@ class InvoiceForm
                                             ->deletable(true)
                                             ->addActionLabel('Add Item'),
                                     ]),
+
+                                Section::make('Detailed Transaction Log')
+                                    ->icon('heroicon-o-clock')
+                                    ->id('detailed-transactions')
+                                    ->collapsible()
+                                    ->visible(fn($record) => $record && $record->transactions->count() > 0)
+                                    ->schema([
+                                        Placeholder::make('all_transactions_table')
+                                            ->hiddenLabel()
+                                            ->content(function ($record) {
+                                                if (!$record)
+                                                    return null;
+
+                                                $rows = $record->transactions->sortByDesc('date')->map(function ($tx) use ($record) {
+                                                    $date = $tx->date ? $tx->date->format('M d, Y H:i') : '-';
+                                                    $amount = number_format($tx->amount / 100, 2);
+                                                    $currency = $record->currency ?? 'USD';
+                                                    return "
+                                                        <tr class='border-b border-gray-50'>
+                                                            <td class='py-2 text-xs font-medium text-gray-600'>{$date}</td>
+                                                            <td class='py-2 text-xs font-bold text-gray-900'>{$tx->payment_method}</td>
+                                                            <td class='py-2 text-xs font-mono text-gray-500'>{$tx->transaction_id}</td>
+                                                            <td class='py-2 text-xs font-bold text-right text-emerald-600'>+ {$amount} {$currency}</td>
+                                                        </tr>
+                                                    ";
+                                                })->implode('');
+
+                                                return new HtmlString("
+                                                    <div class='overflow-x-auto'>
+                                                        <table class='w-full text-left'>
+                                                            <thead>
+                                                                <tr class='border-b border-gray-100'>
+                                                                    <th class='pb-2 text-[10px] font-black uppercase tracking-widest text-gray-400'>Date / Time</th>
+                                                                    <th class='pb-2 text-[10px] font-black uppercase tracking-widest text-gray-400'>Method</th>
+                                                                    <th class='pb-2 text-[10px] font-black uppercase tracking-widest text-gray-400'>Transaction ID</th>
+                                                                    <th class='pb-2 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right'>Amount</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {$rows}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                ");
+                                            }),
+                                    ]),
                             ]),
                         Tab::make('Add Payment')
                             ->icon('heroicon-m-credit-card')
@@ -256,9 +302,13 @@ class InvoiceForm
                                                 $items = $get('items') ?? [];
                                                 $total = collect($items)->sum(fn($item) => (float) ($item['amount'] ?? 0));
 
+                                                $paidInCents = $record ? $record->transactions()->sum('amount') : 0;
+                                                $paidInDollars = $paidInCents / 100;
+                                                $balanceDue = ($status === 'Paid') ? 0 : max(0, $total - $paidInDollars);
+
                                                 return new HtmlString('
                                                             <div class="text-xl font-black text-red-600 underline underline-offset-4 decoration-2">
-                                                                ' . number_format($total, 2) . ' ' . strtoupper($currency) . '
+                                                                ' . number_format($balanceDue, 2) . ' ' . strtoupper($currency) . '
                                                             </div>
                                                         ');
                                             }),
@@ -351,6 +401,17 @@ class InvoiceForm
                                 Section::make('Credit Control')
                                     ->description('Apply existing customer credits to this specific invoice.')
                                     ->schema([
+                                        Placeholder::make('available_credit_display')
+                                            ->label('Available Customer Credit')
+                                            ->content(function ($record) {
+                                                if (!$record)
+                                                    return '0.00 USD';
+                                                $availableCredit = \App\Models\Credit::where('user_id', $record->user_id)
+                                                    ->whereNull('invoice_id')
+                                                    ->where('amount', '>', 0)
+                                                    ->sum('amount');
+                                                return '$' . number_format($availableCredit / 100, 2);
+                                            }),
                                         TextInput::make('credit_to_apply')
                                             ->label('Amount to Apply')
                                             ->numeric()
