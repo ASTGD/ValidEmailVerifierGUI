@@ -208,7 +208,7 @@ class Invoice extends Model
 
     public function getFormattedTotalAttribute(): string
     {
-        return number_format($this->total / 100, 2) . ' ' . strtoupper($this->currency);
+        return number_format($this->calculateTotal() / 100, 2) . ' ' . strtoupper($this->currency);
     }
 
     public function getFormattedBalanceDueAttribute(): string

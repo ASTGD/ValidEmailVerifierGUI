@@ -103,8 +103,18 @@
 
         {{-- Card 3: Financials --}}
         @php
-            $total = $invoice->total / 100;
-            $paid = $invoice->total_paid / 100;
+            // Calculate dynamically from items and transactions to ensure perfect accuracy
+            $subtotalInCents = $invoice->items->sum('amount');
+            $taxInCents = $invoice->tax ?? 0;
+            $discountInCents = $invoice->discount ?? 0;
+            $totalInCents = max(0, $subtotalInCents + $taxInCents - $discountInCents);
+            
+            $total = $totalInCents / 100;
+            
+            $paidInCents = $invoice->transactions->sum('amount');
+            $creditsAppliedInCents = $invoice->credit_applied ?? 0;
+            $paid = ($paidInCents + $creditsAppliedInCents) / 100;
+
             $balance = ($invoice->status === 'Paid') ? 0 : max(0, $total - $paid);
             $accentColor = $balance > 0 ? '#dc2626' : '#16a34a';
         @endphp
@@ -188,13 +198,27 @@
                         <div class="w-full max-w-xs space-y-3">
                             <div class="flex justify-between items-center text-sm">
                                 <span class="text-[#64748B] font-semibold">{{ __('Subtotal') }}</span>
-                                <span class="text-[#334155] font-bold">{{ number_format($invoice->subtotal / 100, 2) }}
+                                <span class="text-[#334155] font-bold">{{ number_format($subtotalInCents / 100, 2) }}
                                     {{ strtoupper($invoice->currency) }}</span>
                             </div>
+                            @if($taxInCents > 0)
+                                <div class="flex justify-between items-center text-sm">
+                                    <span class="text-[#64748B] font-semibold">{{ __('Tax') }}</span>
+                                    <span class="text-[#334155] font-bold">{{ number_format($taxInCents / 100, 2) }}
+                                        {{ strtoupper($invoice->currency) }}</span>
+                                </div>
+                            @endif
+                            @if($discountInCents > 0)
+                                <div class="flex justify-between items-center text-sm">
+                                    <span class="text-[#64748B] font-semibold">{{ __('Discount') }}</span>
+                                    <span class="text-[#dc2626] font-bold">- {{ number_format($discountInCents / 100, 2) }}
+                                        {{ strtoupper($invoice->currency) }}</span>
+                                </div>
+                            @endif
                             <div class="pt-4 border-t-2 border-[#f1f5f9] flex justify-between items-center">
                                 <span
                                     class="text-[#0F172A] text-xl font-black uppercase tracking-tighter">{{ __('Final Total') }}</span>
-                                <span class="text-[#1E7CCF] text-2xl font-black">{{ $invoice->formatted_total }}</span>
+                                <span class="text-[#1E7CCF] text-2xl font-black">{{ number_format($totalInCents / 100, 2) }} {{ strtoupper($invoice->currency) }}</span>
                             </div>
                         </div>
                     </div>
