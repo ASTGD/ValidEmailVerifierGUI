@@ -17,7 +17,7 @@ class InvoiceShow extends Component
 
     public function mount(Invoice $invoice)
     {
-        if ($invoice->user_id !== Auth::id()) {
+        if ($invoice->user_id !== Auth::id() || !$invoice->is_published) {
             abort(403);
         }
         $this->invoice = $invoice->load('items', 'transactions', 'user');

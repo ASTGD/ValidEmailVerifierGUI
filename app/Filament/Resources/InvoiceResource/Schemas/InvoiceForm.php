@@ -9,7 +9,8 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\Actions\Action;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
@@ -40,6 +41,36 @@ class InvoiceForm
                         Tab::make('Summary')
                             ->icon('heroicon-m-document-text')
                             ->schema([
+                                Placeholder::make('publication_banner')
+                                    ->hiddenLabel()
+                                    ->visible(fn($record) => $record && !$record->is_published)
+                                    ->content(fn($record) => new HtmlString('
+                                        <div class="flex items-center justify-between p-4 mb-4 border border-amber-200 rounded-xl bg-amber-50 dark:bg-amber-900/10 dark:border-amber-500/20">
+                                            <div class="flex items-center space-x-3">
+                                                <div class="p-2 bg-amber-100 rounded-lg dark:bg-amber-500/20">
+                                                </div>
+                                                <div>
+                                                    <h3 class="text-sm font-bold text-amber-800 dark:text-amber-400">Invoice is in Draft Mode</h3>
+                                                    <p class="text-[11px] text-amber-700 dark:text-amber-500/80 uppercase font-black tracking-widest">Only visible to administrators</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    '))
+                                    ->hintAction(
+                                        Action::make('publish')
+                                            ->label('Publish Now')
+                                            ->icon('heroicon-m-paper-airplane')
+                                            ->color('success')
+                                            ->requiresConfirmation()
+                                            ->action(function ($record) {
+                                                $record->update(['is_published' => true]);
+                                                Notification::make()
+                                                    ->title('Invoice Published')
+                                                    ->success()
+                                                    ->send();
+                                            })
+                                    ),
+
                                 Grid::make(['default' => 1, 'lg' => 3])
                                     ->schema([
                                         Section::make('Invoice Overview')
@@ -53,6 +84,12 @@ class InvoiceForm
                                                             <div class="flex justify-between border-b border-gray-50 pb-2">
                                                                 <span class="text-[11px] font-black text-gray-400 uppercase tracking-widest"><b>Customer :</b></span>
                                                                 <span class="text-xs font-bold text-gray-900">' . ($record->user?->name ?? 'Guest') . '</span>
+                                                            </div>
+                                                            <div class="flex justify-between border-b border-gray-50 pb-2">
+                                                                <span class="text-[11px] font-black text-gray-400 uppercase tracking-widest"><b>Publication :</b></span>
+                                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest" style="background-color: ' . ($record->is_published ? '#dcfce7; color: #166534;' : '#fef3c7; color: #92400e;') . '">
+                                                                    ' . ($record->is_published ? 'PUBLISHED' : 'DRAFT') . '
+                                                                </span>
                                                             </div>
                                                             <div class="flex justify-between border-b border-gray-50 pb-2">
                                                                 <span class="text-[11px] font-black text-gray-400 uppercase tracking-widest"><b>Status :</b></span>

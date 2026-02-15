@@ -24,6 +24,7 @@ class Invoice extends Model
         'currency',
         'notes',
         'payment_method',
+        'is_published',
     ];
 
     protected $casts = [
@@ -36,6 +37,7 @@ class Invoice extends Model
         'total' => 'integer',
         'credit_applied' => 'integer',
         'balance_due' => 'integer',
+        'is_published' => 'boolean',
     ];
 
     public function user(): BelongsTo

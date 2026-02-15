@@ -241,6 +241,9 @@ class EditInvoice extends EditRecord
             $data['balance_due'] = max(0, $data['total'] - $paid - $creditApplied);
         }
 
+        // Force to draft mode whenever admin clicks Save/Update
+        $data['is_published'] = false;
+
         return $data;
     }
 

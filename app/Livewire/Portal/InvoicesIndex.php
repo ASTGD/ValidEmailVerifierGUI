@@ -23,7 +23,8 @@ class InvoicesIndex extends Component
     public function getInvoicesProperty()
     {
         $query = Invoice::query()
-            ->where('user_id', Auth::id());
+            ->where('user_id', Auth::id())
+            ->where('is_published', true);
 
         if ($this->status) {
             $query->where('status', $this->status);
