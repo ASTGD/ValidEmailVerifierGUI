@@ -25,7 +25,12 @@ class InternalDocsPortalTest extends TestCase
         $pageResponse
             ->assertOk()
             ->assertSee('Go Runtime Settings Reference')
-            ->assertSee('alert_error_rate_threshold');
+            ->assertSee('alert_error_rate_threshold')
+            ->assertSee('<h1', false)
+            ->assertSee('<h2', false)
+            ->assertSee('<table', false)
+            ->assertSee('<thead', false)
+            ->assertSee('<tbody', false);
     }
 
     public function test_non_admin_cannot_access_internal_docs_portal(): void
