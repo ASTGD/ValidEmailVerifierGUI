@@ -248,28 +248,33 @@ class InvoiceForm
                                                     return null;
 
                                                 $rows = $record->transactions->sortByDesc('date')->map(function ($tx) use ($record) {
-                                                    $date = $tx->date ? $tx->date->format('M d, Y H:i') : '-';
+                                                    $date = $tx->date ? $tx->date->format('M d, Y - H:i') : '-';
                                                     $amount = number_format($tx->amount / 100, 2);
                                                     $currency = $record->currency ?? 'USD';
+                                                    $color = $tx->amount > 0 ? '#10b981' : '#ef4444';
                                                     return "
-                                                        <tr class='border-b border-gray-50'>
-                                                            <td class='py-2 text-xs font-medium text-gray-600'>{$date}</td>
-                                                            <td class='py-2 text-xs font-bold text-gray-900'>{$tx->payment_method}</td>
-                                                            <td class='py-2 text-xs font-mono text-gray-500'>{$tx->transaction_id}</td>
-                                                            <td class='py-2 text-xs font-bold text-right text-emerald-600'>+ {$amount} {$currency}</td>
+                                                        <tr style='border-bottom: 1px solid #f1f5f9;'>
+                                                            <td style='padding: 12px 10px; font-size: 11px; font-weight: 700; color: #334155;'>{$date}</td>
+                                                            <td style='padding: 12px 10px;'>
+                                                                <span style='background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 900; text-transform: uppercase;'>{$tx->payment_method}</span>
+                                                            </td>
+                                                            <td style='padding: 12px 10px; font-size: 11px; font-family: monospace; color: #64748b;'>{$tx->transaction_id}</td>
+                                                            <td style='padding: 12px 10px; text-align: right; font-size: 11px; font-weight: 900; color: {$color};'>
+                                                                " . ($tx->amount > 0 ? '+ ' : '') . "{$amount} {$currency}
+                                                            </td>
                                                         </tr>
                                                     ";
                                                 })->implode('');
 
                                                 return new HtmlString("
-                                                    <div class='overflow-x-auto'>
-                                                        <table class='w-full text-left'>
+                                                    <div style='width: 100%; border: 1px solid #f1f5f9; border-radius: 12px; overflow: hidden; background: #ffffff; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);'>
+                                                        <table style='width: 100%; border-collapse: collapse; table-layout: fixed;'>
                                                             <thead>
-                                                                <tr class='border-b border-gray-100'>
-                                                                    <th class='pb-2 text-[10px] font-black uppercase tracking-widest text-gray-400'>Date / Time</th>
-                                                                    <th class='pb-2 text-[10px] font-black uppercase tracking-widest text-gray-400'>Method</th>
-                                                                    <th class='pb-2 text-[10px] font-black uppercase tracking-widest text-gray-400'>Transaction ID</th>
-                                                                    <th class='pb-2 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right'>Amount</th>
+                                                                <tr style='background: #f8fafc; border-bottom: 1px solid #f1f5f9;'>
+                                                                    <th style='padding: 10px; text-align: left; width: 25%; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 900;'>Date / Time</th>
+                                                                    <th style='padding: 10px; text-align: left; width: 20%; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 900;'>Method</th>
+                                                                    <th style='padding: 10px; text-align: left; width: 35%; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 900;'>Transaction ID</th>
+                                                                    <th style='padding: 10px; text-align: right; width: 20%; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 900;'>Amount</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
