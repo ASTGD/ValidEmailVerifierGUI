@@ -14,81 +14,180 @@
     {{ end }}
 
     <form method="POST" action="{{ .BasePath }}/settings" class="mt-6 space-y-5">
-        <div class="grid gap-4 md:grid-cols-3">
-            <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <input type="checkbox" name="alerts_enabled" {{ if .Settings.AlertsEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
-                <span>
-                    <span class="block text-sm font-medium">Enable alerts</span>
-                    <span class="block text-xs text-slate-400">Turns alert checks and notifications on.</span>
-                </span>
-            </label>
-
-            <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <input type="checkbox" name="auto_actions_enabled" {{ if .Settings.AutoActionsEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
-                <span>
-                    <span class="block text-sm font-medium">Enable auto actions</span>
-                    <span class="block text-xs text-slate-400">Drains workers that exceed the error-rate threshold.</span>
-                </span>
-            </label>
-
-            <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <input type="checkbox" name="autoscale_enabled" {{ if .Settings.AutoscaleEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
-                <span>
-                    <span class="block text-sm font-medium">Enable autoscaling</span>
-                    <span class="block text-xs text-slate-400">Allows control plane to adjust pool desired counts within safe limits.</span>
-                </span>
-            </label>
-
-            <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <input type="checkbox" name="provider_policy_engine_enabled" {{ if .Settings.ProviderPolicyEngineEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
-                <span>
-                    <span class="block text-sm font-medium">Enable provider policy engine</span>
-                    <span class="block text-xs text-slate-400">Turns on provider-level policy behavior for SMTP control logic.</span>
-                </span>
-            </label>
-
-            <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <input type="checkbox" name="adaptive_retry_enabled" {{ if .Settings.AdaptiveRetryEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
-                <span>
-                    <span class="block text-sm font-medium">Enable adaptive retry</span>
-                    <span class="block text-xs text-slate-400">Uses provider-aware retry pacing for tempfail/greylist patterns.</span>
-                </span>
-            </label>
-
-            <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                <input type="checkbox" name="provider_autoprotect_enabled" {{ if .Settings.ProviderAutoprotectEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
-                <span>
-                    <span class="block text-sm font-medium">Enable provider auto protect</span>
-                    <span class="block text-xs text-slate-400">Auto-shifts provider mode when health degrades (respects manual overrides).</span>
-                </span>
-            </label>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+            <h3 class="text-sm font-semibold">Core Toggles</h3>
+            <p class="mt-1 text-xs text-slate-400">High-impact controls grouped in one block.</p>
+            <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <input type="checkbox" name="alerts_enabled" {{ if .Settings.AlertsEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
+                    <span>
+                        <span class="block text-sm font-medium">Enable alerts</span>
+                        <span class="block text-xs text-slate-400">Turns alert checks and notifications on.</span>
+                    </span>
+                </label>
+                <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <input type="checkbox" name="auto_actions_enabled" {{ if .Settings.AutoActionsEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
+                    <span>
+                        <span class="block text-sm font-medium">Enable auto actions</span>
+                        <span class="block text-xs text-slate-400">Drains workers exceeding thresholds.</span>
+                    </span>
+                </label>
+                <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <input type="checkbox" name="autoscale_enabled" {{ if .Settings.AutoscaleEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
+                    <span>
+                        <span class="block text-sm font-medium">Enable autoscaling</span>
+                        <span class="block text-xs text-slate-400">Adjust pool desired counts within guardrails.</span>
+                    </span>
+                </label>
+                <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <input type="checkbox" name="provider_policy_engine_enabled" {{ if .Settings.ProviderPolicyEngineEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
+                    <span>
+                        <span class="block text-sm font-medium">Enable provider policy engine</span>
+                        <span class="block text-xs text-slate-400">Use provider rule packs in SMTP control logic.</span>
+                    </span>
+                </label>
+                <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <input type="checkbox" name="adaptive_retry_enabled" {{ if .Settings.AdaptiveRetryEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
+                    <span>
+                        <span class="block text-sm font-medium">Enable adaptive retry</span>
+                        <span class="block text-xs text-slate-400">Provider-aware retry pacing for tempfails.</span>
+                    </span>
+                </label>
+                <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <input type="checkbox" name="provider_autoprotect_enabled" {{ if .Settings.ProviderAutoprotectEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
+                    <span>
+                        <span class="block text-sm font-medium">Enable provider auto protect</span>
+                        <span class="block text-xs text-slate-400">Auto-shifts provider mode when health degrades.</span>
+                    </span>
+                </label>
+                <label class="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <input type="checkbox" name="policy_canary_autopilot_enabled" {{ if .Settings.PolicyCanaryAutopilotEnabled }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
+                    <span>
+                        <span class="block text-sm font-medium">Enable canary autopilot</span>
+                        <span class="block text-xs text-slate-400">Automatic step-up/rollback by KPI windows.</span>
+                    </span>
+                </label>
+            </div>
         </div>
 
-        <div class="grid gap-4 md:grid-cols-3">
-            <label class="space-y-2">
-                <span class="text-xs uppercase tracking-wider text-slate-400">Error threshold (errors/min)</span>
-                <input name="alert_error_rate_threshold" type="number" min="0" step="0.1" value="{{ .Settings.AlertErrorRateThreshold }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
-            </label>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+            <h3 class="text-sm font-semibold">Alerting and Reliability</h3>
+            <div class="mt-4 grid gap-4 md:grid-cols-3">
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Error threshold (errors/min)</span>
+                    <input name="alert_error_rate_threshold" type="number" min="0" step="0.1" value="{{ .Settings.AlertErrorRateThreshold }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Heartbeat grace (seconds)</span>
+                    <input name="alert_heartbeat_grace_seconds" type="number" min="1" value="{{ .Settings.AlertHeartbeatGraceSecond }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Alert cooldown (seconds)</span>
+                    <input name="alert_cooldown_seconds" type="number" min="1" value="{{ .Settings.AlertCooldownSecond }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Alert check interval (seconds)</span>
+                    <input name="alert_check_interval_seconds" type="number" min="5" value="{{ .Settings.AlertCheckIntervalSecond }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Stale worker TTL (seconds)</span>
+                    <input name="stale_worker_ttl_seconds" type="number" min="60" value="{{ .Settings.StaleWorkerTTLSecond }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Stuck desired grace (seconds)</span>
+                    <input name="stuck_desired_grace_seconds" type="number" min="30" value="{{ .Settings.StuckDesiredGraceSecond }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Quarantine threshold</span>
+                    <input name="quarantine_error_rate_threshold" type="number" min="0" step="0.1" value="{{ .Settings.QuarantineErrorRateThreshold }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+            </div>
+        </div>
 
-            <label class="space-y-2">
-                <span class="text-xs uppercase tracking-wider text-slate-400">Heartbeat grace (seconds)</span>
-                <input name="alert_heartbeat_grace_seconds" type="number" min="1" value="{{ .Settings.AlertHeartbeatGraceSecond }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
-            </label>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+            <h3 class="text-sm font-semibold">Provider Health Thresholds</h3>
+            <div class="mt-4 grid gap-4 md:grid-cols-3">
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Tempfail warn rate</span>
+                    <input name="provider_tempfail_warn_rate" type="number" min="0" max="1" step="0.01" value="{{ .Settings.ProviderTempfailWarnRate }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Tempfail critical rate</span>
+                    <input name="provider_tempfail_critical_rate" type="number" min="0" max="1" step="0.01" value="{{ .Settings.ProviderTempfailCriticalRate }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Reject warn rate</span>
+                    <input name="provider_reject_warn_rate" type="number" min="0" max="1" step="0.01" value="{{ .Settings.ProviderRejectWarnRate }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Reject critical rate</span>
+                    <input name="provider_reject_critical_rate" type="number" min="0" max="1" step="0.01" value="{{ .Settings.ProviderRejectCriticalRate }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Unknown warn rate</span>
+                    <input name="provider_unknown_warn_rate" type="number" min="0" max="1" step="0.01" value="{{ .Settings.ProviderUnknownWarnRate }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Unknown critical rate</span>
+                    <input name="provider_unknown_critical_rate" type="number" min="0" max="1" step="0.01" value="{{ .Settings.ProviderUnknownCriticalRate }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+            </div>
+        </div>
 
-            <label class="space-y-2">
-                <span class="text-xs uppercase tracking-wider text-slate-400">Alert cooldown (seconds)</span>
-                <input name="alert_cooldown_seconds" type="number" min="1" value="{{ .Settings.AlertCooldownSecond }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
-            </label>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+            <h3 class="text-sm font-semibold">Autoscale Guardrails</h3>
+            <div class="mt-4 grid gap-4 md:grid-cols-3">
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Autoscale interval (seconds)</span>
+                    <input name="autoscale_interval_seconds" type="number" min="5" value="{{ .Settings.AutoscaleIntervalSecond }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Autoscale cooldown (seconds)</span>
+                    <input name="autoscale_cooldown_seconds" type="number" min="10" value="{{ .Settings.AutoscaleCooldownSecond }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Autoscale canary (%)</span>
+                    <input name="autoscale_canary_percent" type="number" min="1" max="100" value="{{ .Settings.AutoscaleCanaryPercent }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Autoscale min desired</span>
+                    <input name="autoscale_min_desired" type="number" min="0" value="{{ .Settings.AutoscaleMinDesired }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Autoscale max desired</span>
+                    <input name="autoscale_max_desired" type="number" min="{{ .Settings.AutoscaleMinDesired }}" value="{{ .Settings.AutoscaleMaxDesired }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+            </div>
+        </div>
 
-            <label class="space-y-2">
-                <span class="text-xs uppercase tracking-wider text-slate-400">Quarantine threshold</span>
-                <input name="quarantine_error_rate_threshold" type="number" min="0" step="0.1" value="{{ .Settings.QuarantineErrorRateThreshold }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
-            </label>
-
-            <label class="space-y-2">
-                <span class="text-xs uppercase tracking-wider text-slate-400">Autoscale canary (%)</span>
-                <input name="autoscale_canary_percent" type="number" min="1" max="100" value="{{ .Settings.AutoscaleCanaryPercent }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
-            </label>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+            <h3 class="text-sm font-semibold">Canary Autopilot Gates</h3>
+            <div class="mt-4 grid gap-4 md:grid-cols-3">
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Window (minutes)</span>
+                    <input name="policy_canary_window_minutes" type="number" min="1" value="{{ .Settings.PolicyCanaryWindowMinutes }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Required healthy windows</span>
+                    <input name="policy_canary_required_health_windows" type="number" min="1" value="{{ .Settings.PolicyCanaryRequiredHealthWindows }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Minimum provider workers</span>
+                    <input name="policy_canary_min_provider_workers" type="number" min="1" value="{{ .Settings.PolicyCanaryMinProviderWorkers }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Unknown regression threshold</span>
+                    <input name="policy_canary_unknown_regression_threshold" type="number" min="0" max="1" step="0.01" value="{{ .Settings.PolicyCanaryUnknownRegressionThreshold }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Tempfail recovery drop threshold</span>
+                    <input name="policy_canary_tempfail_recovery_drop_threshold" type="number" min="0" max="1" step="0.01" value="{{ .Settings.PolicyCanaryTempfailRecoveryDropThreshold }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <label class="space-y-2">
+                    <span class="text-xs uppercase tracking-wider text-slate-400">Policy-block spike threshold</span>
+                    <input name="policy_canary_policy_block_spike_threshold" type="number" min="0" max="1" step="0.01" value="{{ .Settings.PolicyCanaryPolicyBlockSpikeThreshold }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+            </div>
         </div>
 
         <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
@@ -99,17 +198,14 @@
                     <span class="text-xs uppercase tracking-wider text-slate-400">Overview stream (sec)</span>
                     <input name="ui_overview_live_interval_seconds" type="number" min="2" max="60" value="{{ .Settings.UIOverviewLiveIntervalSecond }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
                 </label>
-
                 <label class="space-y-2">
                     <span class="text-xs uppercase tracking-wider text-slate-400">Workers refresh (sec)</span>
                     <input name="ui_workers_refresh_seconds" type="number" min="2" max="120" value="{{ .Settings.UIWorkersRefreshSecond }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
                 </label>
-
                 <label class="space-y-2">
                     <span class="text-xs uppercase tracking-wider text-slate-400">Pools refresh (sec)</span>
                     <input name="ui_pools_refresh_seconds" type="number" min="2" max="120" value="{{ .Settings.UIPoolsRefreshSecond }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
                 </label>
-
                 <label class="space-y-2">
                     <span class="text-xs uppercase tracking-wider text-slate-400">Alerts refresh (sec)</span>
                     <input name="ui_alerts_refresh_seconds" type="number" min="5" max="300" value="{{ .Settings.UIAlertsRefreshSecond }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />

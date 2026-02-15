@@ -32,21 +32,41 @@ const (
 )
 
 type RuntimeSettings struct {
-	AlertsEnabled                bool    `json:"alerts_enabled"`
-	AutoActionsEnabled           bool    `json:"auto_actions_enabled"`
-	ProviderPolicyEngineEnabled  bool    `json:"provider_policy_engine_enabled"`
-	AdaptiveRetryEnabled         bool    `json:"adaptive_retry_enabled"`
-	ProviderAutoprotectEnabled   bool    `json:"provider_autoprotect_enabled"`
-	AlertErrorRateThreshold      float64 `json:"alert_error_rate_threshold"`
-	AlertHeartbeatGraceSecond    int     `json:"alert_heartbeat_grace_seconds"`
-	AlertCooldownSecond          int     `json:"alert_cooldown_seconds"`
-	AutoscaleEnabled             bool    `json:"autoscale_enabled"`
-	AutoscaleCanaryPercent       int     `json:"autoscale_canary_percent"`
-	QuarantineErrorRateThreshold float64 `json:"quarantine_error_rate_threshold"`
-	UIOverviewLiveIntervalSecond int     `json:"ui_overview_live_interval_seconds"`
-	UIWorkersRefreshSecond       int     `json:"ui_workers_refresh_seconds"`
-	UIPoolsRefreshSecond         int     `json:"ui_pools_refresh_seconds"`
-	UIAlertsRefreshSecond        int     `json:"ui_alerts_refresh_seconds"`
+	AlertsEnabled                             bool    `json:"alerts_enabled"`
+	AutoActionsEnabled                        bool    `json:"auto_actions_enabled"`
+	ProviderPolicyEngineEnabled               bool    `json:"provider_policy_engine_enabled"`
+	AdaptiveRetryEnabled                      bool    `json:"adaptive_retry_enabled"`
+	ProviderAutoprotectEnabled                bool    `json:"provider_autoprotect_enabled"`
+	AlertErrorRateThreshold                   float64 `json:"alert_error_rate_threshold"`
+	AlertHeartbeatGraceSecond                 int     `json:"alert_heartbeat_grace_seconds"`
+	AlertCooldownSecond                       int     `json:"alert_cooldown_seconds"`
+	AlertCheckIntervalSecond                  int     `json:"alert_check_interval_seconds"`
+	StaleWorkerTTLSecond                      int     `json:"stale_worker_ttl_seconds"`
+	StuckDesiredGraceSecond                   int     `json:"stuck_desired_grace_seconds"`
+	AutoscaleEnabled                          bool    `json:"autoscale_enabled"`
+	AutoscaleIntervalSecond                   int     `json:"autoscale_interval_seconds"`
+	AutoscaleCooldownSecond                   int     `json:"autoscale_cooldown_seconds"`
+	AutoscaleMinDesired                       int     `json:"autoscale_min_desired"`
+	AutoscaleMaxDesired                       int     `json:"autoscale_max_desired"`
+	AutoscaleCanaryPercent                    int     `json:"autoscale_canary_percent"`
+	QuarantineErrorRateThreshold              float64 `json:"quarantine_error_rate_threshold"`
+	ProviderTempfailWarnRate                  float64 `json:"provider_tempfail_warn_rate"`
+	ProviderTempfailCriticalRate              float64 `json:"provider_tempfail_critical_rate"`
+	ProviderRejectWarnRate                    float64 `json:"provider_reject_warn_rate"`
+	ProviderRejectCriticalRate                float64 `json:"provider_reject_critical_rate"`
+	ProviderUnknownWarnRate                   float64 `json:"provider_unknown_warn_rate"`
+	ProviderUnknownCriticalRate               float64 `json:"provider_unknown_critical_rate"`
+	PolicyCanaryAutopilotEnabled              bool    `json:"policy_canary_autopilot_enabled"`
+	PolicyCanaryWindowMinutes                 int     `json:"policy_canary_window_minutes"`
+	PolicyCanaryRequiredHealthWindows         int     `json:"policy_canary_required_health_windows"`
+	PolicyCanaryUnknownRegressionThreshold    float64 `json:"policy_canary_unknown_regression_threshold"`
+	PolicyCanaryTempfailRecoveryDropThreshold float64 `json:"policy_canary_tempfail_recovery_drop_threshold"`
+	PolicyCanaryPolicyBlockSpikeThreshold     float64 `json:"policy_canary_policy_block_spike_threshold"`
+	PolicyCanaryMinProviderWorkers            int     `json:"policy_canary_min_provider_workers"`
+	UIOverviewLiveIntervalSecond              int     `json:"ui_overview_live_interval_seconds"`
+	UIWorkersRefreshSecond                    int     `json:"ui_workers_refresh_seconds"`
+	UIPoolsRefreshSecond                      int     `json:"ui_pools_refresh_seconds"`
+	UIAlertsRefreshSecond                     int     `json:"ui_alerts_refresh_seconds"`
 }
 
 func NewStore(rdb *redis.Client, ttl time.Duration) *Store {
@@ -300,6 +320,11 @@ func (s *Store) ShouldSendAlert(ctx context.Context, key string, ttl time.Durati
 }
 
 func defaultRuntimeSettings(cfg Config) RuntimeSettings {
+	alertCheckInterval := int(cfg.AlertCheckInterval / time.Second)
+	if alertCheckInterval <= 0 {
+		alertCheckInterval = 30
+	}
+
 	grace := int(cfg.AlertHeartbeatGrace / time.Second)
 	if grace <= 0 {
 		grace = 120
@@ -310,22 +335,62 @@ func defaultRuntimeSettings(cfg Config) RuntimeSettings {
 		cooldown = 300
 	}
 
+	staleWorkerTTL := int(cfg.StaleWorkerTTL / time.Second)
+	if staleWorkerTTL <= 0 {
+		staleWorkerTTL = 86400
+	}
+
+	stuckDesiredGrace := int(cfg.StuckDesiredGrace / time.Second)
+	if stuckDesiredGrace <= 0 {
+		stuckDesiredGrace = 600
+	}
+
+	autoscaleInterval := int(cfg.AutoScaleInterval / time.Second)
+	if autoscaleInterval <= 0 {
+		autoscaleInterval = 30
+	}
+
+	autoscaleCooldown := int(cfg.AutoScaleCooldown / time.Second)
+	if autoscaleCooldown <= 0 {
+		autoscaleCooldown = 120
+	}
+
 	return RuntimeSettings{
-		AlertsEnabled:                cfg.AlertsEnabled,
-		AutoActionsEnabled:           cfg.AutoActionsEnabled,
-		ProviderPolicyEngineEnabled:  cfg.ProviderPolicyEngineEnabled,
-		AdaptiveRetryEnabled:         cfg.AdaptiveRetryEnabled,
-		ProviderAutoprotectEnabled:   cfg.ProviderAutoprotectEnabled,
-		AlertErrorRateThreshold:      cfg.AlertErrorRateThreshold,
-		AlertHeartbeatGraceSecond:    grace,
-		AlertCooldownSecond:          cooldown,
-		AutoscaleEnabled:             cfg.AutoScaleEnabled,
-		AutoscaleCanaryPercent:       cfg.AutoScaleCanaryPercent,
-		QuarantineErrorRateThreshold: cfg.QuarantineErrorRate,
-		UIOverviewLiveIntervalSecond: 5,
-		UIWorkersRefreshSecond:       10,
-		UIPoolsRefreshSecond:         10,
-		UIAlertsRefreshSecond:        30,
+		AlertsEnabled:                             cfg.AlertsEnabled,
+		AutoActionsEnabled:                        cfg.AutoActionsEnabled,
+		ProviderPolicyEngineEnabled:               cfg.ProviderPolicyEngineEnabled,
+		AdaptiveRetryEnabled:                      cfg.AdaptiveRetryEnabled,
+		ProviderAutoprotectEnabled:                cfg.ProviderAutoprotectEnabled,
+		AlertErrorRateThreshold:                   cfg.AlertErrorRateThreshold,
+		AlertHeartbeatGraceSecond:                 grace,
+		AlertCooldownSecond:                       cooldown,
+		AlertCheckIntervalSecond:                  alertCheckInterval,
+		StaleWorkerTTLSecond:                      staleWorkerTTL,
+		StuckDesiredGraceSecond:                   stuckDesiredGrace,
+		AutoscaleEnabled:                          cfg.AutoScaleEnabled,
+		AutoscaleIntervalSecond:                   autoscaleInterval,
+		AutoscaleCooldownSecond:                   autoscaleCooldown,
+		AutoscaleMinDesired:                       cfg.AutoScaleMinDesired,
+		AutoscaleMaxDesired:                       cfg.AutoScaleMaxDesired,
+		AutoscaleCanaryPercent:                    cfg.AutoScaleCanaryPercent,
+		QuarantineErrorRateThreshold:              cfg.QuarantineErrorRate,
+		ProviderTempfailWarnRate:                  cfg.ProviderTempfailWarnRate,
+		ProviderTempfailCriticalRate:              cfg.ProviderTempfailCriticalRate,
+		ProviderRejectWarnRate:                    cfg.ProviderRejectWarnRate,
+		ProviderRejectCriticalRate:                cfg.ProviderRejectCriticalRate,
+		ProviderUnknownWarnRate:                   cfg.ProviderUnknownWarnRate,
+		ProviderUnknownCriticalRate:               cfg.ProviderUnknownCriticalRate,
+		PolicyCanaryAutopilotEnabled:              cfg.PolicyCanaryAutopilotEnabled,
+		PolicyCanaryWindowMinutes:                 cfg.PolicyCanaryWindowMinutes,
+		PolicyCanaryRequiredHealthWindows:         cfg.PolicyCanaryRequiredHealthWindows,
+		PolicyCanaryUnknownRegressionThreshold:    cfg.PolicyCanaryUnknownRegressionThreshold,
+		PolicyCanaryTempfailRecoveryDropThreshold: cfg.PolicyCanaryTempfailRecoveryDropThreshold,
+		PolicyCanaryPolicyBlockSpikeThreshold:     cfg.PolicyCanaryPolicyBlockSpikeThreshold,
+		PolicyCanaryMinProviderWorkers:            cfg.PolicyCanaryMinProviderWorkers,
+		UIOverviewLiveIntervalSecond:              5,
+		UIWorkersRefreshSecond:                    10,
+		UIPoolsRefreshSecond:                      10,
+		UIAlertsRefreshSecond:                     30,
 	}
 }
 
@@ -340,8 +405,36 @@ func normalizeRuntimeSettings(in RuntimeSettings, defaults RuntimeSettings) Runt
 		out.AlertCooldownSecond = defaults.AlertCooldownSecond
 	}
 
+	if out.AlertCheckIntervalSecond <= 0 {
+		out.AlertCheckIntervalSecond = defaults.AlertCheckIntervalSecond
+	}
+
+	if out.StaleWorkerTTLSecond <= 0 {
+		out.StaleWorkerTTLSecond = defaults.StaleWorkerTTLSecond
+	}
+
+	if out.StuckDesiredGraceSecond <= 0 {
+		out.StuckDesiredGraceSecond = defaults.StuckDesiredGraceSecond
+	}
+
 	if out.AlertErrorRateThreshold < 0 {
 		out.AlertErrorRateThreshold = defaults.AlertErrorRateThreshold
+	}
+
+	if out.AutoscaleIntervalSecond <= 0 {
+		out.AutoscaleIntervalSecond = defaults.AutoscaleIntervalSecond
+	}
+
+	if out.AutoscaleCooldownSecond <= 0 {
+		out.AutoscaleCooldownSecond = defaults.AutoscaleCooldownSecond
+	}
+
+	if out.AutoscaleMinDesired < 0 {
+		out.AutoscaleMinDesired = defaults.AutoscaleMinDesired
+	}
+
+	if out.AutoscaleMaxDesired < out.AutoscaleMinDesired {
+		out.AutoscaleMaxDesired = out.AutoscaleMinDesired
 	}
 
 	defaultCanary := defaults.AutoscaleCanaryPercent
@@ -358,6 +451,66 @@ func normalizeRuntimeSettings(in RuntimeSettings, defaults RuntimeSettings) Runt
 
 	if out.QuarantineErrorRateThreshold < 0 {
 		out.QuarantineErrorRateThreshold = defaults.QuarantineErrorRateThreshold
+	}
+
+	if out.ProviderTempfailWarnRate < 0 {
+		out.ProviderTempfailWarnRate = defaults.ProviderTempfailWarnRate
+	}
+
+	if out.ProviderTempfailCriticalRate < 0 {
+		out.ProviderTempfailCriticalRate = defaults.ProviderTempfailCriticalRate
+	}
+
+	if out.ProviderRejectWarnRate < 0 {
+		out.ProviderRejectWarnRate = defaults.ProviderRejectWarnRate
+	}
+
+	if out.ProviderRejectCriticalRate < 0 {
+		out.ProviderRejectCriticalRate = defaults.ProviderRejectCriticalRate
+	}
+
+	if out.ProviderUnknownWarnRate < 0 {
+		out.ProviderUnknownWarnRate = defaults.ProviderUnknownWarnRate
+	}
+
+	if out.ProviderUnknownCriticalRate < 0 {
+		out.ProviderUnknownCriticalRate = defaults.ProviderUnknownCriticalRate
+	}
+
+	if out.ProviderTempfailCriticalRate < out.ProviderTempfailWarnRate {
+		out.ProviderTempfailCriticalRate = out.ProviderTempfailWarnRate
+	}
+
+	if out.ProviderRejectCriticalRate < out.ProviderRejectWarnRate {
+		out.ProviderRejectCriticalRate = out.ProviderRejectWarnRate
+	}
+
+	if out.ProviderUnknownCriticalRate < out.ProviderUnknownWarnRate {
+		out.ProviderUnknownCriticalRate = out.ProviderUnknownWarnRate
+	}
+
+	if out.PolicyCanaryWindowMinutes <= 0 {
+		out.PolicyCanaryWindowMinutes = defaults.PolicyCanaryWindowMinutes
+	}
+
+	if out.PolicyCanaryRequiredHealthWindows <= 0 {
+		out.PolicyCanaryRequiredHealthWindows = defaults.PolicyCanaryRequiredHealthWindows
+	}
+
+	if out.PolicyCanaryUnknownRegressionThreshold < 0 {
+		out.PolicyCanaryUnknownRegressionThreshold = defaults.PolicyCanaryUnknownRegressionThreshold
+	}
+
+	if out.PolicyCanaryTempfailRecoveryDropThreshold < 0 {
+		out.PolicyCanaryTempfailRecoveryDropThreshold = defaults.PolicyCanaryTempfailRecoveryDropThreshold
+	}
+
+	if out.PolicyCanaryPolicyBlockSpikeThreshold < 0 {
+		out.PolicyCanaryPolicyBlockSpikeThreshold = defaults.PolicyCanaryPolicyBlockSpikeThreshold
+	}
+
+	if out.PolicyCanaryMinProviderWorkers <= 0 {
+		out.PolicyCanaryMinProviderWorkers = defaults.PolicyCanaryMinProviderWorkers
 	}
 
 	if out.UIOverviewLiveIntervalSecond <= 0 {
@@ -404,6 +557,66 @@ func (s *Store) GetRuntimeSettings(ctx context.Context, defaults RuntimeSettings
 		}
 		if _, ok := raw["provider_autoprotect_enabled"]; !ok {
 			settings.ProviderAutoprotectEnabled = defaults.ProviderAutoprotectEnabled
+		}
+		if _, ok := raw["policy_canary_autopilot_enabled"]; !ok {
+			settings.PolicyCanaryAutopilotEnabled = defaults.PolicyCanaryAutopilotEnabled
+		}
+		if _, ok := raw["alert_check_interval_seconds"]; !ok {
+			settings.AlertCheckIntervalSecond = defaults.AlertCheckIntervalSecond
+		}
+		if _, ok := raw["stale_worker_ttl_seconds"]; !ok {
+			settings.StaleWorkerTTLSecond = defaults.StaleWorkerTTLSecond
+		}
+		if _, ok := raw["stuck_desired_grace_seconds"]; !ok {
+			settings.StuckDesiredGraceSecond = defaults.StuckDesiredGraceSecond
+		}
+		if _, ok := raw["autoscale_interval_seconds"]; !ok {
+			settings.AutoscaleIntervalSecond = defaults.AutoscaleIntervalSecond
+		}
+		if _, ok := raw["autoscale_cooldown_seconds"]; !ok {
+			settings.AutoscaleCooldownSecond = defaults.AutoscaleCooldownSecond
+		}
+		if _, ok := raw["autoscale_min_desired"]; !ok {
+			settings.AutoscaleMinDesired = defaults.AutoscaleMinDesired
+		}
+		if _, ok := raw["autoscale_max_desired"]; !ok {
+			settings.AutoscaleMaxDesired = defaults.AutoscaleMaxDesired
+		}
+		if _, ok := raw["provider_tempfail_warn_rate"]; !ok {
+			settings.ProviderTempfailWarnRate = defaults.ProviderTempfailWarnRate
+		}
+		if _, ok := raw["provider_tempfail_critical_rate"]; !ok {
+			settings.ProviderTempfailCriticalRate = defaults.ProviderTempfailCriticalRate
+		}
+		if _, ok := raw["provider_reject_warn_rate"]; !ok {
+			settings.ProviderRejectWarnRate = defaults.ProviderRejectWarnRate
+		}
+		if _, ok := raw["provider_reject_critical_rate"]; !ok {
+			settings.ProviderRejectCriticalRate = defaults.ProviderRejectCriticalRate
+		}
+		if _, ok := raw["provider_unknown_warn_rate"]; !ok {
+			settings.ProviderUnknownWarnRate = defaults.ProviderUnknownWarnRate
+		}
+		if _, ok := raw["provider_unknown_critical_rate"]; !ok {
+			settings.ProviderUnknownCriticalRate = defaults.ProviderUnknownCriticalRate
+		}
+		if _, ok := raw["policy_canary_window_minutes"]; !ok {
+			settings.PolicyCanaryWindowMinutes = defaults.PolicyCanaryWindowMinutes
+		}
+		if _, ok := raw["policy_canary_required_health_windows"]; !ok {
+			settings.PolicyCanaryRequiredHealthWindows = defaults.PolicyCanaryRequiredHealthWindows
+		}
+		if _, ok := raw["policy_canary_unknown_regression_threshold"]; !ok {
+			settings.PolicyCanaryUnknownRegressionThreshold = defaults.PolicyCanaryUnknownRegressionThreshold
+		}
+		if _, ok := raw["policy_canary_tempfail_recovery_drop_threshold"]; !ok {
+			settings.PolicyCanaryTempfailRecoveryDropThreshold = defaults.PolicyCanaryTempfailRecoveryDropThreshold
+		}
+		if _, ok := raw["policy_canary_policy_block_spike_threshold"]; !ok {
+			settings.PolicyCanaryPolicyBlockSpikeThreshold = defaults.PolicyCanaryPolicyBlockSpikeThreshold
+		}
+		if _, ok := raw["policy_canary_min_provider_workers"]; !ok {
+			settings.PolicyCanaryMinProviderWorkers = defaults.PolicyCanaryMinProviderWorkers
 		}
 	}
 

@@ -14,21 +14,17 @@ type AutoScaleService struct {
 	stopChannel chan struct{}
 	ticker      *time.Ticker
 	lastAction  map[string]time.Time
+	lastRunAt   time.Time
 }
 
 func NewAutoScaleService(store *Store, cfg Config, instanceID string) *AutoScaleService {
-	interval := cfg.AutoScaleInterval
-	if interval <= 0 {
-		interval = 30 * time.Second
-	}
-
 	return &AutoScaleService{
 		store:       store,
 		cfg:         cfg,
 		instanceID:  instanceID,
 		stopChannel: make(chan struct{}),
 		lastAction:  map[string]time.Time{},
-		ticker:      time.NewTicker(interval),
+		ticker:      time.NewTicker(5 * time.Second),
 	}
 }
 
@@ -55,16 +51,18 @@ func (s *AutoScaleService) run() {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 
-	if !s.shouldRun(ctx) {
-		return
-	}
-
 	defaults := defaultRuntimeSettings(s.cfg)
 	settings, err := s.store.GetRuntimeSettings(ctx, defaults)
 	if err != nil {
 		settings = defaults
 	}
 	if !settings.AutoscaleEnabled {
+		return
+	}
+	if !s.shouldRun(ctx) {
+		return
+	}
+	if !s.runDue(settings) {
 		return
 	}
 
@@ -93,11 +91,11 @@ func (s *AutoScaleService) run() {
 		}
 	}
 
-	minDesired := s.cfg.AutoScaleMinDesired
+	minDesired := settings.AutoscaleMinDesired
 	if minDesired < 0 {
 		minDesired = 0
 	}
-	maxDesired := s.cfg.AutoScaleMaxDesired
+	maxDesired := settings.AutoscaleMaxDesired
 	if maxDesired < minDesired {
 		maxDesired = minDesired
 	}
@@ -133,7 +131,7 @@ func (s *AutoScaleService) run() {
 			continue
 		}
 
-		if !s.cooldownElapsed(pool.Pool) {
+		if !s.cooldownElapsed(pool.Pool, settings) {
 			continue
 		}
 
@@ -155,6 +153,22 @@ func (s *AutoScaleService) run() {
 	}
 }
 
+func (s *AutoScaleService) runDue(settings RuntimeSettings) bool {
+	intervalSeconds := settings.AutoscaleIntervalSecond
+	if intervalSeconds <= 0 {
+		intervalSeconds = 30
+	}
+
+	interval := time.Duration(intervalSeconds) * time.Second
+	now := time.Now().UTC()
+	if !s.lastRunAt.IsZero() && now.Sub(s.lastRunAt) < interval {
+		return false
+	}
+
+	s.lastRunAt = now
+	return true
+}
+
 func (s *AutoScaleService) shouldRun(ctx context.Context) bool {
 	if !s.cfg.LeaderLockEnabled {
 		return true
@@ -169,8 +183,8 @@ func (s *AutoScaleService) shouldRun(ctx context.Context) bool {
 	return ok
 }
 
-func (s *AutoScaleService) cooldownElapsed(pool string) bool {
-	cooldown := s.cfg.AutoScaleCooldown
+func (s *AutoScaleService) cooldownElapsed(pool string, settings RuntimeSettings) bool {
+	cooldown := time.Duration(settings.AutoscaleCooldownSecond) * time.Second
 	if cooldown <= 0 {
 		cooldown = 120 * time.Second
 	}

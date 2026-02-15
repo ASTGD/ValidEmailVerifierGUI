@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\SeedSendConsentApproveController;
 use App\Http\Controllers\Admin\SeedSendConsentRevokeController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\InternalDocsController;
 use App\Http\Controllers\MarketingController;
 use App\Http\Controllers\Portal\SeedSendConsentRequestController;
 use App\Http\Controllers\Portal\SeedSendReportDownloadController;
@@ -104,6 +105,14 @@ Route::middleware(['auth', 'verified', 'admin.role'])
             ->name('campaigns.retry-failed');
         Route::get('health', SeedSendCampaignHealthController::class)
             ->name('health');
+    });
+
+Route::middleware(['auth', 'verified', 'admin.role'])
+    ->prefix('internal/docs')
+    ->name('internal.docs.')
+    ->group(function () {
+        Route::get('/', [InternalDocsController::class, 'index'])->name('index');
+        Route::get('{section}/{page}', [InternalDocsController::class, 'show'])->name('page');
     });
 
 Route::middleware(['auth', 'verified'])

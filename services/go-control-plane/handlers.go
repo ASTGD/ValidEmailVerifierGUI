@@ -220,8 +220,10 @@ func (s *Server) handleProvidersQualityDrift(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	settings := s.runtimeSettings(r.Context())
+
 	writeJSON(w, http.StatusOK, ProviderQualityDriftResponse{
-		Data: providerQualityDriftFromHealth(stats.ProviderHealth, thresholdsFromConfig(s.cfg)),
+		Data: providerQualityDriftFromHealth(stats.ProviderHealth, thresholdsFromRuntimeSettings(settings)),
 	})
 }
 

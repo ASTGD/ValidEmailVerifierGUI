@@ -34,6 +34,17 @@ func thresholdsFromConfig(cfg Config) providerHealthThresholds {
 	}
 }
 
+func thresholdsFromRuntimeSettings(settings RuntimeSettings) providerHealthThresholds {
+	return providerHealthThresholds{
+		TempfailWarn:     settings.ProviderTempfailWarnRate,
+		TempfailCritical: settings.ProviderTempfailCriticalRate,
+		RejectWarn:       settings.ProviderRejectWarnRate,
+		RejectCritical:   settings.ProviderRejectCriticalRate,
+		UnknownWarn:      settings.ProviderUnknownWarnRate,
+		UnknownCritical:  settings.ProviderUnknownCriticalRate,
+	}
+}
+
 func aggregateProviderHealth(
 	workers []WorkerSummary,
 	modes map[string]ProviderModeState,

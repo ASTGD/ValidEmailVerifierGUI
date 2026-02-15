@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNormalizeRuntimeSettingsFallsBackCanaryToDefaultWhenZero(t *testing.T) {
@@ -77,6 +78,144 @@ func TestDefaultRuntimeSettingsIncludesProviderFeatureToggles(t *testing.T) {
 	}
 	if !settings.ProviderAutoprotectEnabled {
 		t.Fatal("expected provider auto-protect default toggle to be true")
+	}
+}
+
+func TestDefaultRuntimeSettingsIncludesOperationalThresholds(t *testing.T) {
+	cfg := Config{
+		AlertCheckInterval:                        45 * time.Second,
+		StaleWorkerTTL:                            2 * time.Hour,
+		StuckDesiredGrace:                         12 * time.Minute,
+		AutoScaleInterval:                         40 * time.Second,
+		AutoScaleCooldown:                         3 * time.Minute,
+		AutoScaleMinDesired:                       2,
+		AutoScaleMaxDesired:                       9,
+		ProviderTempfailWarnRate:                  0.31,
+		ProviderTempfailCriticalRate:              0.56,
+		ProviderRejectWarnRate:                    0.21,
+		ProviderRejectCriticalRate:                0.42,
+		ProviderUnknownWarnRate:                   0.22,
+		ProviderUnknownCriticalRate:               0.38,
+		PolicyCanaryAutopilotEnabled:              true,
+		PolicyCanaryWindowMinutes:                 20,
+		PolicyCanaryRequiredHealthWindows:         5,
+		PolicyCanaryUnknownRegressionThreshold:    0.07,
+		PolicyCanaryTempfailRecoveryDropThreshold: 0.11,
+		PolicyCanaryPolicyBlockSpikeThreshold:     0.12,
+		PolicyCanaryMinProviderWorkers:            3,
+	}
+
+	settings := defaultRuntimeSettings(cfg)
+	if settings.AlertCheckIntervalSecond != 45 {
+		t.Fatalf("expected alert interval 45, got %d", settings.AlertCheckIntervalSecond)
+	}
+	if settings.StaleWorkerTTLSecond != int((2 * time.Hour).Seconds()) {
+		t.Fatalf("expected stale worker ttl 7200, got %d", settings.StaleWorkerTTLSecond)
+	}
+	if settings.StuckDesiredGraceSecond != int((12 * time.Minute).Seconds()) {
+		t.Fatalf("expected stuck desired grace 720, got %d", settings.StuckDesiredGraceSecond)
+	}
+	if settings.AutoscaleIntervalSecond != 40 {
+		t.Fatalf("expected autoscale interval 40, got %d", settings.AutoscaleIntervalSecond)
+	}
+	if settings.AutoscaleCooldownSecond != 180 {
+		t.Fatalf("expected autoscale cooldown 180, got %d", settings.AutoscaleCooldownSecond)
+	}
+	if settings.AutoscaleMinDesired != 2 || settings.AutoscaleMaxDesired != 9 {
+		t.Fatalf("expected autoscale desired range 2..9, got %d..%d", settings.AutoscaleMinDesired, settings.AutoscaleMaxDesired)
+	}
+	if !settings.PolicyCanaryAutopilotEnabled {
+		t.Fatal("expected policy canary autopilot default toggle to be true")
+	}
+	if settings.PolicyCanaryWindowMinutes != 20 {
+		t.Fatalf("expected policy canary window 20, got %d", settings.PolicyCanaryWindowMinutes)
+	}
+	if settings.PolicyCanaryMinProviderWorkers != 3 {
+		t.Fatalf("expected policy canary min provider workers 3, got %d", settings.PolicyCanaryMinProviderWorkers)
+	}
+	if settings.ProviderTempfailWarnRate != 0.31 {
+		t.Fatalf("expected provider tempfail warn rate 0.31, got %.2f", settings.ProviderTempfailWarnRate)
+	}
+}
+
+func TestNormalizeRuntimeSettingsNormalizesOperationalRanges(t *testing.T) {
+	defaults := RuntimeSettings{
+		AlertCheckIntervalSecond:                  30,
+		StaleWorkerTTLSecond:                      86400,
+		StuckDesiredGraceSecond:                   600,
+		AutoscaleIntervalSecond:                   30,
+		AutoscaleCooldownSecond:                   120,
+		AutoscaleMinDesired:                       1,
+		AutoscaleMaxDesired:                       4,
+		ProviderTempfailWarnRate:                  0.30,
+		ProviderTempfailCriticalRate:              0.55,
+		ProviderRejectWarnRate:                    0.20,
+		ProviderRejectCriticalRate:                0.40,
+		ProviderUnknownWarnRate:                   0.20,
+		ProviderUnknownCriticalRate:               0.35,
+		PolicyCanaryWindowMinutes:                 15,
+		PolicyCanaryRequiredHealthWindows:         4,
+		PolicyCanaryUnknownRegressionThreshold:    0.05,
+		PolicyCanaryTempfailRecoveryDropThreshold: 0.10,
+		PolicyCanaryPolicyBlockSpikeThreshold:     0.10,
+		PolicyCanaryMinProviderWorkers:            1,
+	}
+
+	settings := RuntimeSettings{
+		AlertCheckIntervalSecond:                  0,
+		StaleWorkerTTLSecond:                      0,
+		StuckDesiredGraceSecond:                   0,
+		AutoscaleIntervalSecond:                   0,
+		AutoscaleCooldownSecond:                   0,
+		AutoscaleMinDesired:                       3,
+		AutoscaleMaxDesired:                       2,
+		ProviderTempfailWarnRate:                  0.40,
+		ProviderTempfailCriticalRate:              0.20,
+		ProviderRejectWarnRate:                    0.30,
+		ProviderRejectCriticalRate:                0.10,
+		ProviderUnknownWarnRate:                   0.25,
+		ProviderUnknownCriticalRate:               0.05,
+		PolicyCanaryWindowMinutes:                 0,
+		PolicyCanaryRequiredHealthWindows:         0,
+		PolicyCanaryUnknownRegressionThreshold:    -1,
+		PolicyCanaryTempfailRecoveryDropThreshold: -1,
+		PolicyCanaryPolicyBlockSpikeThreshold:     -1,
+		PolicyCanaryMinProviderWorkers:            0,
+	}
+
+	normalized := normalizeRuntimeSettings(settings, defaults)
+	if normalized.AlertCheckIntervalSecond != defaults.AlertCheckIntervalSecond {
+		t.Fatalf("expected alert interval fallback %d, got %d", defaults.AlertCheckIntervalSecond, normalized.AlertCheckIntervalSecond)
+	}
+	if normalized.StaleWorkerTTLSecond != defaults.StaleWorkerTTLSecond {
+		t.Fatalf("expected stale ttl fallback %d, got %d", defaults.StaleWorkerTTLSecond, normalized.StaleWorkerTTLSecond)
+	}
+	if normalized.StuckDesiredGraceSecond != defaults.StuckDesiredGraceSecond {
+		t.Fatalf("expected stuck desired fallback %d, got %d", defaults.StuckDesiredGraceSecond, normalized.StuckDesiredGraceSecond)
+	}
+	if normalized.AutoscaleIntervalSecond != defaults.AutoscaleIntervalSecond {
+		t.Fatalf("expected autoscale interval fallback %d, got %d", defaults.AutoscaleIntervalSecond, normalized.AutoscaleIntervalSecond)
+	}
+	if normalized.AutoscaleCooldownSecond != defaults.AutoscaleCooldownSecond {
+		t.Fatalf("expected autoscale cooldown fallback %d, got %d", defaults.AutoscaleCooldownSecond, normalized.AutoscaleCooldownSecond)
+	}
+	if normalized.AutoscaleMaxDesired != normalized.AutoscaleMinDesired {
+		t.Fatalf("expected autoscale max to clamp to min, got %d vs %d", normalized.AutoscaleMaxDesired, normalized.AutoscaleMinDesired)
+	}
+	if normalized.ProviderTempfailCriticalRate != normalized.ProviderTempfailWarnRate {
+		t.Fatalf("expected tempfail critical to clamp to warn, got %.2f vs %.2f", normalized.ProviderTempfailCriticalRate, normalized.ProviderTempfailWarnRate)
+	}
+	if normalized.ProviderRejectCriticalRate != normalized.ProviderRejectWarnRate {
+		t.Fatalf("expected reject critical to clamp to warn, got %.2f vs %.2f", normalized.ProviderRejectCriticalRate, normalized.ProviderRejectWarnRate)
+	}
+	if normalized.ProviderUnknownCriticalRate != normalized.ProviderUnknownWarnRate {
+		t.Fatalf("expected unknown critical to clamp to warn, got %.2f vs %.2f", normalized.ProviderUnknownCriticalRate, normalized.ProviderUnknownWarnRate)
+	}
+	if normalized.PolicyCanaryWindowMinutes != defaults.PolicyCanaryWindowMinutes {
+		t.Fatalf("expected policy canary window fallback %d, got %d", defaults.PolicyCanaryWindowMinutes, normalized.PolicyCanaryWindowMinutes)
+	}
+	if normalized.PolicyCanaryMinProviderWorkers != defaults.PolicyCanaryMinProviderWorkers {
+		t.Fatalf("expected policy canary min provider workers fallback %d, got %d", defaults.PolicyCanaryMinProviderWorkers, normalized.PolicyCanaryMinProviderWorkers)
 	}
 }
 

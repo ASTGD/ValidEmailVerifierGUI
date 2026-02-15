@@ -157,7 +157,7 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 		activePolicyVersion = ""
 	}
 
-	providerHealth := aggregateProviderHealth(workers, providerModesMap, thresholdsFromConfig(s.cfg))
+	providerHealth := aggregateProviderHealth(workers, providerModesMap, thresholdsFromRuntimeSettings(settings))
 	providerModes := make([]ProviderModeState, 0, len(providerModesMap))
 	for _, mode := range providerModesMap {
 		providerModes = append(providerModes, mode)
@@ -194,7 +194,7 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 			PolicyEngineEnabled:  settings.ProviderPolicyEngineEnabled,
 			AdaptiveRetryEnabled: settings.AdaptiveRetryEnabled,
 			AutoProtectEnabled:   settings.ProviderAutoprotectEnabled,
-			AutopilotEnabled:     s.cfg.PolicyCanaryAutopilotEnabled,
+			AutopilotEnabled:     settings.PolicyCanaryAutopilotEnabled,
 			ActiveVersion:        activePolicyVersion,
 			LastReloadAt:         providerPolicyState.LastReloadAt,
 			ReloadCount:          providerPolicyState.ReloadCount,
