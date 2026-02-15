@@ -24,6 +24,7 @@ type AlertService struct {
 	notifier    Notifier
 	stopChannel chan struct{}
 	checkTicker *time.Ticker
+	lastRunAt   time.Time
 }
 
 func NewAlertService(store *Store, snapshots *SnapshotStore, cfg Config, notifier Notifier, instanceID string) *AlertService {
@@ -38,12 +39,7 @@ func NewAlertService(store *Store, snapshots *SnapshotStore, cfg Config, notifie
 }
 
 func (s *AlertService) Start() {
-	interval := s.cfg.AlertCheckInterval
-	if interval <= 0 {
-		interval = 30 * time.Second
-	}
-
-	s.checkTicker = time.NewTicker(interval)
+	s.checkTicker = time.NewTicker(5 * time.Second)
 	go func() {
 		defer s.checkTicker.Stop()
 		for {
@@ -65,11 +61,13 @@ func (s *AlertService) runChecks() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	settings := s.loadRuntimeSettings(ctx)
 	if !s.shouldRun(ctx) {
 		return
 	}
-
-	settings := s.loadRuntimeSettings(ctx)
+	if !s.checkDue(settings) {
+		return
+	}
 
 	s.cleanupStaleWorkers(ctx, settings)
 
@@ -82,6 +80,23 @@ func (s *AlertService) runChecks() {
 	s.checkWorkerErrorRate(ctx, settings)
 	s.checkStuckDesiredState(ctx, settings)
 	s.checkProviderHealth(ctx, settings)
+}
+
+func (s *AlertService) checkDue(settings RuntimeSettings) bool {
+	intervalSeconds := settings.AlertCheckIntervalSecond
+	if intervalSeconds <= 0 {
+		intervalSeconds = 30
+	}
+
+	interval := time.Duration(intervalSeconds) * time.Second
+	now := time.Now().UTC()
+	if !s.lastRunAt.IsZero() && now.Sub(s.lastRunAt) < interval {
+		return false
+	}
+
+	s.lastRunAt = now
+
+	return true
 }
 
 func (s *AlertService) shouldRun(ctx context.Context) bool {
@@ -99,11 +114,12 @@ func (s *AlertService) shouldRun(ctx context.Context) bool {
 }
 
 func (s *AlertService) cleanupStaleWorkers(ctx context.Context, settings RuntimeSettings) {
-	if s.cfg.StaleWorkerTTL <= 0 {
+	staleWorkerTTLSeconds := settings.StaleWorkerTTLSecond
+	if staleWorkerTTLSeconds <= 0 {
 		return
 	}
 
-	cutoff := time.Now().UTC().Add(-s.cfg.StaleWorkerTTL)
+	cutoff := time.Now().UTC().Add(-time.Duration(staleWorkerTTLSeconds) * time.Second)
 	staleWorkers, err := s.store.CleanupStaleKnownWorkers(ctx, cutoff)
 	if err != nil {
 		log.Printf("alert: stale worker cleanup failed: %v", err)
@@ -257,7 +273,7 @@ func (s *AlertService) checkWorkerErrorRate(ctx context.Context, settings Runtim
 }
 
 func (s *AlertService) checkStuckDesiredState(ctx context.Context, settings RuntimeSettings) {
-	grace := s.cfg.StuckDesiredGrace
+	grace := time.Duration(settings.StuckDesiredGraceSecond) * time.Second
 	if grace <= 0 {
 		grace = 10 * time.Minute
 	}
@@ -322,7 +338,7 @@ func (s *AlertService) checkProviderHealth(ctx context.Context, settings Runtime
 		modes = map[string]ProviderModeState{}
 	}
 
-	health := aggregateProviderHealth(workers, modes, thresholdsFromConfig(s.cfg))
+	health := aggregateProviderHealth(workers, modes, thresholdsFromRuntimeSettings(settings))
 	for _, provider := range health {
 		active := provider.Status != "healthy"
 		contextData := map[string]interface{}{

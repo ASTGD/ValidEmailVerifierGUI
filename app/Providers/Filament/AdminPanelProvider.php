@@ -2,26 +2,26 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\OpsOverview;
 use App\Filament\Widgets\AdminDashboardHighlights;
 use App\Filament\Widgets\AdminQuickLinks;
 use App\Filament\Widgets\AdminStatsOverview;
-use App\Filament\Widgets\FeedbackAnalytics;
 use App\Filament\Widgets\EngineWarmupOverview;
+use App\Filament\Widgets\FeedbackAnalytics;
 use App\Filament\Widgets\FinalizationHealth;
-use App\Filament\Pages\OpsOverview;
 use App\Support\EngineSettings;
 use App\Support\Roles;
-use Filament\Support\Assets\Css;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Navigation\NavigationItem;
 use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
+use Filament\Support\Assets\Css;
 use Filament\Support\Colors\Color;
 use Filament\Support\Icons\Heroicon;
-use Filament\Navigation\NavigationItem;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -60,7 +60,7 @@ class AdminPanelProvider extends PanelProvider
                     ->group('Operations')
                     ->icon(Heroicon::OutlinedQueueList)
                     ->sort(10)
-                    ->url(fn (): string => url('/' . trim((string) config('horizon.path', 'horizon'), '/')))
+                    ->url(fn (): string => url('/'.trim((string) config('horizon.path', 'horizon'), '/')))
                     ->openUrlInNewTab()
                     ->visible(function (): bool {
                         $user = auth()->user();
@@ -74,6 +74,17 @@ class AdminPanelProvider extends PanelProvider
                         } catch (\Throwable $exception) {
                             return false;
                         }
+                    }),
+                NavigationItem::make('Operations Docs')
+                    ->group('Operations')
+                    ->icon(Heroicon::OutlinedBookOpen)
+                    ->sort(11)
+                    ->url(fn (): string => route('internal.docs.index'))
+                    ->openUrlInNewTab()
+                    ->visible(function (): bool {
+                        $user = auth()->user();
+
+                        return $user && method_exists($user, 'hasRole') && $user->hasRole(Roles::ADMIN);
                     }),
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')

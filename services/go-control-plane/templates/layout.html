@@ -15,7 +15,12 @@
                     <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Verifier Engine Room</p>
                     <h1 class="text-xl font-semibold">Go Worker Control Center</h1>
                 </div>
-                <div class="text-xs text-slate-400">{{ .Subtitle }}</div>
+                <div class="flex items-center gap-3">
+                    {{ if .DocsURL }}
+                    <a href="{{ .DocsURL }}" target="_blank" class="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-200 hover:bg-slate-800">Docs</a>
+                    {{ end }}
+                    <div class="text-xs text-slate-400">{{ .Subtitle }}</div>
+                </div>
             </div>
             <nav class="mx-auto flex max-w-6xl gap-3 px-6 pb-4 text-sm">
                 <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "overview" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/overview">Overview</a>

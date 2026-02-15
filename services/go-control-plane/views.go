@@ -19,6 +19,7 @@ type BasePageData struct {
 	ActiveNav        string
 	ContentTemplate  string
 	BasePath         string
+	DocsURL          string
 	LiveStreamPath   string
 	AutoReloadOnLive bool
 }

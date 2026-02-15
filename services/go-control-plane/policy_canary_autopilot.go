@@ -19,6 +19,7 @@ type PolicyCanaryAutopilotService struct {
 	instanceID  string
 	stopChannel chan struct{}
 	ticker      *time.Ticker
+	lastRunAt   time.Time
 }
 
 type policyCanaryAutopilotState struct {
@@ -44,17 +45,12 @@ type policyCanarySnapshot struct {
 }
 
 func NewPolicyCanaryAutopilotService(store *Store, cfg Config, instanceID string) *PolicyCanaryAutopilotService {
-	interval := time.Duration(cfg.PolicyCanaryWindowMinutes) * time.Minute
-	if interval <= 0 {
-		interval = 15 * time.Minute
-	}
-
 	return &PolicyCanaryAutopilotService{
 		store:       store,
 		cfg:         cfg,
 		instanceID:  instanceID,
 		stopChannel: make(chan struct{}),
-		ticker:      time.NewTicker(interval),
+		ticker:      time.NewTicker(30 * time.Second),
 	}
 }
 
@@ -78,14 +74,23 @@ func (s *PolicyCanaryAutopilotService) Stop() {
 }
 
 func (s *PolicyCanaryAutopilotService) run() {
-	if !s.cfg.PolicyCanaryAutopilotEnabled {
-		return
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 
+	defaults := defaultRuntimeSettings(s.cfg)
+	settings, err := s.store.GetRuntimeSettings(ctx, defaults)
+	if err != nil {
+		settings = defaults
+	}
+
+	if !settings.PolicyCanaryAutopilotEnabled {
+		return
+	}
+
 	if !s.shouldRun(ctx) {
+		return
+	}
+	if !s.runDue(settings) {
 		return
 	}
 
@@ -124,7 +129,7 @@ func (s *PolicyCanaryAutopilotService) run() {
 		return
 	}
 
-	snapshot, err := s.collectKPI(ctx, modes)
+	snapshot, err := s.collectKPI(ctx, modes, settings)
 	if err != nil {
 		log.Printf("policy-autopilot: failed to collect kpi: %v", err)
 		return
@@ -149,17 +154,17 @@ func (s *PolicyCanaryAutopilotService) run() {
 	rollbackReason := evaluatePolicyCanaryRollback(
 		state,
 		snapshot.Aggregate,
-		s.cfg.PolicyCanaryUnknownRegressionThreshold,
-		s.cfg.PolicyCanaryTempfailRecoveryDropThreshold,
-		s.cfg.PolicyCanaryPolicyBlockSpikeThreshold,
+		settings.PolicyCanaryUnknownRegressionThreshold,
+		settings.PolicyCanaryTempfailRecoveryDropThreshold,
+		settings.PolicyCanaryPolicyBlockSpikeThreshold,
 	)
 	provider, providerRollbackReason := evaluateProviderPolicyCanaryRollback(
 		state.ProviderBaselines,
 		snapshot.Providers,
-		s.cfg.PolicyCanaryUnknownRegressionThreshold,
-		s.cfg.PolicyCanaryTempfailRecoveryDropThreshold,
-		s.cfg.PolicyCanaryPolicyBlockSpikeThreshold,
-		s.cfg.PolicyCanaryMinProviderWorkers,
+		settings.PolicyCanaryUnknownRegressionThreshold,
+		settings.PolicyCanaryTempfailRecoveryDropThreshold,
+		settings.PolicyCanaryPolicyBlockSpikeThreshold,
+		settings.PolicyCanaryMinProviderWorkers,
 	)
 	if providerRollbackReason != "" {
 		currentMode := "normal"
@@ -189,7 +194,7 @@ func (s *PolicyCanaryAutopilotService) run() {
 		return
 	}
 
-	if !hasMinimumProviderTelemetry(snapshot.Providers, s.cfg.PolicyCanaryMinProviderWorkers) {
+	if !hasMinimumProviderTelemetry(snapshot.Providers, settings.PolicyCanaryMinProviderWorkers) {
 		state.LastEvaluatedAt = time.Now().UTC().Format(time.RFC3339)
 		_ = s.saveState(ctx, state)
 		return
@@ -198,7 +203,7 @@ func (s *PolicyCanaryAutopilotService) run() {
 	state.HealthyWindows++
 	state.LastEvaluatedAt = time.Now().UTC().Format(time.RFC3339)
 
-	required := s.cfg.PolicyCanaryRequiredHealthWindows
+	required := settings.PolicyCanaryRequiredHealthWindows
 	if required < 1 {
 		required = 1
 	}
@@ -234,6 +239,22 @@ func (s *PolicyCanaryAutopilotService) run() {
 	_ = s.saveState(ctx, state)
 }
 
+func (s *PolicyCanaryAutopilotService) runDue(settings RuntimeSettings) bool {
+	windowMinutes := settings.PolicyCanaryWindowMinutes
+	if windowMinutes <= 0 {
+		windowMinutes = 15
+	}
+
+	interval := time.Duration(windowMinutes) * time.Minute
+	now := time.Now().UTC()
+	if !s.lastRunAt.IsZero() && now.Sub(s.lastRunAt) < interval {
+		return false
+	}
+
+	s.lastRunAt = now
+	return true
+}
+
 func (s *PolicyCanaryAutopilotService) shouldRun(ctx context.Context) bool {
 	if !s.cfg.LeaderLockEnabled {
 		return true
@@ -248,13 +269,17 @@ func (s *PolicyCanaryAutopilotService) shouldRun(ctx context.Context) bool {
 	return ok
 }
 
-func (s *PolicyCanaryAutopilotService) collectKPI(ctx context.Context, modes map[string]ProviderModeState) (policyCanarySnapshot, error) {
+func (s *PolicyCanaryAutopilotService) collectKPI(
+	ctx context.Context,
+	modes map[string]ProviderModeState,
+	settings RuntimeSettings,
+) (policyCanarySnapshot, error) {
 	workers, err := s.store.GetWorkers(ctx)
 	if err != nil {
 		return policyCanarySnapshot{}, err
 	}
 
-	health := aggregateProviderHealth(workers, modes, thresholdsFromConfig(s.cfg))
+	health := aggregateProviderHealth(workers, modes, thresholdsFromRuntimeSettings(settings))
 	if len(health) == 0 {
 		return policyCanarySnapshot{
 			Aggregate: policyCanaryKPI{},

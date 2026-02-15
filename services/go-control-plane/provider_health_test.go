@@ -2,6 +2,37 @@ package main
 
 import "testing"
 
+func TestThresholdsFromRuntimeSettings(t *testing.T) {
+	settings := RuntimeSettings{
+		ProviderTempfailWarnRate:     0.31,
+		ProviderTempfailCriticalRate: 0.56,
+		ProviderRejectWarnRate:       0.21,
+		ProviderRejectCriticalRate:   0.42,
+		ProviderUnknownWarnRate:      0.22,
+		ProviderUnknownCriticalRate:  0.36,
+	}
+
+	thresholds := thresholdsFromRuntimeSettings(settings)
+	if thresholds.TempfailWarn != 0.31 {
+		t.Fatalf("expected tempfail warn 0.31, got %.2f", thresholds.TempfailWarn)
+	}
+	if thresholds.TempfailCritical != 0.56 {
+		t.Fatalf("expected tempfail critical 0.56, got %.2f", thresholds.TempfailCritical)
+	}
+	if thresholds.RejectWarn != 0.21 {
+		t.Fatalf("expected reject warn 0.21, got %.2f", thresholds.RejectWarn)
+	}
+	if thresholds.RejectCritical != 0.42 {
+		t.Fatalf("expected reject critical 0.42, got %.2f", thresholds.RejectCritical)
+	}
+	if thresholds.UnknownWarn != 0.22 {
+		t.Fatalf("expected unknown warn 0.22, got %.2f", thresholds.UnknownWarn)
+	}
+	if thresholds.UnknownCritical != 0.36 {
+		t.Fatalf("expected unknown critical 0.36, got %.2f", thresholds.UnknownCritical)
+	}
+}
+
 func TestAggregateProviderHealthAppliesModeOverridesAndThresholds(t *testing.T) {
 	workers := []WorkerSummary{
 		{

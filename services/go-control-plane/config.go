@@ -55,6 +55,7 @@ type Config struct {
 	SMTPTo                                    []string
 	LaravelAPIBaseURL                         string
 	LaravelVerifierToken                      string
+	OpsDocsURL                                string
 	PolicyPayloadStrictValidationEnabled      bool
 	PolicyCanaryAutopilotEnabled              bool
 	PolicyCanaryWindowMinutes                 int
@@ -82,6 +83,7 @@ func LoadConfig() (Config, error) {
 	cfg.SMTPTo = splitCSV(os.Getenv("SMTP_TO"))
 	cfg.LaravelAPIBaseURL = strings.TrimSpace(os.Getenv("LARAVEL_API_BASE_URL"))
 	cfg.LaravelVerifierToken = strings.TrimSpace(os.Getenv("LARAVEL_VERIFIER_TOKEN"))
+	cfg.OpsDocsURL = strings.TrimSpace(os.Getenv("OPS_DOCS_URL"))
 
 	if cfg.Port == "" {
 		return cfg, fmt.Errorf("PORT is required")
