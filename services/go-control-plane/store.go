@@ -22,6 +22,7 @@ type Store struct {
 
 const (
 	runtimeSettingsKey     = "control_plane:runtime_settings"
+	runtimeSettingsLastKey = "control_plane:runtime_settings:last_snapshot"
 	incidentsIndexKey      = "control_plane:incidents:index"
 	incidentsActiveKey     = "control_plane:incidents:active"
 	providerModesKey       = "control_plane:provider_modes"
@@ -629,7 +630,55 @@ func (s *Store) SaveRuntimeSettings(ctx context.Context, settings RuntimeSetting
 		return err
 	}
 
-	return s.rdb.Set(ctx, runtimeSettingsKey, payload, 0).Err()
+	previous, getErr := s.rdb.Get(ctx, runtimeSettingsKey).Result()
+	if getErr != nil && getErr != redis.Nil {
+		return getErr
+	}
+
+	pipe := s.rdb.TxPipeline()
+	if previous != "" {
+		pipe.Set(ctx, runtimeSettingsLastKey, previous, 0)
+	}
+	pipe.Set(ctx, runtimeSettingsKey, payload, 0)
+	_, err = pipe.Exec(ctx)
+	return err
+}
+
+func (s *Store) HasRuntimeSettingsSnapshot(ctx context.Context) (bool, error) {
+	value, err := s.rdb.Get(ctx, runtimeSettingsLastKey).Result()
+	if err == redis.Nil || value == "" {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (s *Store) RollbackRuntimeSettings(ctx context.Context) error {
+	snapshot, err := s.rdb.Get(ctx, runtimeSettingsLastKey).Result()
+	if err == redis.Nil || snapshot == "" {
+		return fmt.Errorf("no runtime settings snapshot available")
+	}
+	if err != nil {
+		return err
+	}
+
+	current, currentErr := s.rdb.Get(ctx, runtimeSettingsKey).Result()
+	if currentErr != nil && currentErr != redis.Nil {
+		return currentErr
+	}
+
+	pipe := s.rdb.TxPipeline()
+	pipe.Set(ctx, runtimeSettingsKey, snapshot, 0)
+	if current != "" {
+		pipe.Set(ctx, runtimeSettingsLastKey, current, 0)
+	} else {
+		pipe.Del(ctx, runtimeSettingsLastKey)
+	}
+	_, err = pipe.Exec(ctx)
+	return err
 }
 
 func (s *Store) SetDesiredState(ctx context.Context, workerID string, state string) error {
