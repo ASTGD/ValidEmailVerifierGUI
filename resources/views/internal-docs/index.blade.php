@@ -6,36 +6,36 @@
     <title>{{ $title }} · {{ $pageTitle }}</title>
     @vite(['resources/css/app.css'])
 </head>
-<body class="min-h-screen bg-slate-950 text-slate-100">
-    <div class="mx-auto max-w-7xl px-6 py-6">
-        <header class="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+<body class="min-h-screen bg-slate-100 text-slate-900">
+    <div class="w-full px-6 py-6">
+        <header class="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-slate-300 pb-4">
             <div>
-                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Operations Docs</p>
-                <h1 class="text-2xl font-semibold">{{ $title }}</h1>
-                <p class="mt-1 text-sm text-slate-400">{{ $pageTitle }}</p>
+                <p class="text-xs uppercase tracking-[0.2em] text-slate-600">Operations Docs</p>
+                <h1 class="text-2xl font-semibold text-slate-900">{{ $title }}</h1>
+                <p class="mt-1 text-sm text-slate-600">{{ $pageTitle }}</p>
             </div>
             <div class="flex items-center gap-2">
-                <a href="{{ url('/admin') }}" class="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">Laravel Admin</a>
-                <a href="{{ url('/'.trim((string) config('horizon.path', 'horizon'), '/')) }}" target="_blank" class="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">Horizon</a>
+                <a href="{{ url('/admin') }}" class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-100">Laravel Admin</a>
+                <a href="{{ url('/'.trim((string) config('horizon.path', 'horizon'), '/')) }}" target="_blank" class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-100">Horizon</a>
                 @if (filled(config('services.go_control_plane.base_url')))
-                    <a href="{{ rtrim((string) config('services.go_control_plane.base_url'), '/').'/verifier-engine-room/overview' }}" target="_blank" class="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900">Go Panel</a>
+                    <a href="{{ rtrim((string) config('services.go_control_plane.base_url'), '/').'/verifier-engine-room/overview' }}" target="_blank" class="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-100">Go Panel</a>
                 @endif
             </div>
         </header>
 
-        <div class="grid gap-6 lg:grid-cols-[18rem,1fr]">
-            <aside class="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-                <p class="mb-3 text-xs uppercase tracking-[0.2em] text-slate-400">Sections</p>
+        <div class="grid gap-6 lg:grid-cols-4">
+            <aside class="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm lg:col-span-1">
+                <p class="mb-3 text-xs uppercase tracking-[0.2em] text-slate-600">Sections</p>
                 <nav class="space-y-4">
                     @foreach ($sections as $sectionKey => $section)
                         <div>
-                            <p class="mb-1 text-xs font-semibold uppercase tracking-[0.15em] text-slate-400">{{ $section['label'] ?? $sectionKey }}</p>
+                            <p class="mb-1 text-xs font-semibold uppercase tracking-[0.15em] text-slate-600">{{ $section['label'] ?? $sectionKey }}</p>
                             <ul class="space-y-1">
                                 @foreach (($section['pages'] ?? []) as $pageKey => $page)
                                     <li>
                                         <a
                                             href="{{ route('internal.docs.page', ['section' => $sectionKey, 'page' => $pageKey]) }}"
-                                            class="@if($activeSection === $sectionKey && $activePage === $pageKey) bg-amber-500/20 text-amber-200 border-amber-400/40 @else text-slate-200 border-transparent hover:bg-slate-800/80 @endif block rounded-lg border px-3 py-2 text-sm"
+                                            class="@if($activeSection === $sectionKey && $activePage === $pageKey) bg-amber-100 text-amber-900 border-amber-300 @else text-slate-700 border-transparent hover:bg-slate-100 @endif block rounded-lg border px-3 py-2 text-sm"
                                         >
                                             {{ $page['title'] ?? $pageKey }}
                                         </a>
@@ -47,8 +47,10 @@
                 </nav>
             </aside>
 
-            <main class="prose prose-invert max-w-none rounded-2xl border border-slate-800 bg-slate-900/60 p-6 prose-headings:scroll-mt-24">
-                {!! $contentHtml !!}
+            <main class="rounded-2xl border border-slate-300 bg-white p-6 shadow-sm lg:col-span-3">
+                <article class="docs-markdown">
+                    {!! $contentHtml !!}
+                </article>
             </main>
         </div>
     </div>
