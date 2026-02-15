@@ -77,6 +77,7 @@ type SettingsPageData struct {
 	PolicyCanaryUnknownRegressionThreshold    float64
 	PolicyCanaryTempfailRecoveryDropThreshold float64
 	PolicyCanaryPolicyBlockSpikeThreshold     float64
+	RuntimeHelp                               map[string]SettingHelpTip
 }
 
 type LivePayload struct {
@@ -293,6 +294,7 @@ func (s *Server) handleUIAlerts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
+	defaults := defaultRuntimeSettings(s.cfg)
 	settings := s.runtimeSettings(r.Context())
 
 	stats, statsErr := s.collectControlPlaneStats(r.Context())
@@ -330,6 +332,7 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 		PolicyCanaryUnknownRegressionThreshold:    settings.PolicyCanaryUnknownRegressionThreshold,
 		PolicyCanaryTempfailRecoveryDropThreshold: settings.PolicyCanaryTempfailRecoveryDropThreshold,
 		PolicyCanaryPolicyBlockSpikeThreshold:     settings.PolicyCanaryPolicyBlockSpikeThreshold,
+		RuntimeHelp:                               buildRuntimeSettingsHelp(defaults, s.docsURL()),
 	}
 
 	if versions, _, versionsErr := s.store.ListSMTPPolicyVersions(r.Context()); versionsErr == nil {
