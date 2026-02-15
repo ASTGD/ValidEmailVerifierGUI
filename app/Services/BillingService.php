@@ -26,6 +26,7 @@ class BillingService
                 'due_date' => $data['due_date'] ?? Carbon::now()->addDays(7),
                 'currency' => $user->currency ?: 'USD',
                 'notes' => $data['notes'] ?? null,
+                'is_published' => $data['is_published'] ?? true, // Programmatic creations are published by default
             ]);
 
             $subtotal = 0;

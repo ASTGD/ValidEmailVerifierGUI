@@ -225,31 +225,20 @@ class EditInvoice extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        // Calculate and update totals
-        if (isset($data['items'])) {
-            $subtotal = collect($data['items'])->sum(fn($item) => (int) ($item['amount'] * 100));
-            $data['subtotal'] = $subtotal;
-
-            $tax = $data['tax'] ?? 0;
-            $discount = $data['discount'] ?? 0;
-            $data['total'] = max(0, $subtotal + $tax - $discount);
-
-            // Calculate balance due
-            $record = $this->getRecord();
-            $paid = $record->transactions()->sum('amount');
-            $creditApplied = $data['credit_applied'] ?? 0;
-            $data['balance_due'] = max(0, $data['total'] - $paid - $creditApplied);
-        }
-
-        // Force to draft mode whenever admin clicks Save/Update
-        $data['is_published'] = false;
-
+        // Totals will be synced in afterSave to ensure relationship items are included
         return $data;
     }
 
     protected function afterSave(): void
     {
         $record = $this->getRecord();
+        $record->refresh(); // Load saved relationship items
+
+        // Always sync the database totals to match the items
+        $record->total = $record->calculateTotal();
+        $record->balance_due = $record->calculateBalanceDue();
+        $record->saveQuietly();
+
         $data = $this->data;
         $hasChanged = false;
 

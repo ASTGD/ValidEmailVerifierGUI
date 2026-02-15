@@ -2,7 +2,8 @@
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
             <div class="flex items-center gap-2 mb-2">
-                <a href="{{ route('portal.invoices.index') }}" class="text-sm font-bold text-[#1E7CCF] hover:underline flex items-center gap-1">
+                <a href="{{ route('portal.invoices.index') }}"
+                    class="text-sm font-bold text-[#1E7CCF] hover:underline flex items-center gap-1">
                     <i data-lucide="arrow-left" class="w-4 h-4"></i>
                     {{ __('Back to Invoices') }}
                 </a>
@@ -12,66 +13,155 @@
             </h1>
 
             @if(session('status'))
-                <div class="mt-4 p-4 rounded-lg bg-green-50 border border-green-100 text-green-800 font-bold">{{ session('status') }}</div>
+                <div class="mt-4 p-4 rounded-lg bg-green-50 border border-green-100 text-green-800 font-bold">
+                    {{ session('status') }}</div>
             @endif
             @if(session('error'))
-                <div class="mt-4 p-4 rounded-lg bg-red-50 border border-red-100 text-red-800 font-bold">{{ session('error') }}</div>
+                <div class="mt-4 p-4 rounded-lg bg-red-50 border border-red-100 text-red-800 font-bold">
+                    {{ session('error') }}</div>
             @endif
-            <p class="text-[#64748B] font-medium mt-1">
-                {{ __('Issued on') }} {{ $invoice->date?->format('M d, Y') }}
-            </p>
         </div>
         <div class="flex items-center gap-3">
-            <button wire:click="download" class="flex items-center gap-2 px-6 py-3 bg-[#1E7CCF] hover:bg-[#1669B2] text-white rounded-xl shadow-lg transition-all font-bold">
+            <button wire:click="download"
+                class="flex items-center gap-2 px-6 py-3 bg-[#1E7CCF] hover:bg-[#1669B2] text-white rounded-xl shadow-lg transition-all font-bold">
                 <i data-lucide="download" class="w-4 h-4"></i>
                 {{ __('Download PDF') }}
             </button>
         </div>
     </div>
 
+    {{-- Premium Summary Cards --}}
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {{-- Card 1: Overview --}}
+        <div class="flex flex-col min-h-[180px] bg-white border border-[#e2e8f0] rounded-2xl p-5 shadow-sm">
+            <div class="flex items-center gap-2 mb-4 border-b border-[#f1f5f9] pb-3">
+                <i data-lucide="info" class="w-4 h-4 text-[#64748b]"></i>
+                <h2 class="text-[11px] font-bold text-[#64748b] uppercase tracking-widest">{{ __('Invoice Overview') }}
+                </h2>
+            </div>
+            <div class="space-y-3">
+                <div class="flex justify-between items-center">
+                    <span
+                        class="text-[11px] text-[#64748b] font-semibold uppercase tracking-tight">{{ __('Status') }}</span>
+                    <span class="px-3 py-1 rounded-md text-[10px] font-extrabold uppercase
+                        @if($invoice->status === 'Paid') bg-green-100 text-green-700
+                        @elseif($invoice->status === 'Unpaid') bg-red-100 text-red-700
+                        @elseif($invoice->status === 'Cancelled') bg-slate-100 text-slate-700
+                        @else bg-blue-100 text-blue-700 @endif">
+                        {{ $invoice->status }}
+                    </span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span
+                        class="text-[11px] text-[#64748b] font-semibold uppercase tracking-tight">{{ __('Issued') }}</span>
+                    <span class="text-xs text-[#334155] font-medium">{{ $invoice->date?->format('F d, Y') }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span
+                        class="text-[11px] text-[#64748b] font-semibold uppercase tracking-tight">{{ __('Due Date') }}</span>
+                    <span class="text-xs text-[#334155] font-medium">{{ $invoice->due_date?->format('F d, Y') }}</span>
+                </div>
+            </div>
+        </div>
+
+        {{-- Card 2: Payment History --}}
+        <div class="flex flex-col min-h-[180px] bg-white border border-[#e2e8f0] rounded-2xl p-5 shadow-sm">
+            <div class="flex items-center gap-2 mb-4 border-b border-[#f1f5f9] pb-3">
+                <i data-lucide="credit-card" class="w-4 h-4 text-[#64748b]"></i>
+                <h2 class="text-[11px] font-bold text-[#64748b] uppercase tracking-widest">{{ __('Last Transaction') }}
+                </h2>
+            </div>
+            @if($invoice->transactions->isEmpty())
+                <div class="flex-1 flex flex-col items-center justify-center opacity-40">
+                    <i data-lucide="clock" class="w-8 h-8 text-[#94a3b8]"></i>
+                    <span
+                        class="text-[10px] uppercase font-bold text-[#94a3b8] mt-2 tracking-widest">{{ __('No records') }}</span>
+                </div>
+            @else
+                @php $latestTx = $invoice->transactions->sortByDesc('date')->first(); @endphp
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span
+                            class="text-[11px] text-[#64748b] font-semibold uppercase tracking-tight">{{ __('Date') }}</span>
+                        <span class="text-xs text-[#334155] font-medium">{{ $latestTx->date?->format('M d, Y') }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span
+                            class="text-[11px] text-[#64748b] font-semibold uppercase tracking-tight">{{ __('Method') }}</span>
+                        <span
+                            class="px-2 py-0.5 bg-[#f8fafc] border border-[#f1f5f9] rounded text-[10px] font-bold text-[#475569] uppercase">{{ $latestTx->payment_method }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span
+                            class="text-[11px] text-[#64748b] font-semibold uppercase tracking-tight">{{ __('Amount') }}</span>
+                        <span class="text-sm text-[#059669] font-bold">{{ number_format($latestTx->amount / 100, 2) }}
+                            {{ strtoupper($invoice->currency) }}</span>
+                    </div>
+                </div>
+            @endif
+        </div>
+
+        {{-- Card 3: Financials --}}
+        @php
+            $total = $invoice->total / 100;
+            $paid = $invoice->total_paid / 100;
+            $balance = ($invoice->status === 'Paid') ? 0 : max(0, $total - $paid);
+            $accentColor = $balance > 0 ? '#dc2626' : '#16a34a';
+        @endphp
+        <div
+            class="relative flex flex-col min-h-[180px] bg-white border border-[#e2e8f0] rounded-2xl overflow-hidden shadow-sm">
+            <div class="h-1 w-full" style="background-color: {{ $accentColor }}"></div>
+            <div class="p-5 flex flex-col h-full">
+                <div class="flex items-center gap-2 mb-4 border-b border-[#f1f5f9] pb-3">
+                    <i data-lucide="banknotes" class="w-4 h-4 text-[#64748b]"></i>
+                    <h2 class="text-[11px] font-bold text-[#64748b] uppercase tracking-widest">
+                        {{ __('Financial Summary') }}</h2>
+                </div>
+                <div class="space-y-3 mb-auto">
+                    <div class="flex justify-between items-center">
+                        <span
+                            class="text-[11px] text-[#64748b] font-semibold uppercase tracking-tight">{{ __('Total') }}</span>
+                        <span class="text-xs text-[#334155] font-medium">{{ number_format($total, 2) }}
+                            {{ strtoupper($invoice->currency) }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span
+                            class="text-[11px] text-[#64748b] font-semibold uppercase tracking-tight">{{ __('Paid') }}</span>
+                        <span class="text-xs text-[#059669] font-semibold">{{ number_format($paid, 2) }}
+                            {{ strtoupper($invoice->currency) }}</span>
+                    </div>
+                </div>
+                <div class="flex justify-between items-center mt-4">
+                    <span class="text-[11px] font-extrabold uppercase tracking-widest"
+                        style="color: {{ $accentColor }}">{{ __('Balance Due') }}</span>
+                    <span class="text-xl font-black" style="color: {{ $accentColor }}">{{ number_format($balance, 2) }}
+                        {{ strtoupper($invoice->currency) }}</span>
+                </div>
+            </div>
+            <div class="absolute -right-4 -bottom-4 w-16 h-16 rounded-full opacity-[0.03]"
+                style="background-color: {{ $accentColor }}"></div>
+        </div>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <!-- Main Invoice Content -->
         <div class="lg:col-span-2 space-y-8">
-            <div class="bg-white rounded-[2.5rem] border border-[#E2E8F0] shadow-sm overflow-hidden">
-                <div class="p-8 border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <h2 class="text-sm font-black text-[#64748B] uppercase tracking-widest mb-4">{{ __('Billed To') }}</h2>
-                            <div class="font-bold text-[#0F172A] text-lg">{{ $invoice->user->name }}</div>
-                            <div class="text-[#334155] mt-1">{{ $invoice->user->email }}</div>
-                            @if($invoice->user->address_1)
-                                <div class="text-[#334155] text-sm mt-2">
-                                    {{ $invoice->user->address_1 }}<br>
-                                    @if($invoice->user->address_2){{ $invoice->user->address_2 }}<br>@endif
-                                    {{ $invoice->user->city }}, {{ $invoice->user->state }} {{ $invoice->user->postcode }}<br>
-                                    {{ $invoice->user->country }}
-                                </div>
-                            @endif
-                        </div>
-                        <div class="text-right">
-                            <span class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black uppercase
-                                @if($invoice->status === 'Paid') bg-green-100 text-green-700
-                                @elseif($invoice->status === 'Unpaid') bg-yellow-100 text-yellow-700
-                                @elseif($invoice->status === 'Cancelled') bg-red-100 text-red-700
-                                @else bg-gray-100 text-gray-700 @endif">
-                                {{ $invoice->status }}
-                            </span>
-                            <div class="mt-4">
-                                <h2 class="text-[10px] font-black text-[#64748B] uppercase tracking-widest">{{ __('Due Date') }}</h2>
-                                <div class="font-bold text-[#0F172A]">{{ $invoice->due_date?->format('F d, Y') ?: '-' }}</div>
-                            </div>
-                        </div>
-                    </div>
+            <div class="bg-white rounded-[2rem] border border-[#E2E8F0] shadow-sm overflow-hidden">
+                <div class="px-8 py-6 border-b border-[#E2E8F0] bg-[#F8FAFC]">
+                    <h2 class="text-xs font-black text-[#64748B] uppercase tracking-widest">{{ __('Items Included') }}
+                    </h2>
                 </div>
 
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="bg-white border-b border-[#E2E8F0]">
-                                <th class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest">
+                                <th
+                                    class="px-8 py-4 text-[10px] font-black text-[#64748B] uppercase tracking-widest border-r border-[#f1f5f9]">
                                     {{ __('Description') }}
                                 </th>
-                                <th class="px-8 py-4 text-[11px] font-black text-[#64748B] uppercase tracking-widest text-right">
+                                <th
+                                    class="px-8 py-4 text-[10px] font-black text-[#64748B] uppercase tracking-widest text-right">
                                     {{ __('Amount') }}
                                 </th>
                             </tr>
@@ -79,11 +169,12 @@
                         <tbody class="divide-y divide-[#E2E8F0]">
                             @foreach($invoice->items as $item)
                                 <tr>
-                                    <td class="px-8 py-6">
-                                        <div class="font-bold text-[#0F172A]">{{ $item->description }}</div>
-                                        <div class="text-xs text-[#64748B] mt-1 uppercase font-medium">{{ $item->type }}</div>
+                                    <td class="px-8 py-5 border-r border-[#f1f5f9]">
+                                        <div class="font-bold text-[#1e293b]">{{ $item->description }}</div>
+                                        <div class="text-[10px] text-[#94a3b8] mt-0.5 uppercase font-bold tracking-tighter">
+                                            {{ $item->type }}</div>
                                     </td>
-                                    <td class="px-8 py-6 text-right font-bold text-[#0F172A]">
+                                    <td class="px-8 py-5 text-right font-bold text-[#0F172A]">
                                         {{ $item->formatted_amount }}
                                     </td>
                                 </tr>
@@ -92,15 +183,17 @@
                     </table>
                 </div>
 
-                <div class="p-8 bg-[#F8FAFC]">
+                <div class="p-8 bg-white border-t border-[#f1f5f9]">
                     <div class="flex justify-end">
-                        <div class="w-full max-w-xs space-y-4">
+                        <div class="w-full max-w-xs space-y-3">
                             <div class="flex justify-between items-center text-sm">
-                                <span class="text-[#64748B] font-bold">{{ __('Subtotal') }}</span>
-                                <span class="text-[#0F172A] font-bold">{{ number_format($invoice->subtotal / 100, 2) }} {{ strtoupper($invoice->currency) }}</span>
+                                <span class="text-[#64748B] font-semibold">{{ __('Subtotal') }}</span>
+                                <span class="text-[#334155] font-bold">{{ number_format($invoice->subtotal / 100, 2) }}
+                                    {{ strtoupper($invoice->currency) }}</span>
                             </div>
-                            <div class="pt-4 border-t border-[#E2E8F0] flex justify-between items-center">
-                                <span class="text-[#0F172A] text-xl font-black">{{ __('Total') }}</span>
+                            <div class="pt-4 border-t-2 border-[#f1f5f9] flex justify-between items-center">
+                                <span
+                                    class="text-[#0F172A] text-xl font-black uppercase tracking-tighter">{{ __('Final Total') }}</span>
                                 <span class="text-[#1E7CCF] text-2xl font-black">{{ $invoice->formatted_total }}</span>
                             </div>
                         </div>
@@ -109,9 +202,11 @@
             </div>
 
             @if($invoice->notes)
-                <div class="bg-white p-8 rounded-[2.5rem] border border-[#E2E8F0] shadow-sm">
-                    <h2 class="text-[11px] font-black text-[#64748B] uppercase tracking-widest mb-4">{{ __('Notes') }}</h2>
-                    <p class="text-[#334155] font-medium leading-relaxed">
+                <div class="bg-white p-8 rounded-[2rem] border border-[#E2E8F0] shadow-sm">
+                    <h2
+                        class="text-[11px] font-black text-[#64748B] uppercase tracking-widest mb-4 border-b border-[#f1f5f9] pb-3">
+                        {{ __('Important Notes') }}</h2>
+                    <p class="text-[#475569] font-medium leading-relaxed text-sm">
                         {{ $invoice->notes }}
                     </p>
                 </div>
@@ -119,25 +214,43 @@
 
             {{-- Transactions --}}
             @if($invoice->transactions->isNotEmpty())
-                <div class="bg-white p-8 rounded-[2.5rem] border border-[#E2E8F0] shadow-sm">
-                    <h2 class="text-[11px] font-black text-[#64748B] uppercase tracking-widest mb-4">{{ __('Transactions') }}</h2>
+                <div id="detailed-transactions"
+                    class="bg-white rounded-[2rem] border border-[#E2E8F0] shadow-sm overflow-hidden">
+                    <div class="px-8 py-5 border-b border-[#E2E8F0] bg-[#f8fafc]">
+                        <h2 class="text-xs font-black text-[#64748b] uppercase tracking-widest">
+                            {{ __('Detailed Transaction Log') }}</h2>
+                    </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
                             <thead>
-                                <tr class="bg-white border-b border-[#E2E8F0]">
-                                    <th class="px-4 py-2 text-xs font-black text-[#64748B]">{{ __('Date') }}</th>
-                                    <th class="px-4 py-2 text-xs font-black text-[#64748B]">{{ __('Method') }}</th>
-                                    <th class="px-4 py-2 text-xs font-black text-[#64748B]">{{ __('Transaction ID') }}</th>
-                                    <th class="px-4 py-2 text-xs font-black text-[#64748B] text-right">{{ __('Amount') }}</th>
+                                <tr class="bg-[#fcfdfe] border-b border-[#eff3f6]">
+                                    <th class="px-6 py-3 text-[10px] font-bold text-[#64748B] uppercase tracking-widest">
+                                        {{ __('Date / Time') }}</th>
+                                    <th class="px-6 py-3 text-[10px] font-bold text-[#64748B] uppercase tracking-widest">
+                                        {{ __('Method') }}</th>
+                                    <th class="px-6 py-3 text-[10px] font-bold text-[#64748B] uppercase tracking-widest">
+                                        {{ __('Transaction ID') }}</th>
+                                    <th
+                                        class="px-6 py-3 text-[10px] font-bold text-[#64748B] uppercase tracking-widest text-right">
+                                        {{ __('Amount') }}</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-[#E2E8F0]">
+                            <tbody class="divide-y divide-[#f1f5f9]">
                                 @foreach($invoice->transactions as $txn)
                                     <tr>
-                                        <td class="px-4 py-3 text-sm">{{ $txn->date->format('M d, Y') }}</td>
-                                        <td class="px-4 py-3 text-sm">{{ $txn->payment_method }}</td>
-                                        <td class="px-4 py-3 text-sm">{{ $txn->transaction_id ?? '-' }}</td>
-                                        <td class="px-4 py-3 text-sm text-right">{{ number_format($txn->amount / 100, 2) }} {{ strtoupper($invoice->currency) }}</td>
+                                        <td class="px-6 py-4 text-xs font-medium text-[#475569]">
+                                            {{ $txn->date->format('M d, Y - H:i') }}</td>
+                                        <td class="px-6 py-4">
+                                            <span
+                                                class="px-2 py-0.5 bg-[#f8fafc] border border-[#f1f5f9] rounded text-[10px] font-bold text-[#64748b] uppercase">{{ $txn->payment_method }}</span>
+                                        </td>
+                                        <td class="px-6 py-4 text-xs font-mono text-[#94a3b8]">{{ $txn->transaction_id ?? '-' }}
+                                        </td>
+                                        <td
+                                            class="px-6 py-4 text-sm text-right font-black @if($txn->amount > 0) text-[#059669] @else text-[#dc2626] @endif">
+                                            {{ $txn->amount > 0 ? '+ ' : '' }}{{ number_format($txn->amount / 100, 2) }}
+                                            {{ strtoupper($invoice->currency) }}
+                                        </td>
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -149,54 +262,81 @@
 
         <!-- Sidebar / Payment Info -->
         <div class="space-y-6">
-            <div class="bg-white p-8 rounded-[2.5rem] border border-[#E2E8F0] shadow-sm">
-                <h2 class="text-lg font-black text-[#0F172A] tracking-tight mb-6">{{ __('Payment Status') }}</h2>
+            <div class="bg-white p-8 rounded-[2rem] border border-[#E2E8F0] shadow-sm">
+                <h2 class="text-lg font-black text-[#0F172A] tracking-tight mb-6 flex items-center gap-2">
+                    <i data-lucide="shield-check" class="w-5 h-5 text-[#1E7CCF]"></i>
+                    {{ __('Payment Status') }}
+                </h2>
 
                 @if($invoice->status === 'Paid')
-                    <div class="flex items-center gap-4 p-4 bg-green-50 rounded-2xl border border-green-100">
-                        <div class="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center shrink-0">
+                    <div class="flex items-center gap-4 p-5 bg-green-50 rounded-2xl border border-green-100">
+                        <div
+                            class="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center shrink-0 shadow-lg shadow-green-200">
                             <i data-lucide="check" class="text-white w-6 h-6"></i>
                         </div>
                         <div>
-                            <div class="text-green-800 font-bold">{{ __('Invoice Paid') }}</div>
-                            <div class="text-green-600 text-xs font-medium">{{ __('On') }} {{ $invoice->paid_at?->format('M d, Y') }}</div>
+                            <div class="text-green-800 font-black text-sm">{{ __('Invoice Fully Paid') }}</div>
+                            <div class="text-green-600 text-[10px] font-bold uppercase tracking-widest mt-0.5">
+                                {{ __('Applied on') }} {{ $invoice->paid_at?->format('M d, Y') }}</div>
                         </div>
                     </div>
                 @elseif($invoice->status === 'Unpaid' || $invoice->status === 'Partially Paid')
-                    <div class="flex items-center gap-4 p-4 bg-yellow-50 rounded-2xl border border-yellow-100 mb-6">
-                        <div class="w-12 h-12 bg-yellow-500 rounded-full flex items-center justify-center shrink-0">
+                    <div class="flex items-center gap-4 p-5 bg-orange-50 rounded-2xl border border-orange-100 mb-6">
+                        <div
+                            class="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center shrink-0 shadow-lg shadow-orange-200">
                             <i data-lucide="clock" class="text-white w-6 h-6"></i>
                         </div>
                         <div>
-                            <div class="text-yellow-800 font-bold">{{ __('Payment Pending') }}</div>
-                            <div class="text-yellow-600 text-xs font-medium">{{ __('Due by') }} {{ $invoice->due_date?->format('M d, Y') }}</div>
+                            <div class="text-orange-800 font-black text-sm">{{ __('Payment Pending') }}</div>
+                            <div class="text-orange-600 text-[10px] font-bold uppercase tracking-widest mt-0.5">
+                                {{ __('Due by') }} {{ $invoice->due_date?->format('M d, Y') }}</div>
                         </div>
                     </div>
 
-                    <div class="mb-4">
-                        <div class="text-xs text-[#64748B] font-medium">{{ __('Available Credit') }}</div>
-                        <div class="text-lg font-black">{{ number_format(($invoice->user->balance ?? 0) / 100, 2) }} {{ strtoupper($invoice->currency) }}</div>
+                    <div class="mb-6 px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl relative overflow-hidden">
+                        <div class="text-[10px] text-[#64748B] font-black uppercase tracking-widest mb-1">
+                            {{ __('Your Available Credit') }}</div>
+                        <div class="text-2xl font-black text-[#1e293b]">
+                            {{ number_format(($invoice->user->balance ?? 0) / 100, 2) }} <span
+                                class="text-sm font-bold text-[#64748b]">{{ strtoupper($invoice->currency) }}</span></div>
+                        <i data-lucide="gift"
+                            class="absolute -right-2 top-1/2 -translate-y-1/2 w-12 h-12 text-blue-500 opacity-5 rotate-12"></i>
                     </div>
 
-                    <form wire:submit.prevent="applyCredit">
-                        <label class="block text-xs text-[#64748B] mb-2">{{ __('Amount to apply') }}</label>
-                        <input type="number" step="0.01" wire:model.defer="applyAmount" class="w-full px-4 py-3 rounded-xl border border-[#E2E8F0] mb-3" placeholder="0.00">
-                        <div class="flex gap-3">
-                            <button type="submit" class="flex-1 py-3 bg-[#1E7CCF] hover:bg-[#1669B2] text-white rounded-2xl shadow-lg transition-all font-black uppercase tracking-widest text-xs">{{ __('Apply Credit') }}</button>
-                            <button type="button" onclick="@this.set('applyAmount', {{ min(($invoice->user->balance ?? 0) / 100, ($invoice->total - $invoice->transactions->sum('amount')) / 100) }})" class="py-3 px-4 bg-white rounded-2xl border border-[#E2E8F0] font-bold">{{ __('Max') }}</button>
+                    <form wire:submit.prevent="applyCredit" class="space-y-4">
+                        <div>
+                            <label
+                                class="block text-[10px] font-black text-[#64748B] uppercase tracking-widest mb-1.5 ml-1">{{ __('Apply Credit to Invoice') }}</label>
+                            <div class="relative">
+                                <span
+                                    class="absolute left-4 top-1/2 -translate-y-1/2 text-[#94a3b8] font-bold">{{ strtoupper($invoice->currency) }}</span>
+                                <input type="number" step="0.01" wire:model.defer="applyAmount"
+                                    class="w-full pl-14 pr-4 py-3 rounded-xl border border-[#E2E8F0] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-bold text-[#1e293b]"
+                                    placeholder="0.00">
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="submit"
+                                class="flex-1 py-3.5 bg-[#1E7CCF] hover:bg-[#1669B2] text-white rounded-xl shadow-lg shadow-blue-200 transition-all font-black uppercase tracking-widest text-[10px]">{{ __('Apply Now') }}</button>
+                            <button type="button"
+                                onclick="@this.set('applyAmount', {{ min(($invoice->user->balance ?? 0) / 100, $balance) }})"
+                                class="py-3 px-4 bg-white hover:bg-slate-50 rounded-xl border border-[#E2E8F0] font-bold text-xs text-[#64748b] transition-colors">{{ __('Max') }}</button>
                         </div>
                     </form>
                 @endif
             </div>
 
-            <div class="bg-[#F8FAFC] p-8 rounded-[2.5rem] border border-[#E2E8F0]">
-                <h3 class="font-black text-[#0F172A] uppercase tracking-widest text-[10px] mb-4">{{ __('Need Help?') }}</h3>
-                <p class="text-sm text-[#64748B] font-medium mb-6">
-                    {{ __('If you have any questions regarding this invoice, please contact our support team.') }}
+            <div
+                class="bg-gradient-to-br from-[#1e293b] to-[#0f172a] p-8 rounded-[2rem] border border-[#1e293b] shadow-xl text-white">
+                <h3 class="font-black text-blue-400 uppercase tracking-widest text-[10px] mb-4">
+                    {{ __('Need Support?') }}</h3>
+                <p class="text-sm text-slate-300 font-medium mb-6 leading-relaxed">
+                    {{ __('If you have any questions regarding this invoice or need to discuss payment terms, our team is here to help.') }}
                 </p>
-                <a href="{{ route('portal.support') }}" class="inline-flex items-center gap-2 text-sm font-bold text-[#1E7CCF] hover:underline">
+                <a href="{{ route('portal.support') }}"
+                    class="inline-flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all text-xs font-bold border border-white/10 group">
                     {{ __('Open Support Ticket') }}
-                    <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                    <i data-lucide="arrow-right" class="w-4 h-4 group-hover:translate-x-1 transition-transform"></i>
                 </a>
             </div>
         </div>
