@@ -80,36 +80,36 @@ class InvoiceForm
                                                 Placeholder::make('overview_details')
                                                     ->hiddenLabel()
                                                     ->content(fn($record) => $record ? new HtmlString('
-                                                        <div class="flex flex-col space-y-3 py-1 min-h-[148px]">
-                                                            <div class="flex justify-between border-b border-gray-50 pb-2">
-                                                                <span class="text-[11px] font-black text-gray-400 uppercase tracking-widest"><b>Customer :</b></span>
-                                                                <span class="text-xs font-bold text-gray-900">' . ($record->user?->name ?? 'Guest') . '</span>
+                                                        <div style="display: flex; flex-direction: column; min-height: 160px; background: #ffffff; border: 1px solid #f1f5f9; border-radius: 12px; padding: 16px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+                                                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f8fafc; padding-bottom: 8px; margin-bottom: 8px;">
+                                                                <span style="font-size: 10px; color: #94a3b8; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;">Customer</span>
+                                                                <span style="font-size: 12px; color: #1e293b; font-weight: 700;">' . ($record->user?->name ?? 'Guest') . '</span>
                                                             </div>
-                                                            <div class="flex justify-between border-b border-gray-50 pb-2">
-                                                                <span class="text-[11px] font-black text-gray-400 uppercase tracking-widest"><b>Publication :</b></span>
-                                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest" style="background-color: ' . ($record->is_published ? '#dcfce7; color: #166534;' : '#fef3c7; color: #92400e;') . '">
+                                                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f8fafc; padding-bottom: 8px; margin-bottom: 8px;">
+                                                                <span style="font-size: 10px; color: #94a3b8; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;">Publication</span>
+                                                                <span style="padding: 2px 8px; border-radius: 6px; font-size: 9px; font-weight: 900; text-transform: uppercase; ' . ($record->is_published ? 'background: #dcfce7; color: #166534;' : 'background: #fef3c7; color: #92400e;') . '">
                                                                     ' . ($record->is_published ? 'PUBLISHED' : 'DRAFT') . '
                                                                 </span>
                                                             </div>
-                                                            <div class="flex justify-between border-b border-gray-50 pb-2">
-                                                                <span class="text-[11px] font-black text-gray-400 uppercase tracking-widest"><b>Status :</b></span>
-                                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest" style="background-color: ' . match ($record->status) {
-                                                        'Paid' => '#dcfce7; color: #166534;',
-                                                        'Unpaid' => '#fee2e2; color: #991b1b;',
-                                                        'Cancelled' => '#f1f5f9; color: #475569;',
-                                                        'Refunded' => '#dbeafe; color: #1e40af;',
-                                                        default => '#f1f5f9; color: #475569;',
+                                                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f8fafc; padding-bottom: 8px; margin-bottom: 8px;">
+                                                                <span style="font-size: 10px; color: #94a3b8; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;">Status</span>
+                                                                <span style="padding: 2px 8px; border-radius: 6px; font-size: 9px; font-weight: 900; text-transform: uppercase; ' . match ($record->status) {
+                                                        'Paid' => 'background: #dcfce7; color: #166534;',
+                                                        'Unpaid' => 'background: #fee2e2; color: #991b1b;',
+                                                        'Cancelled' => 'background: #f1f5f9; color: #475569;',
+                                                        'Refunded' => 'background: #dbeafe; color: #1e40af;',
+                                                        default => 'background: #f1f5f9; color: #475569;',
                                                     } . '">
                                                                     ' . $record->status . '
                                                                 </span>
                                                             </div>
-                                                            <div class="flex justify-between border-b border-gray-50 pb-2">
-                                                                <span class="text-[11px] font-black text-gray-400 uppercase tracking-widest"><b>Created Date :</b></span>
-                                                                <span class="text-xs font-medium text-gray-600">' . ($record->date?->format('M d, Y') ?? '-') . '</span>
+                                                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f8fafc; padding-bottom: 8px; margin-bottom: 8px;">
+                                                                <span style="font-size: 10px; color: #94a3b8; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;">Created Date</span>
+                                                                <span style="font-size: 11px; color: #64748b; font-weight: 700;">' . ($record->date?->format('M d, Y') ?? '-') . '</span>
                                                             </div>
-                                                            <div class="flex justify-between">
-                                                                <span class="text-[11px] font-black text-gray-400 uppercase tracking-widest"><b>Due Date :</b></span>
-                                                                <span class="text-xs font-medium text-gray-600">' . ($record->due_date?->format('M d, Y') ?? '-') . '</span>
+                                                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                                                <span style="font-size: 10px; color: #94a3b8; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;">Due Date</span>
+                                                                <span style="font-size: 11px; color: #64748b; font-weight: 700;">' . ($record->due_date?->format('M d, Y') ?? '-') . '</span>
                                                             </div>
                                                         </div>
                                                     ') : null),
@@ -123,7 +123,7 @@ class InvoiceForm
                                                     ->hiddenLabel()
                                                     ->content(function ($record) {
                                                         if (!$record || $record->transactions->isEmpty()) {
-                                                            return new HtmlString('<div class="flex flex-col items-center justify-center py-8 opacity-30 min-h-[148px] text-center"><svg style="width:24px;height:24px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><span class="text-[10px] mt-1 font-black tracking-widest uppercase text-center leading-tight">No Transactions<br>Recorded</span></div>');
+                                                            return new HtmlString('<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 160px; background: #ffffff; border: 1px dashed #e2e8f0; border-radius: 12px; opacity: 0.5;"><svg style="width:24px;height:24px;color:#94a3b8;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><span style="font-size: 10px; margin-top: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; text-align: center;">No Payments Found</span></div>');
                                                         }
 
                                                         $latest = $record->transactions->sortByDesc('date')->first();
@@ -134,24 +134,24 @@ class InvoiceForm
                                                         $currency = $record->currency ?? 'USD';
 
                                                         return new HtmlString("
-                                                            <div class='flex flex-col space-y-3 py-1 min-h-[148px]'>
-                                                                <div class='flex justify-between border-b border-gray-50 pb-2'>
-                                                                    <span class='text-[11px] font-black text-gray-400 uppercase tracking-widest'><b>Date :</b></span>
-                                                                    <span class='text-xs font-bold text-gray-900'>{$date}</span>
+                                                            <div style='display: flex; flex-direction: column; min-height: 160px; background: #ffffff; border: 1px solid #f1f5f9; border-radius: 12px; padding: 16px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);'>
+                                                                <div style='display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f8fafc; padding-bottom: 8px; margin-bottom: 8px;'>
+                                                                    <span style='font-size: 10px; color: #94a3b8; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;'>Last Date</span>
+                                                                    <span style='font-size: 12px; color: #1e293b; font-weight: 700;'>{$date}</span>
                                                                 </div>
-                                                                <div class='flex justify-between border-b border-gray-50 pb-2'>
-                                                                    <span class='text-[11px] font-black text-gray-400 uppercase tracking-widest'><b>Payment Method :</b></span>
-                                                                    <span class='text-xs font-bold text-gray-900'>{$method}</span>
+                                                                <div style='display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f8fafc; padding-bottom: 8px; margin-bottom: 8px;'>
+                                                                    <span style='font-size: 10px; color: #94a3b8; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;'>Method</span>
+                                                                    <span style='background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 900; text-transform: uppercase;'>{$method}</span>
                                                                 </div>
-                                                                <div class='flex justify-between border-b border-gray-50 pb-2'>
-                                                                    <span class='text-[11px] font-black text-gray-400 uppercase tracking-widest'><b>Transaction ID :</b></span>
-                                                                    <span class='text-xs font-bold text-gray-900 truncate max-w-[120px]' title='{$txId}'>{$txId}</span>
+                                                                <div style='display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f8fafc; padding-bottom: 8px; margin-bottom: 8px;'>
+                                                                    <span style='font-size: 10px; color: #94a3b8; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;'>Trans ID</span>
+                                                                    <span style='font-size: 11px; font-family: monospace; color: #64748b; font-weight: 700;'>{$txId}</span>
                                                                 </div>
-                                                                <div class='flex justify-between items-center'>
-                                                                    <span class='text-[11px] font-black text-gray-400 uppercase tracking-widest'><b>Amount :</b></span>
-                                                                    <span class='text-xs font-bold text-gray-900'>{$amount} {$currency}</span>
+                                                                <div style='display: flex; justify-content: space-between; align-items: center; " . ($record->transactions->count() > 1 ? "margin-bottom: 4px;" : "") . "'>
+                                                                    <span style='font-size: 10px; color: #94a3b8; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;'>Amount</span>
+                                                                    <span style='font-size: 12px; color: #10b981; font-weight: 900;'>{$amount} {$currency}</span>
                                                                 </div>
-                                                                 " . ($record->transactions->count() > 1 ? "<div class='text-[8px] text-center pt-2 text-blue-500 font-bold uppercase tracking-tighter'><a href='#detailed-transactions' class='hover:underline'>See all " . ($record->transactions->count()) . " records below ↓</a></div>" : "") . "
+                                                                " . ($record->transactions->count() > 1 ? "<div style='text-align: center; border-top: 1px dashed #f1f5f9; margin-top: auto; padding-top: 6px;'><a href='#detailed-transactions' style='font-size: 9px; color: #3b82f6; font-weight: 900; text-transform: uppercase; text-decoration: none; letter-spacing: 0.05em;'>See all " . ($record->transactions->count()) . " records below ↓</a></div>" : "") . "
                                                             </div>
                                                         ");
                                                     }),
@@ -176,33 +176,23 @@ class InvoiceForm
                                                         $accentColor = $balanceDue > 0 ? '#ef4444' : '#10b981';
 
                                                         return new HtmlString('
-                                                            <div class="flex flex-col min-h-[152px] relative overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm group">
-                                                                <!-- Top Accent Bar -->
-                                                                <div class="h-1.5 w-full" style="background: linear-gradient(90deg, ' . $accentColor . ' 0%, ' . $accentColor . 'dd 100%);"></div>
-                                                                
-                                                                <div class="p-4 flex flex-col space-y-3">
-                                                                    <!-- Total Amount Row -->
-                                                                    <div class="flex justify-between border-b border-gray-50 pb-2">
-                                                                        <span class="text-[11px] font-black text-gray-400 uppercase tracking-widest"><b>Total Amount :</b></span>
-                                                                        <span class="text-xs font-bold text-gray-900">' . number_format($total, 2) . ' ' . $currency . '</span>
+                                                            <div style="display: flex; flex-direction: column; min-height: 160px; background: #ffffff; border: 1px solid #f1f5f9; border-radius: 12px; overflow: hidden; position: relative; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+                                                                <div style="height: 4px; width: 100%; background: ' . $accentColor . ';"></div>
+                                                                <div style="padding: 16px; display: flex; flex-direction: column; height: 100%;">
+                                                                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f8fafc; padding-bottom: 8px; margin-bottom: 8px;">
+                                                                        <span style="font-size: 10px; color: #94a3b8; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;">Total Amount</span>
+                                                                        <span style="font-size: 12px; color: #1e293b; font-weight: 700;">' . number_format($total, 2) . ' ' . $currency . '</span>
                                                                     </div>
-                                                                    
-                                                                    <!-- Received Row (Only if paid) -->
-                                                                    ' . ($paidInDollars > 0 ? '
-                                                                    <div class="flex justify-between border-b border-gray-50 pb-2">
-                                                                        <span class="text-[11px] font-black text-gray-400 uppercase tracking-widest"><b>Received :</b></span>
-                                                                        <span class="text-xs font-bold text-emerald-600">' . number_format($paidInDollars, 2) . ' ' . $currency . '</span>
-                                                                    </div>' : '') . '
-
-                                                                    <!-- Balance Due Row -->
-                                                                    <div class="flex justify-between items-center pt-1">
-                                                                        <span class="text-[11px] font-black uppercase tracking-widest" style="color: ' . $accentColor . '"><b>Balance Due :</b></span>
-                                                                        <span class="text-xs font-bold" style="color: ' . $accentColor . '">' . number_format($balanceDue, 2) . ' ' . $currency . '</span>
+                                                                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f8fafc; padding-bottom: 8px; margin-bottom: 8px;">
+                                                                        <span style="font-size: 10px; color: #94a3b8; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;">Received</span>
+                                                                        <span style="font-size: 12px; color: #10b981; font-weight: 700;">' . number_format($paidInDollars, 2) . ' ' . $currency . '</span>
+                                                                    </div>
+                                                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto;">
+                                                                        <span style="font-size: 10px; color: ' . $accentColor . '; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;">Balance Due</span>
+                                                                        <span style="font-size: 14px; color: ' . $accentColor . '; font-weight: 900;">' . number_format($balanceDue, 2) . ' ' . $currency . '</span>
                                                                     </div>
                                                                 </div>
-                                                                
-                                                                <!-- Subtle Corner Decoration -->
-                                                                <div class="absolute -right-6 -bottom-6 w-24 h-24 rounded-full opacity-[0.03] group-hover:opacity-[0.06] transition-opacity duration-700" style="background-color: ' . $accentColor . '"></div>
+                                                                <div style="position: absolute; right: -15px; bottom: -15px; width: 60px; height: 60px; border-radius: 50%; background: ' . $accentColor . '; opacity: 0.03;"></div>
                                                             </div>
                                                         ');
                                                     }),
