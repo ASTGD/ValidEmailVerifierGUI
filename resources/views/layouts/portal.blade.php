@@ -139,7 +139,8 @@
                             <div class="flex flex-col leading-none">
                                 <span
                                     class="text-[9px] font-black tracking-widest opacity-70">{{ __('Available Credits') }}</span>
-                                <span class="text-sm font-black">{{ __('100 USD') }}</span>
+                                <span class="text-sm font-black">{{ number_format(auth()->user()->balance / 100, 2) }}
+                                    {{ strtoupper(auth()->user()->currency ?: 'USD') }}</span>
                             </div>
                             <a href="{{ route('billing.index') }}"
                                 class="bg-white/20 p-1 rounded hover:bg-white/30 transition-colors">

@@ -6,16 +6,7 @@
                 {{ __('View and manage your invoices and payments.') }}
             </p>
         </div>
-        <div class="px-6 py-3 bg-white rounded-xl border border-[#E2E8F0] shadow-sm font-bold text-[#0F172A]">
-            {{ __('Credit Balance:') }}
-            <span class="text-[#1E7CCF]">
-                @php
-                    $currency = strtoupper(auth()->user()->currency ?: 'USD');
-                    $prefix = $currency === 'USD' ? '$' : $currency . ' ';
-                @endphp
-                {{ $prefix }}{{ number_format(auth()->user()->balance / 100, 2) }}
-            </span>
-        </div>
+
     </div>
 
     <div class="bg-white p-4 rounded-2xl border border-[#E2E8F0] flex items-center gap-4">
@@ -77,10 +68,10 @@
                             <td class="px-8 py-5">
                                 <span
                                     class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase
-                                                                                            @if($invoice->status === 'Paid') bg-green-100 text-green-700
-                                                                                            @elseif($invoice->status === 'Unpaid') bg-yellow-100 text-yellow-700
-                                                                                            @elseif($invoice->status === 'Cancelled') bg-red-100 text-red-700
-                                                                                            @else bg-gray-100 text-gray-700 @endif">
+                                                                                                @if($invoice->status === 'Paid') bg-green-100 text-green-700
+                                                                                                @elseif($invoice->status === 'Unpaid') bg-yellow-100 text-yellow-700
+                                                                                                @elseif($invoice->status === 'Cancelled') bg-red-100 text-red-700
+                                                                                                @else bg-gray-100 text-gray-700 @endif">
                                     {{ $invoice->status }}
                                 </span>
                             </td>
