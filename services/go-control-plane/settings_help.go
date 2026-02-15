@@ -6,21 +6,36 @@ import (
 )
 
 type SettingHelpTip struct {
-	Key              string
-	Title            string
-	What             string
-	Why              string
-	StandardValue    string
-	IfIncreased      string
-	IfDecreased      string
-	Monitor          string
-	DocsURL          string
-	ChangeKind       string
-	RecommendedLabel string
-	RecommendedValue string
-	RecommendedTone  string
-	ChangeUp         string
-	ChangeDown       string
+	Key                   string
+	Title                 string
+	What                  string
+	Why                   string
+	StandardValue         string
+	IfIncreased           string
+	IfDecreased           string
+	Monitor               string
+	DocsURL               string
+	ChangeKind            string
+	RecommendedLabel      string
+	RecommendedValue      string
+	RecommendedTone       string
+	RiskLevel             string
+	ChangeUp              string
+	ChangeDown            string
+	HasRecommendedRange   bool
+	RecommendedRangeMin   float64
+	RecommendedRangeMax   float64
+	RecommendedRangeLabel string
+	HasCautionRange       bool
+	CautionRangeMin       float64
+	CautionRangeMax       float64
+	CautionRangeLabel     string
+}
+
+type numericRangeLimit struct {
+	Min    float64
+	Max    float64
+	HasMax bool
 }
 
 func runtimeSettingHelpKeys() []string {
@@ -63,7 +78,95 @@ func runtimeSettingHelpKeys() []string {
 	}
 }
 
+func runtimeSettingNumericBounds() map[string]numericRangeLimit {
+	return map[string]numericRangeLimit{
+		"alert_error_rate_threshold":                     {Min: 0, Max: 1000000, HasMax: true},
+		"alert_heartbeat_grace_seconds":                  {Min: 1, Max: 86400, HasMax: true},
+		"alert_cooldown_seconds":                         {Min: 1, Max: 86400, HasMax: true},
+		"alert_check_interval_seconds":                   {Min: 5, Max: 600, HasMax: true},
+		"stale_worker_ttl_seconds":                       {Min: 60, Max: 2592000, HasMax: true},
+		"stuck_desired_grace_seconds":                    {Min: 30, Max: 86400, HasMax: true},
+		"quarantine_error_rate_threshold":                {Min: 0, Max: 1000000, HasMax: true},
+		"provider_tempfail_warn_rate":                    {Min: 0, Max: 1, HasMax: true},
+		"provider_tempfail_critical_rate":                {Min: 0, Max: 1, HasMax: true},
+		"provider_reject_warn_rate":                      {Min: 0, Max: 1, HasMax: true},
+		"provider_reject_critical_rate":                  {Min: 0, Max: 1, HasMax: true},
+		"provider_unknown_warn_rate":                     {Min: 0, Max: 1, HasMax: true},
+		"provider_unknown_critical_rate":                 {Min: 0, Max: 1, HasMax: true},
+		"autoscale_interval_seconds":                     {Min: 5, Max: 600, HasMax: true},
+		"autoscale_cooldown_seconds":                     {Min: 10, Max: 86400, HasMax: true},
+		"autoscale_canary_percent":                       {Min: 1, Max: 100, HasMax: true},
+		"autoscale_min_desired":                          {Min: 0, Max: 1000, HasMax: true},
+		"autoscale_max_desired":                          {Min: 0, Max: 1000, HasMax: true},
+		"policy_canary_window_minutes":                   {Min: 1, Max: 240, HasMax: true},
+		"policy_canary_required_health_windows":          {Min: 1, Max: 20, HasMax: true},
+		"policy_canary_min_provider_workers":             {Min: 1, Max: 1000, HasMax: true},
+		"policy_canary_unknown_regression_threshold":     {Min: 0, Max: 1, HasMax: true},
+		"policy_canary_tempfail_recovery_drop_threshold": {Min: 0, Max: 1, HasMax: true},
+		"policy_canary_policy_block_spike_threshold":     {Min: 0, Max: 1, HasMax: true},
+		"ui_overview_live_interval_seconds":              {Min: 2, Max: 60, HasMax: true},
+		"ui_workers_refresh_seconds":                     {Min: 2, Max: 120, HasMax: true},
+		"ui_pools_refresh_seconds":                       {Min: 2, Max: 120, HasMax: true},
+		"ui_alerts_refresh_seconds":                      {Min: 5, Max: 300, HasMax: true},
+	}
+}
+
+func runtimeSettingsNumericValues(settings RuntimeSettings) map[string]float64 {
+	return map[string]float64{
+		"alert_error_rate_threshold":                     settings.AlertErrorRateThreshold,
+		"alert_heartbeat_grace_seconds":                  float64(settings.AlertHeartbeatGraceSecond),
+		"alert_cooldown_seconds":                         float64(settings.AlertCooldownSecond),
+		"alert_check_interval_seconds":                   float64(settings.AlertCheckIntervalSecond),
+		"stale_worker_ttl_seconds":                       float64(settings.StaleWorkerTTLSecond),
+		"stuck_desired_grace_seconds":                    float64(settings.StuckDesiredGraceSecond),
+		"quarantine_error_rate_threshold":                settings.QuarantineErrorRateThreshold,
+		"provider_tempfail_warn_rate":                    settings.ProviderTempfailWarnRate,
+		"provider_tempfail_critical_rate":                settings.ProviderTempfailCriticalRate,
+		"provider_reject_warn_rate":                      settings.ProviderRejectWarnRate,
+		"provider_reject_critical_rate":                  settings.ProviderRejectCriticalRate,
+		"provider_unknown_warn_rate":                     settings.ProviderUnknownWarnRate,
+		"provider_unknown_critical_rate":                 settings.ProviderUnknownCriticalRate,
+		"autoscale_interval_seconds":                     float64(settings.AutoscaleIntervalSecond),
+		"autoscale_cooldown_seconds":                     float64(settings.AutoscaleCooldownSecond),
+		"autoscale_canary_percent":                       float64(settings.AutoscaleCanaryPercent),
+		"autoscale_min_desired":                          float64(settings.AutoscaleMinDesired),
+		"autoscale_max_desired":                          float64(settings.AutoscaleMaxDesired),
+		"policy_canary_window_minutes":                   float64(settings.PolicyCanaryWindowMinutes),
+		"policy_canary_required_health_windows":          float64(settings.PolicyCanaryRequiredHealthWindows),
+		"policy_canary_min_provider_workers":             float64(settings.PolicyCanaryMinProviderWorkers),
+		"policy_canary_unknown_regression_threshold":     settings.PolicyCanaryUnknownRegressionThreshold,
+		"policy_canary_tempfail_recovery_drop_threshold": settings.PolicyCanaryTempfailRecoveryDropThreshold,
+		"policy_canary_policy_block_spike_threshold":     settings.PolicyCanaryPolicyBlockSpikeThreshold,
+		"ui_overview_live_interval_seconds":              float64(settings.UIOverviewLiveIntervalSecond),
+		"ui_workers_refresh_seconds":                     float64(settings.UIWorkersRefreshSecond),
+		"ui_pools_refresh_seconds":                       float64(settings.UIPoolsRefreshSecond),
+		"ui_alerts_refresh_seconds":                      float64(settings.UIAlertsRefreshSecond),
+	}
+}
+
+func firstUnsafeRuntimeSetting(defaults RuntimeSettings, settings RuntimeSettings) (string, SettingHelpTip, float64, bool) {
+	help := buildRuntimeSettingsHelp(defaults, "")
+	values := runtimeSettingsNumericValues(settings)
+
+	for _, key := range runtimeSettingHelpKeys() {
+		value, hasValue := values[key]
+		if !hasValue {
+			continue
+		}
+		tip, ok := help[key]
+		if !ok || !tip.HasCautionRange {
+			continue
+		}
+		if value < tip.CautionRangeMin || value > tip.CautionRangeMax {
+			return key, tip, value, true
+		}
+	}
+
+	return "", SettingHelpTip{}, 0, false
+}
+
 func buildRuntimeSettingsHelp(defaults RuntimeSettings, docsBaseURL string) map[string]SettingHelpTip {
+	defaults = normalizeRuntimeSettings(defaults, defaults)
 	guideURL := runtimeSettingsGuideURL(docsBaseURL)
 
 	tips := map[string]SettingHelpTip{
@@ -490,6 +593,7 @@ func buildRuntimeSettingsHelp(defaults RuntimeSettings, docsBaseURL string) map[
 		"provider_policy_controls": true,
 		"policy_rollout_controls":  true,
 	}
+	numericBounds := runtimeSettingNumericBounds()
 
 	for key, tip := range tips {
 		if tip.RecommendedLabel == "" {
@@ -506,6 +610,10 @@ func buildRuntimeSettingsHelp(defaults RuntimeSettings, docsBaseURL string) map[
 		}
 		if toggleKeys[key] {
 			tip.ChangeKind = "toggle"
+			if changeUp, changeDown, ok := runtimeHelpToggleChangeMessages(key); ok {
+				tip.ChangeUp = changeUp
+				tip.ChangeDown = changeDown
+			}
 			if strings.EqualFold(tip.RecommendedValue, "Enabled") {
 				tip.RecommendedTone = "success"
 			} else {
@@ -518,10 +626,223 @@ func buildRuntimeSettingsHelp(defaults RuntimeSettings, docsBaseURL string) map[
 			tip.ChangeKind = "numeric"
 			tip.RecommendedTone = "neutral"
 		}
+		tip.RiskLevel = runtimeHelpRiskLevel(key)
+		if min, max, label, ok := runtimeHelpRecommendedRange(key, defaults); ok {
+			tip.HasRecommendedRange = true
+			tip.RecommendedRangeMin = min
+			tip.RecommendedRangeMax = max
+			tip.RecommendedRangeLabel = label
+			if tip.ChangeKind == "numeric" {
+				limits, hasLimits := numericBounds[key]
+				if hasLimits {
+					if cMin, cMax, cLabel, cautionOk := deriveCautionRange(min, max, limits); cautionOk {
+						tip.HasCautionRange = true
+						tip.CautionRangeMin = cMin
+						tip.CautionRangeMax = cMax
+						tip.CautionRangeLabel = cLabel
+					}
+				}
+			}
+		}
 		tips[key] = tip
 	}
 
 	return tips
+}
+
+func deriveCautionRange(safeMin float64, safeMax float64, limits numericRangeLimit) (float64, float64, string, bool) {
+	if safeMax < safeMin {
+		return 0, 0, "", false
+	}
+
+	cautionMin := safeMin * 0.70
+	cautionMax := safeMax * 1.30
+
+	if almostEqualFloat(safeMin, safeMax) {
+		delta := maxFloatSetting(1, safeMin*0.30)
+		cautionMin = safeMin - delta
+		cautionMax = safeMax + delta
+	}
+
+	if cautionMin < limits.Min {
+		cautionMin = limits.Min
+	}
+	if limits.HasMax && cautionMax > limits.Max {
+		cautionMax = limits.Max
+	}
+	if cautionMax < cautionMin {
+		cautionMax = cautionMin
+	}
+
+	return cautionMin, cautionMax, formatRangeLabel(cautionMin, cautionMax), true
+}
+
+func formatRangeLabel(min float64, max float64) string {
+	if almostEqualFloat(min, float64(int(min))) && almostEqualFloat(max, float64(int(max))) {
+		return fmt.Sprintf("%d-%d", int(min), int(max))
+	}
+
+	return fmt.Sprintf("%.2f-%.2f", min, max)
+}
+
+func almostEqualFloat(a float64, b float64) bool {
+	diff := a - b
+	if diff < 0 {
+		diff = -diff
+	}
+
+	return diff < 0.0001
+}
+
+func maxFloatSetting(a float64, b float64) float64 {
+	if a >= b {
+		return a
+	}
+	return b
+}
+
+func runtimeHelpToggleChangeMessages(key string) (string, string, bool) {
+	switch key {
+	case "alerts_enabled":
+		return "Incidents are detected and notifications are sent.", "Incidents are not alerted automatically; use manual checks.", true
+	case "auto_actions_enabled":
+		return "Automatic safety actions can quarantine or drain unhealthy workers.", "Ops team must run mitigation actions manually.", true
+	case "autoscale_enabled":
+		return "Pool desired counts adjust to load within configured guardrails.", "Pool sizes stay fixed until changed manually.", true
+	case "provider_policy_engine_enabled":
+		return "Provider-specific SMTP rules are applied for decisions and pacing.", "Generic fallback policy is used for all providers.", true
+	case "adaptive_retry_enabled":
+		return "Retry windows adapt by provider behavior and tempfail patterns.", "Static retry behavior is used.", true
+	case "provider_autoprotect_enabled":
+		return "Provider mode can shift automatically during degradation.", "Provider mode changes require manual operator action.", true
+	case "policy_canary_autopilot_enabled":
+		return "Canary rollout progression and rollback are evaluated automatically.", "Canary rollout remains manual.", true
+	default:
+		return "", "", false
+	}
+}
+
+func runtimeHelpRiskLevel(key string) string {
+	switch key {
+	case "alerts_enabled", "ui_overview_live_interval_seconds", "ui_workers_refresh_seconds", "ui_pools_refresh_seconds", "ui_alerts_refresh_seconds":
+		return "low"
+	case "provider_policy_controls", "policy_rollout_controls", "auto_actions_enabled", "autoscale_enabled", "provider_policy_engine_enabled", "adaptive_retry_enabled", "provider_autoprotect_enabled", "policy_canary_autopilot_enabled":
+		return "high"
+	default:
+		return "medium"
+	}
+}
+
+func runtimeHelpRecommendedRange(key string, defaults RuntimeSettings) (float64, float64, string, bool) {
+	switch key {
+	case "alert_error_rate_threshold":
+		return expandRangeFloat(defaults.AlertErrorRateThreshold, 0.75, 1.25, 0, 1000000, 2, "")
+	case "alert_heartbeat_grace_seconds":
+		return expandRangeInt(defaults.AlertHeartbeatGraceSecond, 0.7, 1.4, 1, 86400, " sec")
+	case "alert_cooldown_seconds":
+		return expandRangeInt(defaults.AlertCooldownSecond, 0.7, 1.4, 1, 86400, " sec")
+	case "alert_check_interval_seconds":
+		return expandRangeInt(defaults.AlertCheckIntervalSecond, 0.7, 1.4, 5, 300, " sec")
+	case "stale_worker_ttl_seconds":
+		return expandRangeInt(defaults.StaleWorkerTTLSecond, 0.7, 1.3, 60, 172800, " sec")
+	case "stuck_desired_grace_seconds":
+		return expandRangeInt(defaults.StuckDesiredGraceSecond, 0.7, 1.4, 30, 7200, " sec")
+	case "quarantine_error_rate_threshold":
+		return expandRangeFloat(defaults.QuarantineErrorRateThreshold, 0.8, 1.2, 0, 1000000, 2, "")
+	case "provider_tempfail_warn_rate":
+		return expandRangeFloat(defaults.ProviderTempfailWarnRate, 0.85, 1.15, 0, 1, 2, "")
+	case "provider_tempfail_critical_rate":
+		return expandRangeFloat(defaults.ProviderTempfailCriticalRate, 0.85, 1.15, 0, 1, 2, "")
+	case "provider_reject_warn_rate":
+		return expandRangeFloat(defaults.ProviderRejectWarnRate, 0.85, 1.15, 0, 1, 2, "")
+	case "provider_reject_critical_rate":
+		return expandRangeFloat(defaults.ProviderRejectCriticalRate, 0.85, 1.15, 0, 1, 2, "")
+	case "provider_unknown_warn_rate":
+		return expandRangeFloat(defaults.ProviderUnknownWarnRate, 0.85, 1.15, 0, 1, 2, "")
+	case "provider_unknown_critical_rate":
+		return expandRangeFloat(defaults.ProviderUnknownCriticalRate, 0.85, 1.15, 0, 1, 2, "")
+	case "autoscale_interval_seconds":
+		return expandRangeInt(defaults.AutoscaleIntervalSecond, 0.8, 1.25, 5, 600, " sec")
+	case "autoscale_cooldown_seconds":
+		return expandRangeInt(defaults.AutoscaleCooldownSecond, 0.8, 1.25, 10, 3600, " sec")
+	case "autoscale_canary_percent":
+		return expandRangeInt(defaults.AutoscaleCanaryPercent, 0.5, 1.0, 1, 100, "%")
+	case "autoscale_min_desired":
+		min := defaults.AutoscaleMinDesired - 1
+		if min < 0 {
+			min = 0
+		}
+		max := defaults.AutoscaleMinDesired + 2
+		return float64(min), float64(max), fmt.Sprintf("%d-%d workers", min, max), true
+	case "autoscale_max_desired":
+		min := defaults.AutoscaleMaxDesired - 2
+		if min < defaults.AutoscaleMinDesired {
+			min = defaults.AutoscaleMinDesired
+		}
+		max := defaults.AutoscaleMaxDesired + 3
+		return float64(min), float64(max), fmt.Sprintf("%d-%d workers", min, max), true
+	case "policy_canary_window_minutes":
+		return expandRangeInt(defaults.PolicyCanaryWindowMinutes, 0.8, 1.25, 1, 240, " min")
+	case "policy_canary_required_health_windows":
+		return expandRangeInt(defaults.PolicyCanaryRequiredHealthWindows, 0.75, 1.25, 1, 20, " windows")
+	case "policy_canary_min_provider_workers":
+		return expandRangeInt(defaults.PolicyCanaryMinProviderWorkers, 0.75, 1.5, 1, 1000, " workers")
+	case "policy_canary_unknown_regression_threshold":
+		return expandRangeFloat(defaults.PolicyCanaryUnknownRegressionThreshold, 0.8, 1.2, 0, 1, 2, "")
+	case "policy_canary_tempfail_recovery_drop_threshold":
+		return expandRangeFloat(defaults.PolicyCanaryTempfailRecoveryDropThreshold, 0.8, 1.2, 0, 1, 2, "")
+	case "policy_canary_policy_block_spike_threshold":
+		return expandRangeFloat(defaults.PolicyCanaryPolicyBlockSpikeThreshold, 0.8, 1.2, 0, 1, 2, "")
+	case "ui_overview_live_interval_seconds":
+		return expandRangeInt(defaults.UIOverviewLiveIntervalSecond, 0.8, 1.3, 2, 60, " sec")
+	case "ui_workers_refresh_seconds":
+		return expandRangeInt(defaults.UIWorkersRefreshSecond, 0.8, 1.3, 2, 120, " sec")
+	case "ui_pools_refresh_seconds":
+		return expandRangeInt(defaults.UIPoolsRefreshSecond, 0.8, 1.3, 2, 120, " sec")
+	case "ui_alerts_refresh_seconds":
+		return expandRangeInt(defaults.UIAlertsRefreshSecond, 0.8, 1.3, 5, 300, " sec")
+	default:
+		return 0, 0, "", false
+	}
+}
+
+func expandRangeFloat(base float64, lowerFactor float64, upperFactor float64, hardMin float64, hardMax float64, precision int, suffix string) (float64, float64, string, bool) {
+	min := base * lowerFactor
+	max := base * upperFactor
+	if base <= 0 {
+		min = hardMin
+		max = hardMin
+	}
+	if min < hardMin {
+		min = hardMin
+	}
+	if max > hardMax {
+		max = hardMax
+	}
+	if max < min {
+		max = min
+	}
+	format := fmt.Sprintf("%%.%df", precision)
+	return min, max, fmt.Sprintf(format+"-"+format+"%s", min, max, suffix), true
+}
+
+func expandRangeInt(base int, lowerFactor float64, upperFactor float64, hardMin int, hardMax int, suffix string) (float64, float64, string, bool) {
+	min := int(float64(base) * lowerFactor)
+	max := int(float64(base) * upperFactor)
+	if base <= 0 {
+		min = hardMin
+		max = hardMin
+	}
+	if min < hardMin {
+		min = hardMin
+	}
+	if max > hardMax {
+		max = hardMax
+	}
+	if max < min {
+		max = min
+	}
+	return float64(min), float64(max), fmt.Sprintf("%d-%d%s", min, max, suffix), true
 }
 
 func runtimeSettingsGuideURL(docsBaseURL string) string {

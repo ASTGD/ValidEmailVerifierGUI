@@ -60,8 +60,9 @@ func TestSettingsTemplateRendersRuntimeHelpKeys(t *testing.T) {
 			BasePath:        "/verifier-engine-room",
 			DocsURL:         "http://localhost:8082/internal/docs",
 		},
-		Settings:    defaults,
-		RuntimeHelp: help,
+		Settings:        defaults,
+		DefaultSettings: defaults,
+		RuntimeHelp:     help,
 	})
 
 	body := recorder.Body.String()
@@ -77,10 +78,31 @@ func TestSettingsTemplateRendersRuntimeHelpKeys(t *testing.T) {
 	if !strings.Contains(body, "Recommended") {
 		t.Fatalf("expected settings page to render recommended pill text")
 	}
+	if !strings.Contains(body, "Safe:") {
+		t.Fatalf("expected settings page to render safe range hint text")
+	}
+	if !strings.Contains(body, `data-help-risk-key="alert_error_rate_threshold"`) {
+		t.Fatalf("expected settings page to render dynamic risk placeholder")
+	}
+	if !strings.Contains(body, "data-caution-min") || !strings.Contains(body, "data-caution-max") {
+		t.Fatalf("expected settings page to render caution range metadata")
+	}
+	if !strings.Contains(body, "settings-risk-warning") {
+		t.Fatalf("expected settings page to render risk warning container")
+	}
 	if !strings.Contains(body, "<strong>If enabled:</strong>") {
 		t.Fatalf("expected settings page to render toggle wording")
 	}
 	if !strings.Contains(body, "<strong>If increased:</strong>") {
 		t.Fatalf("expected settings page to render numeric wording")
+	}
+	if !strings.Contains(body, "data-settings-preset=\"balanced\"") {
+		t.Fatalf("expected settings page to include preset controls")
+	}
+	if !strings.Contains(body, "settings-change-preview") {
+		t.Fatalf("expected settings page to include change preview container")
+	}
+	if !strings.Contains(body, "runtime-settings-save-button") {
+		t.Fatalf("expected settings page to include save button id for risk guard")
 	}
 }

@@ -65,7 +65,10 @@ type AlertsPageData struct {
 type SettingsPageData struct {
 	BasePageData
 	Saved                                     bool
+	RolledBack                                bool
+	HasRollbackSnapshot                       bool
 	Settings                                  RuntimeSettings
+	DefaultSettings                           RuntimeSettings
 	ProviderHealth                            []ProviderHealthSummary
 	ProviderPolicies                          ProviderPoliciesData
 	PolicyVersions                            []SMTPPolicyVersionRecord
@@ -309,6 +312,10 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 		providerHealth = stats.ProviderHealth
 		providerPolicies = stats.ProviderPolicies
 	}
+	hasRollbackSnapshot := false
+	if s.store != nil {
+		hasRollbackSnapshot, _ = s.store.HasRuntimeSettingsSnapshot(r.Context())
+	}
 
 	data := SettingsPageData{
 		BasePageData: BasePageData{
@@ -320,7 +327,10 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 			DocsURL:         s.docsURL(),
 		},
 		Saved:                                     r.URL.Query().Get("saved") == "1",
+		RolledBack:                                r.URL.Query().Get("rolled_back") == "1",
+		HasRollbackSnapshot:                       hasRollbackSnapshot,
 		Settings:                                  settings,
+		DefaultSettings:                           defaults,
 		ProviderHealth:                            providerHealth,
 		ProviderPolicies:                          providerPolicies,
 		PolicyVersions:                            []SMTPPolicyVersionRecord{},
@@ -346,6 +356,8 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUIUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	defaults := defaultRuntimeSettings(s.cfg)
+
 	if err := r.ParseForm(); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid form")
 		return
@@ -549,12 +561,58 @@ func (s *Server) handleUIUpdateSettings(w http.ResponseWriter, r *http.Request) 
 		UIAlertsRefreshSecond:                     alertsRefreshInterval,
 	}
 
+	if err := validateRuntimeSettingsRisk(defaults, settings); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+
+	if s.store == nil {
+		writeError(w, http.StatusInternalServerError, "store is not configured")
+		return
+	}
+
 	if err := s.store.SaveRuntimeSettings(r.Context(), settings); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	http.Redirect(w, r, "/verifier-engine-room/settings?saved=1", http.StatusSeeOther)
+}
+
+func formatRuntimeSettingValue(value float64) string {
+	if math.Abs(value-math.Round(value)) < 0.0001 {
+		return strconv.Itoa(int(math.Round(value)))
+	}
+
+	return fmt.Sprintf("%.2f", value)
+}
+
+func validateRuntimeSettingsRisk(defaults RuntimeSettings, settings RuntimeSettings) error {
+	if key, tip, value, found := firstUnsafeRuntimeSetting(defaults, settings); found {
+		return fmt.Errorf(
+			"%s is unsafe at %s (safe: %s, caution: %s)",
+			key,
+			formatRuntimeSettingValue(value),
+			tip.RecommendedRangeLabel,
+			tip.CautionRangeLabel,
+		)
+	}
+
+	return nil
+}
+
+func (s *Server) handleUIRollbackSettings(w http.ResponseWriter, r *http.Request) {
+	if s.store == nil {
+		writeError(w, http.StatusInternalServerError, "store is not configured")
+		return
+	}
+
+	if err := s.store.RollbackRuntimeSettings(r.Context()); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	http.Redirect(w, r, "/verifier-engine-room/settings?saved=1&rolled_back=1", http.StatusSeeOther)
 }
 
 func (s *Server) handleUIProviderMode(w http.ResponseWriter, r *http.Request) {

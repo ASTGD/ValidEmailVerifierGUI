@@ -12,8 +12,22 @@
         Settings saved.
     </div>
     {{ end }}
+    {{ if .RolledBack }}
+    <div class="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+        Rolled back to the previous runtime settings snapshot.
+    </div>
+    {{ end }}
 
-    <form method="POST" action="{{ .BasePath }}/settings" class="mt-6 space-y-5">
+    <form id="runtime-settings-form" method="POST" action="{{ .BasePath }}/settings" class="mt-6 space-y-5">
+        <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Presets</span>
+                <button type="button" class="settings-preset-btn" data-settings-preset="conservative">Conservative</button>
+                <button type="button" class="settings-preset-btn" data-settings-preset="balanced">Balanced</button>
+                <button type="button" class="settings-preset-btn" data-settings-preset="aggressive">Aggressive</button>
+            </div>
+            <p class="mt-2 text-xs text-slate-400">Preset applies to form fields only. Review change preview, then click Save Settings.</p>
+        </div>
         <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
             <h3 class="text-sm font-semibold">Core Toggles</h3>
             <p class="mt-1 text-xs text-slate-400">High-impact controls grouped in one block.</p>
@@ -213,10 +227,31 @@
             </div>
         </div>
 
-        <div>
-            <button type="submit" class="rounded-full bg-amber-500 px-5 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-400">Save Settings</button>
+        <div class="space-y-3">
+            <div id="settings-risk-warning" class="settings-risk-warning hidden">
+                <p id="settings-risk-warning-title" class="settings-risk-warning__title">Unsafe values detected</p>
+                <p id="settings-risk-warning-meta" class="settings-risk-warning__meta">Adjust values to continue.</p>
+                <div id="settings-risk-warning-list" class="settings-risk-warning__list"></div>
+            </div>
+            <div id="settings-change-preview" class="settings-change-preview hidden">
+                <p class="settings-change-preview__title">Pending changes</p>
+                <p id="settings-change-meta" class="settings-change-preview__meta">No unsaved changes.</p>
+                <div id="settings-change-list" class="settings-change-preview__list"></div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <button id="runtime-settings-save-button" type="submit" class="rounded-full bg-amber-500 px-5 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40">Save Settings</button>
+            </div>
         </div>
     </form>
+    <div class="mt-3">
+        {{ if .HasRollbackSnapshot }}
+            <form method="POST" action="{{ .BasePath }}/settings/rollback">
+                <button type="submit" class="rounded-full border border-slate-600 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800">Rollback Last Save</button>
+            </form>
+        {{ else }}
+            <span class="text-xs text-slate-500">Rollback available after the first saved change.</span>
+        {{ end }}
+    </div>
 </section>
 
 <section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
@@ -444,10 +479,23 @@
 </section>
 <script>
     window.addEventListener('DOMContentLoaded', () => {
+        const runtimeHelp = {{ toJSON .RuntimeHelp }};
+        const baselineSettings = {{ toJSON .Settings }};
+        const defaultSettings = {{ toJSON .DefaultSettings }};
+        const runtimeSettingsForm = document.getElementById('runtime-settings-form');
         const versionSelect = document.getElementById('promote-policy-version');
         const promoteButton = document.getElementById('promote-policy-button');
         const hint = document.getElementById('promote-validation-hint');
         const helpTips = Array.from(document.querySelectorAll('.help-tip'));
+        const presetButtons = Array.from(document.querySelectorAll('[data-settings-preset]'));
+        const previewContainer = document.getElementById('settings-change-preview');
+        const previewMeta = document.getElementById('settings-change-meta');
+        const previewList = document.getElementById('settings-change-list');
+        const riskWarningContainer = document.getElementById('settings-risk-warning');
+        const riskWarningTitle = document.getElementById('settings-risk-warning-title');
+        const riskWarningMeta = document.getElementById('settings-risk-warning-meta');
+        const riskWarningList = document.getElementById('settings-risk-warning-list');
+        const runtimeSaveButton = document.getElementById('runtime-settings-save-button');
 
         const closeHelpTips = () => {
             helpTips.forEach((tip) => {
@@ -468,6 +516,384 @@
                 closeHelpTips();
             }
         });
+
+        const parseInputValue = (input) => {
+            if (input.type === 'checkbox') {
+                return input.checked;
+            }
+            if (input.type === 'number') {
+                const value = Number.parseFloat(input.value);
+                if (Number.isNaN(value)) {
+                    return null;
+                }
+                return value;
+            }
+
+            return input.value;
+        };
+
+        const normalizeNumber = (value, input) => {
+            if (typeof value !== 'number' || Number.isNaN(value)) {
+                return null;
+            }
+
+            const min = input.min !== '' ? Number.parseFloat(input.min) : null;
+            const max = input.max !== '' ? Number.parseFloat(input.max) : null;
+            let next = value;
+            if (min !== null && next < min) {
+                next = min;
+            }
+            if (max !== null && next > max) {
+                next = max;
+            }
+            return next;
+        };
+
+        const formatValue = (input, value) => {
+            if (input.type === 'checkbox') {
+                return value ? 'Enabled' : 'Disabled';
+            }
+            if (typeof value === 'number') {
+                if (input.step && input.step.includes('.')) {
+                    return value.toFixed(2);
+                }
+                return Math.round(value).toString();
+            }
+            return String(value);
+        };
+
+        const setInputValue = (input, value) => {
+            if (input.type === 'checkbox') {
+                input.checked = Boolean(value);
+                return;
+            }
+            if (input.type === 'number') {
+                const normalized = normalizeNumber(Number(value), input);
+                if (normalized === null) {
+                    return;
+                }
+                if (input.step && input.step.includes('.')) {
+                    input.value = normalized.toFixed(2);
+                    return;
+                }
+                input.value = Math.round(normalized).toString();
+                return;
+            }
+
+            input.value = value;
+        };
+
+        const evaluateRiskLevel = (input) => {
+            const tip = runtimeHelp[input.name];
+            if (!tip || !tip.HasRecommendedRange || !tip.HasCautionRange || input.type === 'checkbox') {
+                return null;
+            }
+
+            const current = parseInputValue(input);
+            if (typeof current !== 'number') {
+                return null;
+            }
+
+            if (current < tip.CautionRangeMin || current > tip.CautionRangeMax) {
+                return 'high';
+            }
+            if (current < tip.RecommendedRangeMin || current > tip.RecommendedRangeMax) {
+                return 'medium';
+            }
+
+            return 'low';
+        };
+
+        const applyRangeState = (input) => {
+            const risk = evaluateRiskLevel(input);
+            input.classList.remove('settings-outside-range');
+            input.classList.remove('settings-caution-range');
+            if (risk === 'high') {
+                input.classList.add('settings-outside-range');
+            } else if (risk === 'medium') {
+                input.classList.add('settings-caution-range');
+            }
+
+            return risk;
+        };
+
+        const updateRiskBadges = (key, risk) => {
+            const badges = Array.from(document.querySelectorAll(`[data-help-risk-key="${key}"]`));
+            badges.forEach((badge) => {
+                badge.classList.remove('help-tip__risk--low');
+                badge.classList.remove('help-tip__risk--medium');
+                badge.classList.remove('help-tip__risk--high');
+                if (risk === 'high') {
+                    badge.classList.add('help-tip__risk--high');
+                    badge.textContent = 'High';
+                } else if (risk === 'medium') {
+                    badge.classList.add('help-tip__risk--medium');
+                    badge.textContent = 'Medium';
+                } else {
+                    badge.classList.add('help-tip__risk--low');
+                    badge.textContent = 'Low';
+                }
+            });
+        };
+
+        const injectRangeHints = (inputs) => {
+            inputs.forEach((input) => {
+                const tip = runtimeHelp[input.name];
+                if (!tip || !tip.HasRecommendedRange || input.type === 'checkbox') {
+                    return;
+                }
+
+                const label = input.closest('label');
+                const labelHeading = label ? label.querySelector('span') : null;
+                if (!labelHeading || labelHeading.querySelector('.settings-range-hint')) {
+                    return;
+                }
+
+                const badge = document.createElement('span');
+                badge.className = 'settings-range-hint';
+                badge.textContent = `Safe: ${tip.RecommendedRangeLabel}`;
+                labelHeading.appendChild(badge);
+            });
+        };
+
+        const renderRiskWarningState = (inputs) => {
+            const highEntries = [];
+            const mediumEntries = [];
+
+            inputs.forEach((input) => {
+                if (input.type !== 'number') {
+                    return;
+                }
+                const tip = runtimeHelp[input.name];
+                if (!tip || !tip.HasRecommendedRange || !tip.HasCautionRange) {
+                    return;
+                }
+
+                const risk = applyRangeState(input);
+                updateRiskBadges(input.name, risk);
+
+                if (risk === null) {
+                    return;
+                }
+
+                const current = parseInputValue(input);
+                const entry = {
+                    key: input.name,
+                    title: tip.Title,
+                    value: formatValue(input, current),
+                    safe: tip.RecommendedRangeLabel,
+                    caution: tip.CautionRangeLabel,
+                };
+
+                if (risk === 'high') {
+                    highEntries.push(entry);
+                } else if (risk === 'medium') {
+                    mediumEntries.push(entry);
+                }
+            });
+
+            if (runtimeSaveButton) {
+                runtimeSaveButton.disabled = highEntries.length > 0;
+            }
+
+            if (!riskWarningContainer || !riskWarningTitle || !riskWarningMeta || !riskWarningList) {
+                return;
+            }
+
+            if (highEntries.length > 0) {
+                riskWarningContainer.classList.remove('hidden');
+                riskWarningContainer.classList.add('settings-risk-warning--high');
+                riskWarningContainer.classList.remove('settings-risk-warning--medium');
+                riskWarningTitle.textContent = 'Unsafe values detected';
+                riskWarningMeta.textContent = 'Save is blocked. Move these fields into caution range (prefer safe range).';
+                riskWarningList.innerHTML = '';
+                highEntries.forEach((entry) => {
+                    const item = document.createElement('div');
+                    item.className = 'settings-risk-warning__item';
+                    item.textContent = `${entry.title}: ${entry.value} (Safe: ${entry.safe}; Caution: ${entry.caution})`;
+                    riskWarningList.appendChild(item);
+                });
+                return;
+            }
+
+            if (mediumEntries.length > 0) {
+                riskWarningContainer.classList.remove('hidden');
+                riskWarningContainer.classList.add('settings-risk-warning--medium');
+                riskWarningContainer.classList.remove('settings-risk-warning--high');
+                riskWarningTitle.textContent = 'Outside recommended range';
+                riskWarningMeta.textContent = 'Save is allowed, but review values before applying.';
+                riskWarningList.innerHTML = '';
+                mediumEntries.slice(0, 6).forEach((entry) => {
+                    const item = document.createElement('div');
+                    item.className = 'settings-risk-warning__item';
+                    item.textContent = `${entry.title}: ${entry.value} (Safe: ${entry.safe})`;
+                    riskWarningList.appendChild(item);
+                });
+                return;
+            }
+
+            riskWarningContainer.classList.add('hidden');
+            riskWarningContainer.classList.remove('settings-risk-warning--high');
+            riskWarningContainer.classList.remove('settings-risk-warning--medium');
+            riskWarningList.innerHTML = '';
+        };
+
+        const summarizeChangeEffect = (tip, previous, next) => {
+            if (!tip) {
+                return '';
+            }
+            if (tip.ChangeKind === 'toggle') {
+                return next ? tip.ChangeUp : tip.ChangeDown;
+            }
+            if (tip.ChangeKind === 'numeric') {
+                if (typeof previous !== 'number' || typeof next !== 'number') {
+                    return tip.ChangeUp;
+                }
+                return next >= previous ? tip.ChangeUp : tip.ChangeDown;
+            }
+
+            return tip.ChangeUp;
+        };
+
+        const sameValue = (a, b) => {
+            if (typeof a === 'number' && typeof b === 'number') {
+                return Math.abs(a - b) < 0.0001;
+            }
+            return a === b;
+        };
+
+        const buildPresets = (defaults) => {
+            const balanced = { ...defaults };
+
+            const conservative = { ...defaults };
+            conservative.policy_canary_autopilot_enabled = false;
+            conservative.alert_error_rate_threshold = defaults.alert_error_rate_threshold * 0.85;
+            conservative.quarantine_error_rate_threshold = defaults.quarantine_error_rate_threshold * 0.85;
+            conservative.provider_tempfail_warn_rate = defaults.provider_tempfail_warn_rate * 0.9;
+            conservative.provider_tempfail_critical_rate = defaults.provider_tempfail_critical_rate * 0.9;
+            conservative.provider_reject_warn_rate = defaults.provider_reject_warn_rate * 0.9;
+            conservative.provider_reject_critical_rate = defaults.provider_reject_critical_rate * 0.9;
+            conservative.provider_unknown_warn_rate = defaults.provider_unknown_warn_rate * 0.9;
+            conservative.provider_unknown_critical_rate = defaults.provider_unknown_critical_rate * 0.9;
+            conservative.autoscale_canary_percent = Math.min(defaults.autoscale_canary_percent, 50);
+            conservative.policy_canary_required_health_windows = defaults.policy_canary_required_health_windows + 1;
+            conservative.policy_canary_unknown_regression_threshold = defaults.policy_canary_unknown_regression_threshold * 0.9;
+            conservative.policy_canary_tempfail_recovery_drop_threshold = defaults.policy_canary_tempfail_recovery_drop_threshold * 0.9;
+            conservative.policy_canary_policy_block_spike_threshold = defaults.policy_canary_policy_block_spike_threshold * 0.9;
+
+            const aggressive = { ...defaults };
+            aggressive.policy_canary_autopilot_enabled = true;
+            aggressive.alert_error_rate_threshold = defaults.alert_error_rate_threshold * 1.2;
+            aggressive.quarantine_error_rate_threshold = defaults.quarantine_error_rate_threshold * 1.15;
+            aggressive.alert_check_interval_seconds = defaults.alert_check_interval_seconds * 0.8;
+            aggressive.autoscale_interval_seconds = defaults.autoscale_interval_seconds * 0.75;
+            aggressive.autoscale_cooldown_seconds = defaults.autoscale_cooldown_seconds * 0.8;
+            aggressive.autoscale_canary_percent = Math.max(defaults.autoscale_canary_percent, 75);
+            aggressive.autoscale_max_desired = defaults.autoscale_max_desired + 2;
+            aggressive.policy_canary_required_health_windows = Math.max(1, defaults.policy_canary_required_health_windows - 1);
+
+            return { conservative, balanced, aggressive };
+        };
+
+        const renderChangePreview = (inputs, presetName = '') => {
+            if (!previewContainer || !previewMeta || !previewList) {
+                return;
+            }
+
+            const entries = [];
+            inputs.forEach((input) => {
+                const key = input.name;
+                const previous = baselineSettings[key];
+                const next = parseInputValue(input);
+                if (next === null || sameValue(previous, next)) {
+                    return;
+                }
+
+                const tip = runtimeHelp[key];
+                entries.push({
+                    name: tip ? tip.Title : key,
+                    before: formatValue(input, previous),
+                    after: formatValue(input, next),
+                    effect: summarizeChangeEffect(tip, previous, next),
+                });
+            });
+
+            if (entries.length === 0) {
+                previewContainer.classList.add('hidden');
+                previewMeta.textContent = 'No unsaved changes.';
+                previewList.innerHTML = '';
+                return;
+            }
+
+            previewContainer.classList.remove('hidden');
+            const presetText = presetName ? `Preset: ${presetName}. ` : '';
+            previewMeta.textContent = `${presetText}${entries.length} pending change(s).`;
+            previewList.innerHTML = '';
+            entries.slice(0, 8).forEach((entry) => {
+                const item = document.createElement('div');
+                item.className = 'settings-change-preview__item';
+
+                const name = document.createElement('div');
+                name.className = 'settings-change-preview__name';
+                name.textContent = `${entry.name}: ${entry.before} → ${entry.after}`;
+
+                const effect = document.createElement('div');
+                effect.className = 'settings-change-preview__effect';
+                effect.textContent = entry.effect;
+
+                item.appendChild(name);
+                item.appendChild(effect);
+                previewList.appendChild(item);
+            });
+        };
+
+        if (runtimeSettingsForm) {
+            const runtimeInputs = Array.from(runtimeSettingsForm.querySelectorAll('input[name]'));
+            const presets = buildPresets(defaultSettings);
+            let activePreset = '';
+
+            injectRangeHints(runtimeInputs);
+            runtimeInputs.forEach((input) => {
+                const eventName = input.type === 'checkbox' ? 'change' : 'input';
+                input.addEventListener(eventName, () => {
+                    activePreset = '';
+                    presetButtons.forEach((button) => button.classList.remove('is-active'));
+                    renderChangePreview(runtimeInputs);
+                    renderRiskWarningState(runtimeInputs);
+                });
+            });
+
+            presetButtons.forEach((button) => {
+                button.addEventListener('click', () => {
+                    const presetName = button.getAttribute('data-settings-preset');
+                    const preset = presetName ? presets[presetName] : null;
+                    if (!preset) {
+                        return;
+                    }
+
+                    runtimeInputs.forEach((input) => {
+                        if (Object.prototype.hasOwnProperty.call(preset, input.name)) {
+                            setInputValue(input, preset[input.name]);
+                        }
+                    });
+
+                    activePreset = presetName;
+                    presetButtons.forEach((item) => item.classList.toggle('is-active', item === button));
+                    renderChangePreview(runtimeInputs, activePreset);
+                    renderRiskWarningState(runtimeInputs);
+                });
+            });
+
+            renderChangePreview(runtimeInputs, activePreset);
+            renderRiskWarningState(runtimeInputs);
+
+            runtimeSettingsForm.addEventListener('submit', (event) => {
+                renderRiskWarningState(runtimeInputs);
+                if (runtimeSaveButton && runtimeSaveButton.disabled) {
+                    event.preventDefault();
+                }
+            });
+        }
 
         if (!versionSelect || !promoteButton) {
             return;
