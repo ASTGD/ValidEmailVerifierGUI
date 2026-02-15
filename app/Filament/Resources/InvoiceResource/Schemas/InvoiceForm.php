@@ -89,35 +89,32 @@ class InvoiceForm
                                                             return new HtmlString('<div class="flex flex-col items-center justify-center py-8 opacity-30 min-h-[148px] text-center"><svg style="width:24px;height:24px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><span class="text-[10px] mt-1 font-black tracking-widest uppercase text-center leading-tight">No Transactions<br>Recorded</span></div>');
                                                         }
 
-                                                        $rows = $record->transactions->sortByDesc('date')->take(4)->map(function ($transaction) use ($record) {
-                                                            $amount = number_format($transaction->amount / 100, 2);
-                                                            $date = $transaction->date ? $transaction->date->format('M d, H:i') : '-';
-                                                            $method = $transaction->payment_method ?? '-';
-
-                                                            return "
-                                                                <tr class='border-b border-gray-50 hover:bg-gray-50/50 transition-colors'>
-                                                                    <td class='py-2 px-1 text-[10px] text-gray-400 font-medium'>{$date}</td>
-                                                                    <td class='py-2 px-2 text-[10px] font-bold text-gray-600 truncate max-w-[80px]'>{$method}</td>
-                                                                    <td class='py-2 px-1 text-[11px] text-right font-black text-gray-900'>{$amount}</td>
-                                                                </tr>
-                                                            ";
-                                                        })->implode('');
+                                                        $latest = $record->transactions->sortByDesc('date')->first();
+                                                        $amount = number_format($latest->amount / 100, 2);
+                                                        $date = $latest->date ? $latest->date->format('M d, Y') : '-';
+                                                        $method = $latest->payment_method ?? '-';
+                                                        $txId = $latest->transaction_id ?? '-';
+                                                        $currency = $record->currency ?? 'USD';
 
                                                         return new HtmlString("
-                                                            <div class='-mx-2 mt-[-4px] min-h-[148px]'>
-                                                                <table class='w-full text-left'>
-                                                                    <thead class='bg-gray-50/30'>
-                                                                        <tr>
-                                                                            <th class='pb-1 text-[9px] font-black tracking-widest text-gray-400 uppercase px-1'><b>Date & Time</b></th>
-                                                                            <th class='pb-1 px-2 text-[9px] font-black tracking-widest text-gray-400 uppercase'><b>Mode</b></th>
-                                                                            <th class='pb-1 text-[9px] font-black tracking-widest text-gray-400 uppercase text-right px-1'><b>Sum</b></th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody>
-                                                                        {$rows}
-                                                                    </tbody>
-                                                                </table>
-                                                                " . ($record->transactions->count() > 4 ? "<div class='text-[8px] text-center pt-2 text-blue-500 font-bold uppercase tracking-tighter'>See all below →</div>" : "") . "
+                                                            <div class='flex flex-col space-y-3 py-1 min-h-[148px]'>
+                                                                <div class='flex justify-between border-b border-gray-50 pb-2'>
+                                                                    <span class='text-[11px] font-black text-gray-400 uppercase tracking-widest'><b>Date :</b></span>
+                                                                    <span class='text-xs font-bold text-gray-900'>{$date}</span>
+                                                                </div>
+                                                                <div class='flex justify-between border-b border-gray-50 pb-2'>
+                                                                    <span class='text-[11px] font-black text-gray-400 uppercase tracking-widest'><b>Payment Method :</b></span>
+                                                                    <span class='text-xs font-bold text-gray-900'>{$method}</span>
+                                                                </div>
+                                                                <div class='flex justify-between border-b border-gray-50 pb-2'>
+                                                                    <span class='text-[11px] font-black text-gray-400 uppercase tracking-widest'><b>Transaction ID :</b></span>
+                                                                    <span class='text-xs font-bold text-gray-900 truncate max-w-[120px]' title='{$txId}'>{$txId}</span>
+                                                                </div>
+                                                                <div class='flex justify-between items-center'>
+                                                                    <span class='text-[11px] font-black text-gray-400 uppercase tracking-widest'><b>Amount :</b></span>
+                                                                    <span class='text-xs font-bold text-gray-900'>{$amount} {$currency}</span>
+                                                                </div>
+                                                                " . ($record->transactions->count() > 1 ? "<div class='text-[8px] text-center pt-2 text-blue-500 font-bold uppercase tracking-tighter'>See all " . ($record->transactions->count()) . " records below →</div>" : "") . "
                                                             </div>
                                                         ");
                                                     }),
@@ -146,38 +143,24 @@ class InvoiceForm
                                                                 <!-- Top Accent Bar -->
                                                                 <div class="h-1.5 w-full" style="background: linear-gradient(90deg, ' . $accentColor . ' 0%, ' . $accentColor . 'dd 100%);"></div>
                                                                 
-                                                                <div class="p-4 flex flex-col flex-grow">
-                                                                    <div class="flex justify-between items-start mb-2">
-                                                                        <div class="flex flex-col">
-                                                                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400">Total Amount</span>
-                                                                            <div class="flex items-baseline space-x-1">
-                                                                                <span class="text-xl font-black text-gray-700 tracking-tight">' . number_format($total, 2) . '</span>
-                                                                                <span class="text-[9px] font-bold text-gray-400 uppercase">' . $currency . '</span>
-                                                                            </div>
-                                                                        </div>
-                                                                        <div class="p-2 rounded-xl bg-gray-50 border border-gray-100 group-hover:scale-110 transition-transform duration-500">
-                                                                            <svg style="width:16px;height:16px" class="text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                                                        </div>
+                                                                <div class="p-4 flex flex-col space-y-3">
+                                                                    <!-- Total Amount Row -->
+                                                                    <div class="flex justify-between border-b border-gray-50 pb-2">
+                                                                        <span class="text-[11px] font-black text-gray-400 uppercase tracking-widest"><b>Total Amount :</b></span>
+                                                                        <span class="text-xs font-bold text-gray-900">' . number_format($total, 2) . ' ' . $currency . '</span>
                                                                     </div>
                                                                     
-                                                                    <div class="mt-auto flex flex-col items-end">
-                                                                        <div class="flex items-center space-x-1.5 mb-1">
-                                                                            <div class="flex h-1.5 w-1.5 relative">
-                                                                                ' . ($balanceDue > 0 ? '<span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style="background-color: ' . $accentColor . '"></span>' : '') . '
-                                                                                <span class="relative inline-flex rounded-full h-1.5 w-1.5" style="background-color: ' . $accentColor . '"></span>
-                                                                            </div>
-                                                                            <span class="text-[11px] font-black uppercase tracking-[0.1em]" style="color: ' . $accentColor . '">Balance Due</span>
-                                                                        </div>
-                                                                        
-                                                                        <div class="flex items-baseline space-x-1.5">
-                                                                            <span class="text-5xl font-black tracking-tighter tabular-nums" style="color: ' . $accentColor . '; text-shadow: 0 2px 4px rgba(0,0,0,0.05);">' . number_format($balanceDue, 2) . '</span>
-                                                                            <span class="text-xs font-black uppercase opacity-60" style="color: ' . $accentColor . '">' . $currency . '</span>
-                                                                        </div>
-                                                                        
-                                                                        ' . ($paidInDollars > 0 ? '
-                                                                        <div class="mt-2 px-2 py-0.5 rounded-full border border-emerald-100 bg-emerald-50/50">
-                                                                            <span class="text-[9px] font-black text-emerald-600 uppercase tracking-tight">Received: ' . number_format($paidInDollars, 2) . ' ' . $currency . '</span>
-                                                                        </div>' : '') . '
+                                                                    <!-- Received Row (Only if paid) -->
+                                                                    ' . ($paidInDollars > 0 ? '
+                                                                    <div class="flex justify-between border-b border-gray-50 pb-2">
+                                                                        <span class="text-[11px] font-black text-gray-400 uppercase tracking-widest"><b>Received :</b></span>
+                                                                        <span class="text-xs font-bold text-emerald-600">' . number_format($paidInDollars, 2) . ' ' . $currency . '</span>
+                                                                    </div>' : '') . '
+
+                                                                    <!-- Balance Due Row -->
+                                                                    <div class="flex justify-between items-center pt-1">
+                                                                        <span class="text-[11px] font-black uppercase tracking-widest" style="color: ' . $accentColor . '"><b>Balance Due :</b></span>
+                                                                        <span class="text-xs font-bold" style="color: ' . $accentColor . '">' . number_format($balanceDue, 2) . ' ' . $currency . '</span>
                                                                     </div>
                                                                 </div>
                                                                 
