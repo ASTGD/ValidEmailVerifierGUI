@@ -237,6 +237,7 @@ class EditInvoice extends EditRecord
         // Always sync the database totals to match the items
         $record->total = $record->calculateTotal();
         $record->balance_due = $record->calculateBalanceDue();
+        $record->syncStatus();
         $record->saveQuietly();
 
         $data = $this->data;
@@ -275,6 +276,7 @@ class EditInvoice extends EditRecord
         if ($hasChanged) {
             $record->refresh();
             $record->balance_due = $record->calculateBalanceDue();
+            $record->syncStatus();
             $record->saveQuietly();
 
             Notification::make()
@@ -301,6 +303,7 @@ class EditInvoice extends EditRecord
         } else {
             // Standard balance sync
             $record->balance_due = $record->calculateBalanceDue();
+            $record->syncStatus();
             $record->saveQuietly();
         }
     }

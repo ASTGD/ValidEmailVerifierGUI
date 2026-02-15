@@ -43,8 +43,9 @@
                 <div class="flex justify-between items-center">
                     <span
                         class="text-[11px] text-[#64748b] font-semibold uppercase tracking-tight">{{ __('Status') }}</span>
-                    <span class="px-3 py-1 rounded-md text-[10px] font-extrabold uppercase
+                     <span class="px-3 py-1 rounded-md text-[10px] font-extrabold uppercase
                         @if($invoice->status === 'Paid') bg-green-100 text-green-700
+                        @elseif($invoice->status === 'Partially Paid') bg-orange-100 text-orange-700
                         @elseif($invoice->status === 'Unpaid') bg-red-100 text-red-700
                         @elseif($invoice->status === 'Cancelled') bg-slate-100 text-slate-700
                         @else bg-blue-100 text-blue-700 @endif">

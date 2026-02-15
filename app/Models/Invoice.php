@@ -93,11 +93,38 @@ class Invoice extends Model
     }
 
     /**
+     * Automatically synchronize the invoice status based on balance/payments
+     */
+    public function syncStatus(): void
+    {
+        // Protected statuses that should not be auto-overwritten
+        $protectedStatuses = ['Cancelled', 'Refunded', 'Draft', 'Collections'];
+        if (in_array($this->status, $protectedStatuses)) {
+            return;
+        }
+
+        $totalCents = $this->calculateTotal();
+        $balanceCents = $this->calculateBalanceDue();
+        $paidCents = $this->total_paid;
+        $creditsCents = $this->credit_applied ?? 0;
+
+        if ($balanceCents <= 0) {
+            $this->status = 'Paid';
+            $this->paid_at = $this->paid_at ?? now();
+        } elseif ($paidCents > 0 || $creditsCents > 0) {
+            $this->status = 'Partially Paid';
+        } else {
+            $this->status = 'Unpaid';
+            $this->paid_at = null;
+        }
+    }
+
+    /**
      * Apply credit to this invoice
      */
     public function applyCredit(int $amount, string $description = null): bool
     {
-        $maxCredit = $this->balance_due ?? $this->calculateBalanceDue();
+        $maxCredit = $this->calculateBalanceDue();
         $amount = min($amount, $maxCredit);
 
         if ($amount <= 0) {
@@ -108,13 +135,8 @@ class Invoice extends Model
         $this->credit_applied = ($this->credit_applied ?? 0) + $amount;
         $this->balance_due = $this->calculateBalanceDue();
 
-        // Update status if fully paid
-        if ($this->balance_due <= 0) {
-            $this->status = 'Paid';
-            $this->paid_at = now();
-        } elseif ($this->credit_applied > 0 || $this->total_paid > 0) {
-            $this->status = 'Partially Paid';
-        }
+        // Sync status using the new unified logic
+        $this->syncStatus();
 
         $this->save();
 
@@ -135,7 +157,7 @@ class Invoice extends Model
      */
     public function processPayment(int $amount, string $paymentMethod, string $transactionId = null): bool
     {
-        $maxPayment = $this->balance_due ?? $this->calculateBalanceDue();
+        $maxPayment = $this->calculateBalanceDue();
         $amount = min($amount, $maxPayment);
 
         if ($amount <= 0) {
@@ -152,16 +174,15 @@ class Invoice extends Model
             'date' => now(),
         ]);
 
+        // Refresh model to get new transaction sum
+        $this->refresh();
+
         // Update invoice
         $this->balance_due = $this->calculateBalanceDue();
         $this->payment_method = $paymentMethod;
 
-        if ($this->balance_due <= 0) {
-            $this->status = 'Paid';
-            $this->paid_at = now();
-        } else {
-            $this->status = 'Partially Paid';
-        }
+        // Sync status using the new unified logic
+        $this->syncStatus();
 
         $this->save();
 

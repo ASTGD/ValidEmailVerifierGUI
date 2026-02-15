@@ -16,6 +16,7 @@
                 class="bg-transparent border-none text-sm font-bold text-[#334155] focus:ring-0 cursor-pointer">
                 <option value="">{{ __('All Statuses') }}</option>
                 <option value="Paid">{{ __('Paid') }}</option>
+                <option value="Partially Paid">{{ __('Partially Paid') }}</option>
                 <option value="Unpaid">{{ __('Unpaid') }}</option>
                 <option value="Cancelled">{{ __('Cancelled') }}</option>
                 <option value="Refunded">{{ __('Refunded') }}</option>
@@ -68,10 +69,11 @@
                             <td class="px-8 py-5">
                                 <span
                                     class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase
-                                                                                                @if($invoice->status === 'Paid') bg-green-100 text-green-700
-                                                                                                @elseif($invoice->status === 'Unpaid') bg-yellow-100 text-yellow-700
-                                                                                                @elseif($invoice->status === 'Cancelled') bg-red-100 text-red-700
-                                                                                                @else bg-gray-100 text-gray-700 @endif">
+                                                                                                    @if($invoice->status === 'Paid') bg-green-100 text-green-700
+                                                                                                    @elseif($invoice->status === 'Partially Paid') bg-orange-100 text-orange-700
+                                                                                                    @elseif($invoice->status === 'Unpaid') bg-yellow-100 text-yellow-700
+                                                                                                    @elseif($invoice->status === 'Cancelled') bg-red-100 text-red-700
+                                                                                                    @else bg-gray-100 text-gray-700 @endif">
                                     {{ $invoice->status }}
                                 </span>
                             </td>
