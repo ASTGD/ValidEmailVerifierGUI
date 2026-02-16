@@ -25,6 +25,8 @@ class VerifierEngine extends Dashboard
 
     protected static ?string $slug = 'verifier-engine';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     public function getWidgets(): array
     {
         return [

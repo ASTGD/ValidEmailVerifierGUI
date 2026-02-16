@@ -34,6 +34,8 @@ class AdminPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
+        $goControlPlaneUrl = $this->resolveGoControlPlaneUrl();
+
         return $panel
             ->default()
             ->id('admin')
@@ -56,6 +58,20 @@ class AdminPanelProvider extends PanelProvider
                 OpsOverview::class,
             ])
             ->navigationItems([
+                NavigationItem::make('Verifier Engine Room')
+                    ->group('Operations')
+                    ->icon(Heroicon::OutlinedServer)
+                    ->sort(3)
+                    ->url(fn (): string => $goControlPlaneUrl ?? '')
+                    ->openUrlInNewTab()
+                    ->visible(function () use ($goControlPlaneUrl): bool {
+                        $user = auth()->user();
+
+                        return $goControlPlaneUrl !== null
+                            && $user
+                            && method_exists($user, 'hasRole')
+                            && $user->hasRole(Roles::ADMIN);
+                    }),
                 NavigationItem::make('Queue Engine Room')
                     ->group('Operations')
                     ->icon(Heroicon::OutlinedQueueList)
@@ -111,5 +127,22 @@ class AdminPanelProvider extends PanelProvider
             ->authMiddleware([
                 Authenticate::class,
             ]);
+    }
+
+    private function resolveGoControlPlaneUrl(): ?string
+    {
+        $baseUrl = trim((string) config('services.go_control_plane.base_url', ''));
+
+        if ($baseUrl === '') {
+            return null;
+        }
+
+        $baseUrl = rtrim($baseUrl, '/');
+
+        if (str_contains($baseUrl, '/verifier-engine-room')) {
+            return $baseUrl;
+        }
+
+        return $baseUrl.'/verifier-engine-room/overview';
     }
 }
