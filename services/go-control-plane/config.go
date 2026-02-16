@@ -55,6 +55,10 @@ type Config struct {
 	SMTPTo                                    []string
 	LaravelAPIBaseURL                         string
 	LaravelVerifierToken                      string
+	LaravelInternalAPIBaseURL                 string
+	LaravelInternalAPIToken                   string
+	LaravelInternalAPITimeoutSeconds          int
+	ServerRegistryUIEnabled                   bool
 	OpsDocsURL                                string
 	PolicyPayloadStrictValidationEnabled      bool
 	PolicyCanaryAutopilotEnabled              bool
@@ -83,7 +87,26 @@ func LoadConfig() (Config, error) {
 	cfg.SMTPTo = splitCSV(os.Getenv("SMTP_TO"))
 	cfg.LaravelAPIBaseURL = strings.TrimSpace(os.Getenv("LARAVEL_API_BASE_URL"))
 	cfg.LaravelVerifierToken = strings.TrimSpace(os.Getenv("LARAVEL_VERIFIER_TOKEN"))
+	cfg.LaravelInternalAPIBaseURL = strings.TrimSpace(os.Getenv("LARAVEL_INTERNAL_API_BASE_URL"))
+	cfg.LaravelInternalAPIToken = strings.TrimSpace(os.Getenv("LARAVEL_INTERNAL_API_TOKEN"))
+	cfg.ServerRegistryUIEnabled = parseBool(os.Getenv("GO_SERVER_REGISTRY_UI_ENABLED"))
 	cfg.OpsDocsURL = strings.TrimSpace(os.Getenv("OPS_DOCS_URL"))
+
+	if cfg.LaravelInternalAPIBaseURL == "" {
+		cfg.LaravelInternalAPIBaseURL = cfg.LaravelAPIBaseURL
+	}
+
+	laravelInternalTimeoutSeconds := 5
+	if value := strings.TrimSpace(os.Getenv("LARAVEL_INTERNAL_API_TIMEOUT_SECONDS")); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return cfg, fmt.Errorf("LARAVEL_INTERNAL_API_TIMEOUT_SECONDS must be an integer")
+		}
+		if parsed > 0 {
+			laravelInternalTimeoutSeconds = parsed
+		}
+	}
+	cfg.LaravelInternalAPITimeoutSeconds = laravelInternalTimeoutSeconds
 
 	if cfg.Port == "" {
 		return cfg, fmt.Errorf("PORT is required")

@@ -145,6 +145,13 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute($limit)->by(sprintf('seed-send-webhooks|%s|%s', $provider, $clientIp));
         });
+
+        RateLimiter::for('go-internal-api', function (Request $request): Limit {
+            $limit = max(1, (int) config('services.go_control_plane.internal_api_rate_limit_per_minute', 240));
+            $clientIp = (string) ($request->ip() ?? 'unknown');
+
+            return Limit::perMinute($limit)->by('go-internal-api|'.$clientIp);
+        });
     }
 
     private function applyRuntimeQueueSettings(): void

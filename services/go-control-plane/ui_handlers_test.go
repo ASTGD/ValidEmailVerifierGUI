@@ -112,3 +112,72 @@ func TestSettingsTemplateRendersRuntimeHelpKeys(t *testing.T) {
 		t.Fatalf("expected settings page to include set all to recommended button")
 	}
 }
+
+func TestWorkersTemplateRendersRegistryTabAndForms(t *testing.T) {
+	renderer, err := NewViewRenderer()
+	if err != nil {
+		t.Fatalf("failed to create renderer: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	renderer.Render(recorder, WorkersPageData{
+		BasePageData: BasePageData{
+			Title:           "Verifier Engine Room · Workers",
+			Subtitle:        "Live worker status",
+			ActiveNav:       "workers",
+			ContentTemplate: "workers",
+			BasePath:        "/verifier-engine-room",
+		},
+		ActiveTab: "registry",
+		ServerRegistry: EngineServerRegistryPageData{
+			Enabled:    true,
+			Configured: true,
+			Servers: []LaravelEngineServerRecord{
+				{
+					ID:        7,
+					Name:      "engine-7",
+					IPAddress: "10.0.0.7",
+					Status:    "online",
+				},
+			},
+			VerifierDomains: []LaravelVerifierDomainOption{
+				{ID: 1, Domain: "example.org"},
+			},
+			EditServerID: 7,
+			EditServer: &LaravelEngineServerRecord{
+				ID:                     7,
+				Name:                   "engine-7",
+				IPAddress:              "10.0.0.7",
+				VerifierDomainID:       1,
+				MaxConcurrency:         10,
+				Status:                 "online",
+				LatestProvisioningInfo: nil,
+			},
+			ProvisionBundleServerID: 7,
+			ProvisionBundle: &LaravelProvisioningBundleDetails{
+				BundleUUID:     "bundle-uuid",
+				EngineServerID: 7,
+				DownloadURLs: map[string]string{
+					"install": "https://app.test/install.sh",
+					"env":     "https://app.test/worker.env",
+				},
+				InstallCommandTemplate: "curl -fsSL \"https://app.test/install.sh\" | bash -s -- --ghcr-user \"<ghcr-username>\" --ghcr-token \"<ghcr-token>\"",
+			},
+		},
+	})
+
+	body := recorder.Body.String()
+	assertContains := func(needle string) {
+		if !strings.Contains(body, needle) {
+			t.Fatalf("expected workers template to contain %q", needle)
+		}
+	}
+
+	assertContains("Runtime Workers")
+	assertContains("Server Registry &amp; Provisioning")
+	assertContains("/verifier-engine-room/workers/servers")
+	assertContains("/verifier-engine-room/workers/servers/7/provision")
+	assertContains("Latest Provisioning Bundle")
+	assertContains("Create Server")
+	assertContains("Save Changes")
+}

@@ -85,6 +85,11 @@ class EngineServer extends Model
         return $this->hasMany(EngineServerProvisioningBundle::class);
     }
 
+    public function latestProvisioningBundle(): HasOne
+    {
+        return $this->hasOne(EngineServerProvisioningBundle::class)->latestOfMany();
+    }
+
     public function verifierDomain(): BelongsTo
     {
         return $this->belongsTo(VerifierDomain::class);

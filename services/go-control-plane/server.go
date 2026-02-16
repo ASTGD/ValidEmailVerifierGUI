@@ -13,10 +13,11 @@ import (
 )
 
 type Server struct {
-	store     *Store
-	cfg       Config
-	views     *ViewRenderer
-	snapshots *SnapshotStore
+	store               *Store
+	cfg                 Config
+	views               *ViewRenderer
+	snapshots           *SnapshotStore
+	laravelEngineClient *LaravelEngineServerClient
 }
 
 func NewServer(store *Store, snapshots *SnapshotStore, cfg Config) *Server {
@@ -25,7 +26,13 @@ func NewServer(store *Store, snapshots *SnapshotStore, cfg Config) *Server {
 		panic(err)
 	}
 
-	return &Server{store: store, snapshots: snapshots, cfg: cfg, views: renderer}
+	return &Server{
+		store:               store,
+		snapshots:           snapshots,
+		cfg:                 cfg,
+		views:               renderer,
+		laravelEngineClient: NewLaravelEngineServerClient(cfg),
+	}
 }
 
 func (s *Server) Router() http.Handler {
@@ -87,6 +94,9 @@ func (s *Server) Router() http.Handler {
 		router.Post("/ui/workers/{workerID}/stop", s.requireSameOriginUI(s.handleUISetDesired("stopped")))
 		router.Post("/ui/workers/{workerID}/quarantine", s.requireSameOriginUI(s.handleUIQuarantine(true)))
 		router.Post("/ui/workers/{workerID}/unquarantine", s.requireSameOriginUI(s.handleUIQuarantine(false)))
+		router.Post("/ui/workers/servers", s.requireSameOriginUI(s.handleUICreateEngineServer))
+		router.Post("/ui/workers/servers/{serverID}", s.requireSameOriginUI(s.handleUIUpdateEngineServer))
+		router.Post("/ui/workers/servers/{serverID}/provision", s.requireSameOriginUI(s.handleUIProvisionEngineServer))
 		router.Post("/ui/pools/{pool}/scale", s.requireSameOriginUI(s.handleUIScalePool))
 		router.Post("/ui/settings", s.requireSameOriginUI(s.handleUIUpdateSettings))
 		router.Post("/ui/settings/rollback", s.requireSameOriginUI(s.handleUIRollbackSettings))
@@ -110,6 +120,9 @@ func (s *Server) Router() http.Handler {
 		router.Post("/verifier-engine-room/workers/{workerID}/stop", s.requireSameOriginUI(s.handleUISetDesired("stopped")))
 		router.Post("/verifier-engine-room/workers/{workerID}/quarantine", s.requireSameOriginUI(s.handleUIQuarantine(true)))
 		router.Post("/verifier-engine-room/workers/{workerID}/unquarantine", s.requireSameOriginUI(s.handleUIQuarantine(false)))
+		router.Post("/verifier-engine-room/workers/servers", s.requireSameOriginUI(s.handleUICreateEngineServer))
+		router.Post("/verifier-engine-room/workers/servers/{serverID}", s.requireSameOriginUI(s.handleUIUpdateEngineServer))
+		router.Post("/verifier-engine-room/workers/servers/{serverID}/provision", s.requireSameOriginUI(s.handleUIProvisionEngineServer))
 		router.Post("/verifier-engine-room/pools/{pool}/scale", s.requireSameOriginUI(s.handleUIScalePool))
 		router.Post("/verifier-engine-room/providers/{provider}/mode", s.requireSameOriginUI(s.handleUIProviderMode))
 		router.Post("/verifier-engine-room/providers/policies/reload", s.requireSameOriginUI(s.handleUIProviderPoliciesReload))
