@@ -82,4 +82,9 @@ class VerificationJobChunk extends Model
     {
         return $this->hasMany(self::class, 'parent_chunk_id');
     }
+
+    public function smtpDecisionTraces(): HasMany
+    {
+        return $this->hasMany(SmtpDecisionTrace::class, 'verification_job_chunk_id');
+    }
 }

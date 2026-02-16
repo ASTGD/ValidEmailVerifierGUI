@@ -159,3 +159,25 @@ func TestEvaluateProviderPolicyCanaryRollbackReturnsProviderReason(t *testing.T)
 		t.Fatal("expected rollback reason for provider regression")
 	}
 }
+
+func TestNextProviderMitigationModeLadder(t *testing.T) {
+	mode, rollback := nextProviderMitigationMode("normal")
+	if mode != "cautious" || rollback {
+		t.Fatalf("expected normal -> cautious, got mode=%q rollback=%t", mode, rollback)
+	}
+
+	mode, rollback = nextProviderMitigationMode("cautious")
+	if mode != "degraded_probe" || rollback {
+		t.Fatalf("expected cautious -> degraded_probe, got mode=%q rollback=%t", mode, rollback)
+	}
+
+	mode, rollback = nextProviderMitigationMode("degraded_probe")
+	if mode != "drain" || rollback {
+		t.Fatalf("expected degraded_probe -> drain, got mode=%q rollback=%t", mode, rollback)
+	}
+
+	mode, rollback = nextProviderMitigationMode("drain")
+	if mode != "" || !rollback {
+		t.Fatalf("expected drain -> rollback, got mode=%q rollback=%t", mode, rollback)
+	}
+}

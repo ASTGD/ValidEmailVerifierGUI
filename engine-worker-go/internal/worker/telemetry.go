@@ -34,6 +34,7 @@ type workerTelemetry struct {
 	sessionRetrySameConnTotal int64
 	sessionRetryNewConnTotal  int64
 	throttleAppliedTotal      int64
+	mxFallbackAttemptsTotal   int64
 }
 
 type providerCounters struct {
@@ -45,12 +46,15 @@ type providerCounters struct {
 }
 
 type telemetrySnapshot struct {
-	stageMetrics    *api.ControlPlaneStageMetrics
-	smtpMetrics     *api.ControlPlaneSMTPMetrics
-	providerMetrics []api.ControlPlaneProviderMetric
-	routingMetrics  *api.ControlPlaneRoutingMetrics
-	sessionMetrics  *api.ControlPlaneSessionMetrics
-	reasonTagCounts map[string]int64
+	stageMetrics          *api.ControlPlaneStageMetrics
+	smtpMetrics           *api.ControlPlaneSMTPMetrics
+	providerMetrics       []api.ControlPlaneProviderMetric
+	routingMetrics        *api.ControlPlaneRoutingMetrics
+	sessionMetrics        *api.ControlPlaneSessionMetrics
+	attemptRouteMetrics   *api.ControlPlaneAttemptRouteMetrics
+	retryAntiAffinityHits int64
+	unknownReasonTags     map[string]int64
+	reasonTagCounts       map[string]int64
 }
 
 func newWorkerTelemetry() *workerTelemetry {
@@ -100,6 +104,9 @@ func (t *workerTelemetry) recordChunkSuccess(
 		}
 		if tempfailCount := outputs.baseReasonCount("smtp_tempfail"); tempfailCount > 0 {
 			t.throttleAppliedTotal += int64(tempfailCount)
+		}
+		if mxFallbackCount := outputs.baseReasonPrefixCount("mx_fallback"); mxFallbackCount > 0 {
+			t.mxFallbackAttemptsTotal += int64(mxFallbackCount)
 		}
 	default:
 		t.screeningProcessed += int64(outputs.EmailCount)
@@ -234,7 +241,14 @@ func (t *workerTelemetry) snapshot() telemetrySnapshot {
 			SessionRetryNewConnTotal:  t.sessionRetryNewConnTotal,
 			ThrottleAppliedTotal:      t.throttleAppliedTotal,
 		},
-		reasonTagCounts: cloneReasonTagCounters(t.reasonTagCounters),
+		attemptRouteMetrics: &api.ControlPlaneAttemptRouteMetrics{
+			AttemptsTotal:           t.smtpProcessed,
+			RetryAttemptsTotal:      t.retryClaimsTotal,
+			MXFallbackAttemptsTotal: t.mxFallbackAttemptsTotal,
+		},
+		retryAntiAffinityHits: t.retryAntiAffinitySuccessTotal,
+		unknownReasonTags:     unknownReasonTagCounters(t.reasonTagCounters),
+		reasonTagCounts:       cloneReasonTagCounters(t.reasonTagCounters),
 	}
 }
 
@@ -249,6 +263,29 @@ func cloneReasonTagCounters(source map[string]int64) map[string]int64 {
 	}
 
 	return cloned
+}
+
+func unknownReasonTagCounters(source map[string]int64) map[string]int64 {
+	if len(source) == 0 {
+		return map[string]int64{}
+	}
+
+	filtered := make(map[string]int64)
+	for key, value := range source {
+		normalized := strings.ToLower(strings.TrimSpace(key))
+		if normalized == "" || value <= 0 {
+			continue
+		}
+
+		if strings.Contains(normalized, "unknown") ||
+			normalized == "greylist" ||
+			normalized == "rate_limit" ||
+			normalized == "policy_blocked" {
+			filtered[normalized] = value
+		}
+	}
+
+	return filtered
 }
 
 func normalizeProviderName(provider string) string {

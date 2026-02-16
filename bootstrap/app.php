@@ -30,6 +30,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('ops:queue-rollup')->hourly()->withoutOverlapping();
         $schedule->command('ops:queue-slo-report')->everyFiveMinutes()->withoutOverlapping();
         $schedule->command('ops:go-probe-weekly-report')->weeklyOn(1, '09:00')->withoutOverlapping();
+        $schedule->command('ops:go-policy-shadow-sync --limit=50')->hourly()->withoutOverlapping();
+        $schedule->command('ops:smtp-truth-labels-sync --since-hours=168')->everySixHours()->withoutOverlapping();
+        $schedule->command('ops:smtp-confidence-calibrate --window-days=14')->daily()->withoutOverlapping();
+        $schedule->command('ops:smtp-policy-suggestions-generate --window-days=7')->daily()->withoutOverlapping();
         $schedule->command('ops:queue-prune')->daily()->withoutOverlapping();
     })
     ->withExceptions(function (Exceptions $exceptions): void {

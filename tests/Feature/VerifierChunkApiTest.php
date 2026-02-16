@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Contracts\EngineStorageUrlSigner;
 use App\Enums\VerificationJobStatus;
 use App\Enums\VerificationMode;
+use App\Jobs\RecordSmtpDecisionTracesJob;
 use App\Models\EngineServer;
 use App\Models\EngineSetting;
 use App\Models\EngineVerificationPolicy;
@@ -14,6 +15,7 @@ use App\Models\VerificationJobChunk;
 use App\Services\ScreeningToProbeChunkPlanner;
 use App\Support\Roles;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -163,6 +165,37 @@ class VerifierChunkApiTest extends TestCase
             'valid_key' => 'results/chunks/'.$job->id.'/1/other.csv',
         ]))
             ->assertStatus(409);
+    }
+
+    public function test_chunk_complete_dispatches_trace_recorder_for_smtp_probe_stage(): void
+    {
+        Bus::fake();
+        $this->actingAsVerifier();
+
+        $job = $this->makeJob();
+        $chunk = $this->makeChunk($job, [
+            'status' => 'processing',
+            'processing_stage' => 'smtp_probe',
+            'output_disk' => null,
+        ]);
+
+        $payload = [
+            'output_disk' => 'local',
+            'valid_key' => 'results/chunks/'.$job->id.'/1/valid.csv',
+            'invalid_key' => 'results/chunks/'.$job->id.'/1/invalid.csv',
+            'risky_key' => 'results/chunks/'.$job->id.'/1/risky.csv',
+            'email_count' => 5,
+            'valid_count' => 2,
+            'invalid_count' => 1,
+            'risky_count' => 2,
+        ];
+
+        $this->postJson(route('api.verifier.chunks.complete', $chunk), $payload)
+            ->assertOk();
+
+        Bus::assertDispatched(RecordSmtpDecisionTracesJob::class, function (RecordSmtpDecisionTracesJob $job) use ($chunk): bool {
+            return $job->chunkId === (string) $chunk->id;
+        });
     }
 
     public function test_signed_url_endpoints_use_signer(): void

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Verifier;
 
 use App\Http\Requests\Verifier\ChunkCompleteRequest;
 use App\Jobs\FinalizeVerificationJob;
+use App\Jobs\RecordSmtpDecisionTracesJob;
 use App\Models\VerificationJobChunk;
 use App\Services\EngineServerReputationRecorder;
 use App\Services\JobMetricsRecorder;
@@ -187,6 +188,10 @@ class VerifierChunkCompleteController
         }
 
         $chunk->refresh();
+
+        if ($processingStage === 'smtp_probe') {
+            RecordSmtpDecisionTracesJob::dispatch((string) $chunk->id);
+        }
 
         $chunk->job?->addLog('chunk_completed', 'Chunk completed.', [
             'chunk_id' => (string) $chunk->id,

@@ -31,12 +31,17 @@ Lightweight Go service that tracks worker heartbeats, desired state, and pool sc
 - `GET /api/slo`
 - `GET /api/providers/health`
 - `GET /api/providers/quality`
+- `GET /api/providers/accuracy/calibration`
+- `GET /api/providers/unknown/clusters`
 - `GET /api/providers/policies`
 - `POST /api/providers/{provider}/mode`
 - `POST /api/providers/policies/reload`
+- `GET /api/routing/effectiveness`
 - `GET /api/policies/versions`
 - `POST /api/policies/promote`
 - `POST /api/policies/rollback`
+- `POST /api/policies/shadow/evaluate`
+- `GET /api/policies/shadow/runs`
 - `GET /metrics` (Prometheus format; auth required)
 
 All endpoints require `Authorization: Bearer <CONTROL_PLANE_TOKEN>`.
@@ -136,3 +141,4 @@ SMTP_TO=ceo@domain.com,ops@domain.com
 - `control_plane:smtp_policy_versions`
 - `control_plane:smtp_policy_active`
 - `control_plane:smtp_policy_rollout_history`
+- `control_plane:smtp_policy_shadow_runs`

@@ -150,6 +150,11 @@ class VerificationJob extends Model
         return $this->hasMany(SeedSendCreditLedger::class, 'verification_job_id');
     }
 
+    public function smtpDecisionTraces(): HasMany
+    {
+        return $this->hasMany(SmtpDecisionTrace::class, 'verification_job_id');
+    }
+
     public function addLog(string $event, ?string $message = null, ?array $context = null, ?int $userId = null): VerificationJobLog
     {
         return $this->logs()->create([

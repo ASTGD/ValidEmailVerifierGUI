@@ -51,25 +51,35 @@ type SessionMetrics struct {
 	ThrottleAppliedTotal      int64   `json:"throttle_applied_total,omitempty"`
 }
 
+type AttemptRouteMetrics struct {
+	AttemptsTotal           int64 `json:"attempts_total,omitempty"`
+	RetryAttemptsTotal      int64 `json:"retry_attempts_total,omitempty"`
+	MXFallbackAttemptsTotal int64 `json:"mx_fallback_attempts_total,omitempty"`
+}
+
 type HeartbeatRequest struct {
-	WorkerID        string           `json:"worker_id"`
-	Host            string           `json:"host,omitempty"`
-	IPAddress       string           `json:"ip_address,omitempty"`
-	Version         string           `json:"version,omitempty"`
-	Pool            string           `json:"pool,omitempty"`
-	Tags            []string         `json:"tags,omitempty"`
-	Status          string           `json:"status"`
-	CurrentJobID    string           `json:"current_job_id,omitempty"`
-	CurrentChunkID  string           `json:"current_chunk_id,omitempty"`
-	CorrelationID   string           `json:"correlation_id,omitempty"`
-	Metrics         *WorkerMetrics   `json:"metrics,omitempty"`
-	StageMetrics    *StageMetrics    `json:"stage_metrics,omitempty"`
-	SMTPMetrics     *SMTPMetrics     `json:"smtp_metrics,omitempty"`
-	ProviderMetrics []ProviderMetric `json:"provider_metrics,omitempty"`
-	RoutingMetrics  *RoutingMetrics  `json:"routing_metrics,omitempty"`
-	SessionMetrics  *SessionMetrics  `json:"session_metrics,omitempty"`
-	ReasonTagCounts map[string]int64 `json:"reason_tag_counters,omitempty"`
-	PoolHealthHint  *float64         `json:"pool_health_hint,omitempty"`
+	WorkerID              string               `json:"worker_id"`
+	Host                  string               `json:"host,omitempty"`
+	IPAddress             string               `json:"ip_address,omitempty"`
+	Version               string               `json:"version,omitempty"`
+	Pool                  string               `json:"pool,omitempty"`
+	Tags                  []string             `json:"tags,omitempty"`
+	Status                string               `json:"status"`
+	CurrentJobID          string               `json:"current_job_id,omitempty"`
+	CurrentChunkID        string               `json:"current_chunk_id,omitempty"`
+	CorrelationID         string               `json:"correlation_id,omitempty"`
+	Metrics               *WorkerMetrics       `json:"metrics,omitempty"`
+	StageMetrics          *StageMetrics        `json:"stage_metrics,omitempty"`
+	SMTPMetrics           *SMTPMetrics         `json:"smtp_metrics,omitempty"`
+	ProviderMetrics       []ProviderMetric     `json:"provider_metrics,omitempty"`
+	RoutingMetrics        *RoutingMetrics      `json:"routing_metrics,omitempty"`
+	SessionMetrics        *SessionMetrics      `json:"session_metrics,omitempty"`
+	AttemptRouteMetrics   *AttemptRouteMetrics `json:"attempt_route_metrics,omitempty"`
+	RetryAntiAffinityHits int64                `json:"retry_anti_affinity_hits,omitempty"`
+	UnknownReasonTags     map[string]int64     `json:"unknown_reason_tags,omitempty"`
+	SessionStrategyID     string               `json:"session_strategy_id,omitempty"`
+	ReasonTagCounts       map[string]int64     `json:"reason_tag_counters,omitempty"`
+	PoolHealthHint        *float64             `json:"pool_health_hint,omitempty"`
 }
 
 type HeartbeatResponse struct {
@@ -78,26 +88,30 @@ type HeartbeatResponse struct {
 }
 
 type WorkerSummary struct {
-	WorkerID        string           `json:"worker_id"`
-	Host            string           `json:"host,omitempty"`
-	IPAddress       string           `json:"ip_address,omitempty"`
-	Version         string           `json:"version,omitempty"`
-	Pool            string           `json:"pool,omitempty"`
-	Tags            []string         `json:"tags,omitempty"`
-	Status          string           `json:"status"`
-	DesiredState    string           `json:"desired_state"`
-	Quarantined     bool             `json:"quarantined"`
-	LastHeartbeat   string           `json:"last_heartbeat_at"`
-	CurrentJobID    string           `json:"current_job_id,omitempty"`
-	CurrentChunkID  string           `json:"current_chunk_id,omitempty"`
-	CorrelationID   string           `json:"correlation_id,omitempty"`
-	StageMetrics    *StageMetrics    `json:"stage_metrics,omitempty"`
-	SMTPMetrics     *SMTPMetrics     `json:"smtp_metrics,omitempty"`
-	ProviderMetrics []ProviderMetric `json:"provider_metrics,omitempty"`
-	RoutingMetrics  *RoutingMetrics  `json:"routing_metrics,omitempty"`
-	SessionMetrics  *SessionMetrics  `json:"session_metrics,omitempty"`
-	ReasonTagCounts map[string]int64 `json:"reason_tag_counters,omitempty"`
-	PoolHealthHint  float64          `json:"pool_health_hint,omitempty"`
+	WorkerID              string               `json:"worker_id"`
+	Host                  string               `json:"host,omitempty"`
+	IPAddress             string               `json:"ip_address,omitempty"`
+	Version               string               `json:"version,omitempty"`
+	Pool                  string               `json:"pool,omitempty"`
+	Tags                  []string             `json:"tags,omitempty"`
+	Status                string               `json:"status"`
+	DesiredState          string               `json:"desired_state"`
+	Quarantined           bool                 `json:"quarantined"`
+	LastHeartbeat         string               `json:"last_heartbeat_at"`
+	CurrentJobID          string               `json:"current_job_id,omitempty"`
+	CurrentChunkID        string               `json:"current_chunk_id,omitempty"`
+	CorrelationID         string               `json:"correlation_id,omitempty"`
+	StageMetrics          *StageMetrics        `json:"stage_metrics,omitempty"`
+	SMTPMetrics           *SMTPMetrics         `json:"smtp_metrics,omitempty"`
+	ProviderMetrics       []ProviderMetric     `json:"provider_metrics,omitempty"`
+	RoutingMetrics        *RoutingMetrics      `json:"routing_metrics,omitempty"`
+	SessionMetrics        *SessionMetrics      `json:"session_metrics,omitempty"`
+	AttemptRouteMetrics   *AttemptRouteMetrics `json:"attempt_route_metrics,omitempty"`
+	RetryAntiAffinityHits int64                `json:"retry_anti_affinity_hits,omitempty"`
+	UnknownReasonTags     map[string]int64     `json:"unknown_reason_tags,omitempty"`
+	SessionStrategyID     string               `json:"session_strategy_id,omitempty"`
+	ReasonTagCounts       map[string]int64     `json:"reason_tag_counters,omitempty"`
+	PoolHealthHint        float64              `json:"pool_health_hint,omitempty"`
 }
 
 type WorkersResponse struct {
@@ -246,6 +260,80 @@ type ProviderRetryEffectivenessSummary struct {
 
 type ProviderRetryEffectivenessResponse struct {
 	Data []ProviderRetryEffectivenessSummary `json:"data"`
+}
+
+type ProviderAccuracyCalibrationSummary struct {
+	Provider              string  `json:"provider"`
+	Workers               int     `json:"workers"`
+	UnknownRate           float64 `json:"unknown_rate"`
+	TempfailRecoveryPct   float64 `json:"tempfail_recovery_pct"`
+	PolicyBlockedRate     float64 `json:"policy_blocked_rate"`
+	CalibrationConfidence string  `json:"calibration_confidence"`
+}
+
+type ProviderAccuracyCalibrationResponse struct {
+	Data []ProviderAccuracyCalibrationSummary `json:"data"`
+}
+
+type ProviderUnknownClusterSummary struct {
+	Provider      string `json:"provider"`
+	Tag           string `json:"tag"`
+	Count         int64  `json:"count"`
+	SampleWorkers int    `json:"sample_workers"`
+}
+
+type ProviderUnknownClusterResponse struct {
+	Data []ProviderUnknownClusterSummary `json:"data"`
+}
+
+type PolicyShadowEvaluateRequest struct {
+	CandidateVersion string   `json:"candidate_version"`
+	Providers        []string `json:"providers,omitempty"`
+	TriggeredBy      string   `json:"triggered_by,omitempty"`
+	Notes            string   `json:"notes,omitempty"`
+}
+
+type PolicyShadowEvaluateResult struct {
+	Provider            string  `json:"provider"`
+	UnknownRate         float64 `json:"unknown_rate"`
+	TempfailRecoveryPct float64 `json:"tempfail_recovery_pct"`
+	PolicyBlockedRate   float64 `json:"policy_blocked_rate"`
+	Recommendation      string  `json:"recommendation"`
+}
+
+type PolicyShadowEvaluateResponse struct {
+	Data struct {
+		CandidateVersion string                       `json:"candidate_version"`
+		ActiveVersion    string                       `json:"active_version"`
+		TriggeredBy      string                       `json:"triggered_by"`
+		Notes            string                       `json:"notes,omitempty"`
+		EvaluatedAt      string                       `json:"evaluated_at"`
+		Results          []PolicyShadowEvaluateResult `json:"results"`
+	} `json:"data"`
+}
+
+type PolicyShadowRunSummary struct {
+	ProviderCount             int     `json:"provider_count"`
+	UnknownRateAvg            float64 `json:"unknown_rate_avg"`
+	TempfailRecoveryPctAvg    float64 `json:"tempfail_recovery_pct_avg"`
+	PolicyBlockedRateAvg      float64 `json:"policy_blocked_rate_avg"`
+	HighestRiskRecommendation string  `json:"highest_risk_recommendation"`
+}
+
+type PolicyShadowRunRecord struct {
+	RunUUID          string                       `json:"run_uuid"`
+	CandidateVersion string                       `json:"candidate_version"`
+	ActiveVersion    string                       `json:"active_version"`
+	TriggeredBy      string                       `json:"triggered_by"`
+	Notes            string                       `json:"notes,omitempty"`
+	EvaluatedAt      string                       `json:"evaluated_at"`
+	Providers        []string                     `json:"providers"`
+	Results          []PolicyShadowEvaluateResult `json:"results"`
+	Summary          PolicyShadowRunSummary       `json:"summary"`
+}
+
+type PolicyShadowRunListResponse struct {
+	Data []PolicyShadowRunRecord `json:"data"`
 }
 
 type SMTPPolicyVersionRecord struct {

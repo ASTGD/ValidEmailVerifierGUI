@@ -171,9 +171,10 @@ func (s *PolicyCanaryAutopilotService) run() {
 		if override, ok := modes[provider]; ok {
 			currentMode = normalizeProviderMode(override.Mode)
 		}
-		if currentMode != "cautious" {
-			if _, modeErr := s.store.SetProviderMode(ctx, provider, "cautious", "autopilot"); modeErr != nil {
-				log.Printf("policy-autopilot: failed to set cautious mode for provider %s: %v", provider, modeErr)
+		nextMode, shouldRollback := nextProviderMitigationMode(currentMode)
+		if !shouldRollback {
+			if _, modeErr := s.store.SetProviderMode(ctx, provider, nextMode, "autopilot"); modeErr != nil {
+				log.Printf("policy-autopilot: failed to set %s mode for provider %s: %v", nextMode, provider, modeErr)
 				return
 			}
 			state.HealthyWindows = 0
@@ -182,6 +183,7 @@ func (s *PolicyCanaryAutopilotService) run() {
 			_ = s.saveState(ctx, state)
 			return
 		}
+
 		rollbackReason = providerRollbackReason
 	}
 
@@ -471,6 +473,21 @@ func maxFloat(a float64, b float64) float64 {
 	}
 
 	return b
+}
+
+func nextProviderMitigationMode(currentMode string) (string, bool) {
+	switch normalizeProviderMode(currentMode) {
+	case "normal", "":
+		return "cautious", false
+	case "cautious":
+		return "degraded_probe", false
+	case "degraded_probe":
+		return "drain", false
+	case "drain":
+		return "", true
+	default:
+		return "cautious", false
+	}
 }
 
 func hasMinimumProviderTelemetry(providers map[string]policyCanaryKPI, minWorkers int) bool {

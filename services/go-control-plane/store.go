@@ -21,15 +21,16 @@ type Store struct {
 }
 
 const (
-	runtimeSettingsKey     = "control_plane:runtime_settings"
-	runtimeSettingsLastKey = "control_plane:runtime_settings:last_snapshot"
-	incidentsIndexKey      = "control_plane:incidents:index"
-	incidentsActiveKey     = "control_plane:incidents:active"
-	providerModesKey       = "control_plane:provider_modes"
-	providerPolicyStateKey = "control_plane:provider_policy_state"
-	smtpPolicyVersionsKey  = "control_plane:smtp_policy_versions"
-	smtpPolicyActiveKey    = "control_plane:smtp_policy_active"
-	smtpPolicyHistoryKey   = "control_plane:smtp_policy_rollout_history"
+	runtimeSettingsKey      = "control_plane:runtime_settings"
+	runtimeSettingsLastKey  = "control_plane:runtime_settings:last_snapshot"
+	incidentsIndexKey       = "control_plane:incidents:index"
+	incidentsActiveKey      = "control_plane:incidents:active"
+	providerModesKey        = "control_plane:provider_modes"
+	providerPolicyStateKey  = "control_plane:provider_policy_state"
+	smtpPolicyVersionsKey   = "control_plane:smtp_policy_versions"
+	smtpPolicyActiveKey     = "control_plane:smtp_policy_active"
+	smtpPolicyHistoryKey    = "control_plane:smtp_policy_rollout_history"
+	smtpPolicyShadowRunsKey = "control_plane:smtp_policy_shadow_runs"
 )
 
 type RuntimeSettings struct {
@@ -232,6 +233,24 @@ func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (stri
 		sessionMetricsJSON = payload
 	}
 
+	attemptRouteMetricsJSON := []byte("{}")
+	if req.AttemptRouteMetrics != nil {
+		payload, marshalErr := json.Marshal(req.AttemptRouteMetrics)
+		if marshalErr != nil {
+			return "", marshalErr
+		}
+		attemptRouteMetricsJSON = payload
+	}
+
+	unknownReasonTagsJSON := []byte("{}")
+	if len(req.UnknownReasonTags) > 0 {
+		payload, marshalErr := json.Marshal(req.UnknownReasonTags)
+		if marshalErr != nil {
+			return "", marshalErr
+		}
+		unknownReasonTagsJSON = payload
+	}
+
 	reasonTagCountsJSON := []byte("{}")
 	if len(req.ReasonTagCounts) > 0 {
 		payload, marshalErr := json.Marshal(req.ReasonTagCounts)
@@ -256,6 +275,10 @@ func (s *Store) UpsertHeartbeat(ctx context.Context, req HeartbeatRequest) (stri
 	pipe.Set(ctx, workerKey(req.WorkerID, "provider_metrics"), providerMetricsJSON, s.heartbeatTTL)
 	pipe.Set(ctx, workerKey(req.WorkerID, "routing_metrics"), routingMetricsJSON, s.heartbeatTTL)
 	pipe.Set(ctx, workerKey(req.WorkerID, "session_metrics"), sessionMetricsJSON, s.heartbeatTTL)
+	pipe.Set(ctx, workerKey(req.WorkerID, "attempt_route_metrics"), attemptRouteMetricsJSON, s.heartbeatTTL)
+	pipe.Set(ctx, workerKey(req.WorkerID, "retry_anti_affinity_hits"), req.RetryAntiAffinityHits, s.heartbeatTTL)
+	pipe.Set(ctx, workerKey(req.WorkerID, "unknown_reason_tags"), unknownReasonTagsJSON, s.heartbeatTTL)
+	pipe.Set(ctx, workerKey(req.WorkerID, "session_strategy_id"), req.SessionStrategyID, s.heartbeatTTL)
 	pipe.Set(ctx, workerKey(req.WorkerID, "reason_tag_counters"), reasonTagCountsJSON, s.heartbeatTTL)
 	if req.PoolHealthHint != nil {
 		pipe.Set(ctx, workerKey(req.WorkerID, "pool_health_hint"), *req.PoolHealthHint, s.heartbeatTTL)
@@ -872,6 +895,31 @@ func (s *Store) GetWorkers(ctx context.Context) ([]WorkerSummary, error) {
 			}
 		}
 
+		var attemptRouteMetrics *AttemptRouteMetrics
+		if payload, payloadErr := s.rdb.Get(ctx, workerKey(id, "attempt_route_metrics")).Result(); payloadErr == nil && payload != "" {
+			parsed := AttemptRouteMetrics{}
+			if unmarshalErr := json.Unmarshal([]byte(payload), &parsed); unmarshalErr == nil {
+				attemptRouteMetrics = &parsed
+			}
+		}
+
+		retryAntiAffinityHits := int64(0)
+		if payload, payloadErr := s.rdb.Get(ctx, workerKey(id, "retry_anti_affinity_hits")).Result(); payloadErr == nil && payload != "" {
+			if parsed, parseErr := strconv.ParseInt(payload, 10, 64); parseErr == nil {
+				retryAntiAffinityHits = parsed
+			}
+		}
+
+		unknownReasonTags := map[string]int64{}
+		if payload, payloadErr := s.rdb.Get(ctx, workerKey(id, "unknown_reason_tags")).Result(); payloadErr == nil && payload != "" {
+			parsed := map[string]int64{}
+			if unmarshalErr := json.Unmarshal([]byte(payload), &parsed); unmarshalErr == nil {
+				unknownReasonTags = parsed
+			}
+		}
+
+		sessionStrategyID, _ := s.rdb.Get(ctx, workerKey(id, "session_strategy_id")).Result()
+
 		reasonTagCounts := map[string]int64{}
 		if payload, payloadErr := s.rdb.Get(ctx, workerKey(id, "reason_tag_counters")).Result(); payloadErr == nil && payload != "" {
 			parsed := map[string]int64{}
@@ -888,26 +936,30 @@ func (s *Store) GetWorkers(ctx context.Context) ([]WorkerSummary, error) {
 		}
 
 		results = append(results, WorkerSummary{
-			WorkerID:        id,
-			Host:            meta.Host,
-			IPAddress:       meta.IPAddress,
-			Version:         meta.Version,
-			Pool:            pool,
-			Tags:            meta.Tags,
-			Status:          defaultString(status, "unknown"),
-			DesiredState:    desired,
-			Quarantined:     quarantined,
-			LastHeartbeat:   heartbeat,
-			CurrentJobID:    meta.CurrentJobID,
-			CurrentChunkID:  meta.CurrentChunkID,
-			CorrelationID:   meta.CorrelationID,
-			StageMetrics:    stageMetrics,
-			SMTPMetrics:     smtpMetrics,
-			ProviderMetrics: providerMetrics,
-			RoutingMetrics:  routingMetrics,
-			SessionMetrics:  sessionMetrics,
-			ReasonTagCounts: reasonTagCounts,
-			PoolHealthHint:  poolHealthHint,
+			WorkerID:              id,
+			Host:                  meta.Host,
+			IPAddress:             meta.IPAddress,
+			Version:               meta.Version,
+			Pool:                  pool,
+			Tags:                  meta.Tags,
+			Status:                defaultString(status, "unknown"),
+			DesiredState:          desired,
+			Quarantined:           quarantined,
+			LastHeartbeat:         heartbeat,
+			CurrentJobID:          meta.CurrentJobID,
+			CurrentChunkID:        meta.CurrentChunkID,
+			CorrelationID:         meta.CorrelationID,
+			StageMetrics:          stageMetrics,
+			SMTPMetrics:           smtpMetrics,
+			ProviderMetrics:       providerMetrics,
+			RoutingMetrics:        routingMetrics,
+			SessionMetrics:        sessionMetrics,
+			AttemptRouteMetrics:   attemptRouteMetrics,
+			RetryAntiAffinityHits: retryAntiAffinityHits,
+			UnknownReasonTags:     unknownReasonTags,
+			SessionStrategyID:     sessionStrategyID,
+			ReasonTagCounts:       reasonTagCounts,
+			PoolHealthHint:        poolHealthHint,
 		})
 	}
 
@@ -1694,6 +1746,99 @@ func (s *Store) appendSMTPPolicyRolloutHistory(ctx context.Context, entry SMTPPo
 	return err
 }
 
+func (s *Store) AppendPolicyShadowRun(ctx context.Context, record PolicyShadowRunRecord) error {
+	record.RunUUID = strings.TrimSpace(record.RunUUID)
+	if record.RunUUID == "" {
+		return fmt.Errorf("run_uuid is required")
+	}
+	record.CandidateVersion = normalizePolicyVersion(record.CandidateVersion)
+	record.ActiveVersion = normalizePolicyVersion(record.ActiveVersion)
+	record.TriggeredBy = strings.TrimSpace(record.TriggeredBy)
+	record.Notes = strings.TrimSpace(record.Notes)
+	record.EvaluatedAt = strings.TrimSpace(record.EvaluatedAt)
+	if record.EvaluatedAt == "" {
+		record.EvaluatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+
+	providers := make([]string, 0, len(record.Providers))
+	seen := make(map[string]struct{}, len(record.Providers))
+	for _, provider := range record.Providers {
+		normalized := normalizeProviderName(provider)
+		if normalized == "" {
+			continue
+		}
+		if _, exists := seen[normalized]; exists {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		providers = append(providers, normalized)
+	}
+	if len(providers) == 0 {
+		providers = append(providers, "generic")
+	}
+	sort.Strings(providers)
+	record.Providers = providers
+
+	payload, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+
+	pipe := s.rdb.Pipeline()
+	pipe.LPush(ctx, smtpPolicyShadowRunsKey, payload)
+	pipe.LTrim(ctx, smtpPolicyShadowRunsKey, 0, 199)
+	_, err = pipe.Exec(ctx)
+
+	return err
+}
+
+func (s *Store) ListPolicyShadowRuns(ctx context.Context, limit int) ([]PolicyShadowRunRecord, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	values, err := s.rdb.LRange(ctx, smtpPolicyShadowRunsKey, 0, int64(limit-1)).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	runs := make([]PolicyShadowRunRecord, 0, len(values))
+	for _, payload := range values {
+		record := PolicyShadowRunRecord{}
+		if unmarshalErr := json.Unmarshal([]byte(payload), &record); unmarshalErr != nil {
+			continue
+		}
+
+		record.RunUUID = strings.TrimSpace(record.RunUUID)
+		record.CandidateVersion = normalizePolicyVersion(record.CandidateVersion)
+		record.ActiveVersion = normalizePolicyVersion(record.ActiveVersion)
+		record.TriggeredBy = strings.TrimSpace(record.TriggeredBy)
+		record.Notes = strings.TrimSpace(record.Notes)
+		record.EvaluatedAt = strings.TrimSpace(record.EvaluatedAt)
+		if record.RunUUID == "" || record.CandidateVersion == "" {
+			continue
+		}
+
+		providers := make([]string, 0, len(record.Providers))
+		for _, provider := range record.Providers {
+			normalized := normalizeProviderName(provider)
+			if normalized == "" {
+				continue
+			}
+			providers = append(providers, normalized)
+		}
+		if len(providers) == 0 {
+			providers = []string{"generic"}
+		}
+		sort.Strings(providers)
+		record.Providers = providers
+		record.Summary.ProviderCount = len(providers)
+		runs = append(runs, record)
+	}
+
+	return runs, nil
+}
+
 func (s *Store) preflightPolicyPayload(ctx context.Context, version string, enforce bool) (PolicyPayloadValidation, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	result := PolicyPayloadValidation{
@@ -1810,6 +1955,10 @@ func staleWorkerDeleteKeys(workerID string) []string {
 		workerKey(workerID, "provider_metrics"),
 		workerKey(workerID, "routing_metrics"),
 		workerKey(workerID, "session_metrics"),
+		workerKey(workerID, "attempt_route_metrics"),
+		workerKey(workerID, "retry_anti_affinity_hits"),
+		workerKey(workerID, "unknown_reason_tags"),
+		workerKey(workerID, "session_strategy_id"),
 		workerKey(workerID, "reason_tag_counters"),
 		workerKey(workerID, "pool_health_hint"),
 		workerKey(workerID, "pool"),
