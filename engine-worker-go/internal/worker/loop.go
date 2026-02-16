@@ -1205,13 +1205,17 @@ func (w *Worker) sendHeartbeats(ctx context.Context) {
 				fmt.Sprintf("laravel_heartbeat_every_n:%d", maxInt(1, w.cfg.LaravelHeartbeatEveryN)),
 				fmt.Sprintf("policy_sync:%t", w.cfg.ControlPlanePolicySyncEnabled),
 			},
-			Status:          w.currentDesiredState(),
-			StageMetrics:    snapshot.stageMetrics,
-			SMTPMetrics:     snapshot.smtpMetrics,
-			ProviderMetrics: snapshot.providerMetrics,
-			RoutingMetrics:  snapshot.routingMetrics,
-			SessionMetrics:  snapshot.sessionMetrics,
-			ReasonTagCounts: snapshot.reasonTagCounts,
+			Status:                w.currentDesiredState(),
+			StageMetrics:          snapshot.stageMetrics,
+			SMTPMetrics:           snapshot.smtpMetrics,
+			ProviderMetrics:       snapshot.providerMetrics,
+			RoutingMetrics:        snapshot.routingMetrics,
+			SessionMetrics:        snapshot.sessionMetrics,
+			AttemptRouteMetrics:   snapshot.attemptRouteMetrics,
+			RetryAntiAffinityHits: snapshot.retryAntiAffinityHits,
+			UnknownReasonTags:     snapshot.unknownReasonTags,
+			SessionStrategyID:     w.currentSessionStrategyID(),
+			ReasonTagCounts:       snapshot.reasonTagCounts,
 		}
 
 		response, err := w.cfg.ControlPlaneClient.Heartbeat(ctx, payload)
@@ -1277,6 +1281,21 @@ func (w *Worker) currentDesiredState() string {
 	}
 
 	return state
+}
+
+func (w *Worker) currentSessionStrategyID() string {
+	state := w.policySnapshot()
+	version := strings.TrimSpace(state.activePolicyVersion)
+	if version == "" {
+		version = "unversioned"
+	}
+
+	mode := "standard"
+	if state.policyEngineEnabled || state.adaptiveRetryEnabled {
+		mode = "provider_policy"
+	}
+
+	return fmt.Sprintf("%s:%s", mode, version)
 }
 
 func (w *Worker) providerModeForRuntime(provider string) string {

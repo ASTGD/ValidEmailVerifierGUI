@@ -51,4 +51,13 @@ func TestRecordClaimRoutingCounters(t *testing.T) {
 	if snapshot.routingMetrics.FallbackClaimTotal != 1 {
 		t.Fatalf("expected fallback claims=1, got %d", snapshot.routingMetrics.FallbackClaimTotal)
 	}
+	if snapshot.attemptRouteMetrics == nil {
+		t.Fatal("expected attempt route metrics snapshot to be present")
+	}
+	if snapshot.attemptRouteMetrics.RetryAttemptsTotal != 1 {
+		t.Fatalf("expected retry attempts total=1, got %d", snapshot.attemptRouteMetrics.RetryAttemptsTotal)
+	}
+	if snapshot.retryAntiAffinityHits != 1 {
+		t.Fatalf("expected retry anti-affinity hits=1, got %d", snapshot.retryAntiAffinityHits)
+	}
 }

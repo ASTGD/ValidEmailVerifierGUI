@@ -3,6 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Models\QueueMetric;
+use App\Models\SmtpDecisionTrace;
+use App\Models\SmtpPolicyShadowRun;
 use App\Models\VerificationJobMetric;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
@@ -65,7 +67,41 @@ class ExportGoProbeWeeklyReportCommand extends Command
                     'avg_depth' => round((float) ($queueAggregate[$smtpProbeQueue]->avg_depth ?? 0), 2),
                 ],
             ],
+            'shadow_policy' => [
+                'latest_candidate_version' => null,
+                'latest_evaluated_at' => null,
+                'latest_status' => null,
+            ],
+            'unknown_reasons_top' => [],
         ];
+
+        $latestShadowRun = SmtpPolicyShadowRun::query()
+            ->where('evaluated_at', '>=', $since)
+            ->latest('evaluated_at')
+            ->first();
+        if ($latestShadowRun) {
+            $report['shadow_policy'] = [
+                'latest_candidate_version' => $latestShadowRun->candidate_version,
+                'latest_evaluated_at' => optional($latestShadowRun->evaluated_at)?->toIso8601String(),
+                'latest_status' => $latestShadowRun->status,
+            ];
+        }
+
+        $unknownReasons = SmtpDecisionTrace::query()
+            ->where('observed_at', '>=', $since)
+            ->whereNotNull('reason_tag')
+            ->selectRaw('reason_tag, COUNT(*) as aggregate_count')
+            ->groupBy('reason_tag')
+            ->orderByDesc('aggregate_count')
+            ->limit(5)
+            ->get()
+            ->map(fn ($row): array => [
+                'reason_tag' => (string) $row->reason_tag,
+                'count' => (int) $row->aggregate_count,
+            ])
+            ->values()
+            ->all();
+        $report['unknown_reasons_top'] = $unknownReasons;
 
         if ($this->option('json')) {
             $this->line((string) json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));

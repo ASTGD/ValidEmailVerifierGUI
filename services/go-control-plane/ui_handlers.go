@@ -26,6 +26,9 @@ type OverviewData struct {
 	ProbeRejectRate        float64
 	LaravelFallbackWorkers int
 	ProviderHealth         []ProviderHealthSummary
+	ProviderAccuracy       []ProviderAccuracyCalibrationSummary
+	UnknownClusters        []ProviderUnknownClusterSummary
+	PolicyShadowRuns       []PolicyShadowRunRecord
 	ProviderPolicies       ProviderPoliciesData
 	RoutingQuality         RoutingQualitySummary
 	Pools                  []PoolSummary
@@ -179,6 +182,9 @@ func (s *Server) handleUIOverview(w http.ResponseWriter, r *http.Request) {
 		ProbeRejectRate:        stats.ProbeRejectRate,
 		LaravelFallbackWorkers: stats.LaravelFallbackWorkers,
 		ProviderHealth:         stats.ProviderHealth,
+		ProviderAccuracy:       stats.ProviderAccuracy,
+		UnknownClusters:        stats.UnknownClusters,
+		PolicyShadowRuns:       stats.PolicyShadowRuns,
 		ProviderPolicies:       stats.ProviderPolicies,
 		RoutingQuality:         stats.RoutingQuality,
 		Pools:                  stats.Pools,

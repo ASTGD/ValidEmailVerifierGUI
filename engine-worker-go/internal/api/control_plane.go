@@ -65,25 +65,35 @@ type ControlPlaneSessionMetrics struct {
 	ThrottleAppliedTotal      int64   `json:"throttle_applied_total,omitempty"`
 }
 
+type ControlPlaneAttemptRouteMetrics struct {
+	AttemptsTotal           int64 `json:"attempts_total,omitempty"`
+	RetryAttemptsTotal      int64 `json:"retry_attempts_total,omitempty"`
+	MXFallbackAttemptsTotal int64 `json:"mx_fallback_attempts_total,omitempty"`
+}
+
 type ControlPlaneHeartbeatRequest struct {
-	WorkerID        string                       `json:"worker_id"`
-	Host            string                       `json:"host,omitempty"`
-	IPAddress       string                       `json:"ip_address,omitempty"`
-	Version         string                       `json:"version,omitempty"`
-	Pool            string                       `json:"pool,omitempty"`
-	Tags            []string                     `json:"tags,omitempty"`
-	Status          string                       `json:"status"`
-	CurrentJobID    string                       `json:"current_job_id,omitempty"`
-	CurrentChunkID  string                       `json:"current_chunk_id,omitempty"`
-	CorrelationID   string                       `json:"correlation_id,omitempty"`
-	Metrics         *ControlPlaneWorkerMetrics   `json:"metrics,omitempty"`
-	StageMetrics    *ControlPlaneStageMetrics    `json:"stage_metrics,omitempty"`
-	SMTPMetrics     *ControlPlaneSMTPMetrics     `json:"smtp_metrics,omitempty"`
-	ProviderMetrics []ControlPlaneProviderMetric `json:"provider_metrics,omitempty"`
-	RoutingMetrics  *ControlPlaneRoutingMetrics  `json:"routing_metrics,omitempty"`
-	SessionMetrics  *ControlPlaneSessionMetrics  `json:"session_metrics,omitempty"`
-	ReasonTagCounts map[string]int64             `json:"reason_tag_counters,omitempty"`
-	PoolHealthHint  *float64                     `json:"pool_health_hint,omitempty"`
+	WorkerID              string                           `json:"worker_id"`
+	Host                  string                           `json:"host,omitempty"`
+	IPAddress             string                           `json:"ip_address,omitempty"`
+	Version               string                           `json:"version,omitempty"`
+	Pool                  string                           `json:"pool,omitempty"`
+	Tags                  []string                         `json:"tags,omitempty"`
+	Status                string                           `json:"status"`
+	CurrentJobID          string                           `json:"current_job_id,omitempty"`
+	CurrentChunkID        string                           `json:"current_chunk_id,omitempty"`
+	CorrelationID         string                           `json:"correlation_id,omitempty"`
+	Metrics               *ControlPlaneWorkerMetrics       `json:"metrics,omitempty"`
+	StageMetrics          *ControlPlaneStageMetrics        `json:"stage_metrics,omitempty"`
+	SMTPMetrics           *ControlPlaneSMTPMetrics         `json:"smtp_metrics,omitempty"`
+	ProviderMetrics       []ControlPlaneProviderMetric     `json:"provider_metrics,omitempty"`
+	RoutingMetrics        *ControlPlaneRoutingMetrics      `json:"routing_metrics,omitempty"`
+	SessionMetrics        *ControlPlaneSessionMetrics      `json:"session_metrics,omitempty"`
+	AttemptRouteMetrics   *ControlPlaneAttemptRouteMetrics `json:"attempt_route_metrics,omitempty"`
+	RetryAntiAffinityHits int64                            `json:"retry_anti_affinity_hits,omitempty"`
+	UnknownReasonTags     map[string]int64                 `json:"unknown_reason_tags,omitempty"`
+	SessionStrategyID     string                           `json:"session_strategy_id,omitempty"`
+	ReasonTagCounts       map[string]int64                 `json:"reason_tag_counters,omitempty"`
+	PoolHealthHint        *float64                         `json:"pool_health_hint,omitempty"`
 }
 
 type ControlPlaneHeartbeatResponse struct {

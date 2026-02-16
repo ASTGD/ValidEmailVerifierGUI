@@ -24,6 +24,9 @@ type ControlPlaneStats struct {
 	LaravelFallbackWorkers  int
 	Settings                RuntimeSettings
 	ProviderHealth          []ProviderHealthSummary
+	ProviderAccuracy        []ProviderAccuracyCalibrationSummary
+	UnknownClusters         []ProviderUnknownClusterSummary
+	PolicyShadowRuns        []PolicyShadowRunRecord
 	ProviderPolicies        ProviderPoliciesData
 	RoutingQuality          RoutingQualitySummary
 }
@@ -158,6 +161,12 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 	}
 
 	providerHealth := aggregateProviderHealth(workers, providerModesMap, thresholdsFromRuntimeSettings(settings))
+	providerAccuracy := providerAccuracyCalibrationFromHealth(providerHealth)
+	unknownClusters := providerUnknownClustersFromWorkers(workers)
+	policyShadowRuns, shadowRunsErr := s.store.ListPolicyShadowRuns(ctx, 10)
+	if shadowRunsErr != nil {
+		policyShadowRuns = []PolicyShadowRunRecord{}
+	}
 	providerModes := make([]ProviderModeState, 0, len(providerModesMap))
 	for _, mode := range providerModesMap {
 		providerModes = append(providerModes, mode)
@@ -190,6 +199,9 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 		LaravelFallbackWorkers:  laravelFallbackWorkers,
 		Settings:                settings,
 		ProviderHealth:          providerHealth,
+		ProviderAccuracy:        providerAccuracy,
+		UnknownClusters:         unknownClusters,
+		PolicyShadowRuns:        policyShadowRuns,
 		ProviderPolicies: ProviderPoliciesData{
 			PolicyEngineEnabled:  settings.ProviderPolicyEngineEnabled,
 			AdaptiveRetryEnabled: settings.AdaptiveRetryEnabled,

@@ -268,6 +268,22 @@ func TestStaleWorkerDeleteKeysIncludePoolAndLastSeen(t *testing.T) {
 	if !containsString(keys, expectedSessionMetrics) {
 		t.Fatalf("expected stale delete keys to include %q", expectedSessionMetrics)
 	}
+	expectedAttemptRouteMetrics := workerKey(workerID, "attempt_route_metrics")
+	if !containsString(keys, expectedAttemptRouteMetrics) {
+		t.Fatalf("expected stale delete keys to include %q", expectedAttemptRouteMetrics)
+	}
+	expectedRetryAntiAffinityHits := workerKey(workerID, "retry_anti_affinity_hits")
+	if !containsString(keys, expectedRetryAntiAffinityHits) {
+		t.Fatalf("expected stale delete keys to include %q", expectedRetryAntiAffinityHits)
+	}
+	expectedUnknownReasonTags := workerKey(workerID, "unknown_reason_tags")
+	if !containsString(keys, expectedUnknownReasonTags) {
+		t.Fatalf("expected stale delete keys to include %q", expectedUnknownReasonTags)
+	}
+	expectedSessionStrategyID := workerKey(workerID, "session_strategy_id")
+	if !containsString(keys, expectedSessionStrategyID) {
+		t.Fatalf("expected stale delete keys to include %q", expectedSessionStrategyID)
+	}
 	expectedReasonTagCounters := workerKey(workerID, "reason_tag_counters")
 	if !containsString(keys, expectedReasonTagCounters) {
 		t.Fatalf("expected stale delete keys to include %q", expectedReasonTagCounters)

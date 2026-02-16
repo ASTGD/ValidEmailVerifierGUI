@@ -87,6 +87,123 @@
 <section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
     <div class="flex items-center justify-between">
         <div>
+            <h2 class="text-lg font-semibold">Provider Accuracy Calibration</h2>
+            <p class="text-sm text-slate-400">Provider-level confidence calibration derived from live telemetry windows.</p>
+        </div>
+    </div>
+    <div class="mt-5 overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="text-left text-xs uppercase tracking-wider text-slate-400">
+                <tr>
+                    <th class="px-3 py-2">Provider</th>
+                    <th class="px-3 py-2">Workers</th>
+                    <th class="px-3 py-2">Unknown</th>
+                    <th class="px-3 py-2">Tempfail Recovery</th>
+                    <th class="px-3 py-2">Policy Blocked</th>
+                    <th class="px-3 py-2">Confidence</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+                {{ range .ProviderAccuracy }}
+                    <tr>
+                        <td class="px-3 py-2 font-medium">{{ .Provider }}</td>
+                        <td class="px-3 py-2">{{ .Workers }}</td>
+                        <td class="px-3 py-2">{{ printf "%.2f" .UnknownRate }}</td>
+                        <td class="px-3 py-2">{{ printf "%.2f%%" .TempfailRecoveryPct }}</td>
+                        <td class="px-3 py-2">{{ printf "%.2f" .PolicyBlockedRate }}</td>
+                        <td class="px-3 py-2">
+                            <span class="rounded-full px-2 py-1 text-xs {{ if eq .CalibrationConfidence "high" }}bg-emerald-500/20 text-emerald-300{{ else if eq .CalibrationConfidence "medium" }}bg-amber-500/20 text-amber-300{{ else }}bg-red-500/20 text-red-300{{ end }}">
+                                {{ .CalibrationConfidence }}
+                            </span>
+                        </td>
+                    </tr>
+                {{ else }}
+                    <tr>
+                        <td colspan="6" class="px-3 py-3 text-slate-400">No calibration telemetry yet.</td>
+                    </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Unknown Reason Concentration</h2>
+            <p class="text-sm text-slate-400">Top unknown reason tags aggregated from worker heartbeats.</p>
+        </div>
+    </div>
+    <div class="mt-5 overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="text-left text-xs uppercase tracking-wider text-slate-400">
+                <tr>
+                    <th class="px-3 py-2">Provider</th>
+                    <th class="px-3 py-2">Reason Tag</th>
+                    <th class="px-3 py-2">Count</th>
+                    <th class="px-3 py-2">Workers</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+                {{ range .UnknownClusters }}
+                    <tr>
+                        <td class="px-3 py-2 font-medium">{{ .Provider }}</td>
+                        <td class="px-3 py-2">{{ .Tag }}</td>
+                        <td class="px-3 py-2">{{ .Count }}</td>
+                        <td class="px-3 py-2">{{ .SampleWorkers }}</td>
+                    </tr>
+                {{ else }}
+                    <tr>
+                        <td colspan="4" class="px-3 py-3 text-slate-400">No unknown cluster evidence yet.</td>
+                    </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Shadow Policy Evaluations</h2>
+            <p class="text-sm text-slate-400">Read-only candidate policy comparisons before promotion.</p>
+        </div>
+    </div>
+    <div class="mt-5 overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="text-left text-xs uppercase tracking-wider text-slate-400">
+                <tr>
+                    <th class="px-3 py-2">Evaluated</th>
+                    <th class="px-3 py-2">Candidate</th>
+                    <th class="px-3 py-2">Active</th>
+                    <th class="px-3 py-2">Providers</th>
+                    <th class="px-3 py-2">Unknown Avg</th>
+                    <th class="px-3 py-2">Top Recommendation</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+                {{ range .PolicyShadowRuns }}
+                    <tr>
+                        <td class="px-3 py-2">{{ .EvaluatedAt }}</td>
+                        <td class="px-3 py-2 font-medium">{{ .CandidateVersion }}</td>
+                        <td class="px-3 py-2">{{ if .ActiveVersion }}{{ .ActiveVersion }}{{ else }}-{{ end }}</td>
+                        <td class="px-3 py-2">{{ .Summary.ProviderCount }}</td>
+                        <td class="px-3 py-2">{{ printf "%.3f" .Summary.UnknownRateAvg }}</td>
+                        <td class="px-3 py-2">{{ .Summary.HighestRiskRecommendation }}</td>
+                    </tr>
+                {{ else }}
+                    <tr>
+                        <td colspan="6" class="px-3 py-3 text-slate-400">No shadow policy runs recorded yet.</td>
+                    </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
             <h2 class="text-lg font-semibold">Shard Routing Quality</h2>
             <p class="text-sm text-slate-400">Anti-affinity and provider routing effectiveness from worker telemetry.</p>
         </div>

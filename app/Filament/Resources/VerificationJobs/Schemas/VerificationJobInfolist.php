@@ -5,6 +5,7 @@ namespace App\Filament\Resources\VerificationJobs\Schemas;
 use App\Enums\VerificationJobStatus;
 use App\Enums\VerificationMode;
 use App\Filament\Resources\VerificationJobChunks\VerificationJobChunkResource;
+use App\Models\SmtpDecisionTrace;
 use App\Models\VerificationJob;
 use App\Models\VerificationJobChunk;
 use App\Support\JobProgressCalculator;
@@ -237,6 +238,66 @@ class VerificationJobInfolist
                         TextEntry::make('metrics.peak_memory_mb')
                             ->label('Peak memory (MB)')
                             ->placeholder('-'),
+                    ])
+                    ->columns(3),
+                Section::make('SMTP Decision Trace (Internal)')
+                    ->schema([
+                        TextEntry::make('trace_total')
+                            ->label('Trace rows')
+                            ->state(fn (VerificationJob $record): int => SmtpDecisionTrace::query()
+                                ->where('verification_job_id', (string) $record->id)
+                                ->count())
+                            ->numeric(),
+                        TextEntry::make('trace_unknown')
+                            ->label('Unknown traces')
+                            ->state(fn (VerificationJob $record): int => SmtpDecisionTrace::query()
+                                ->where('verification_job_id', (string) $record->id)
+                                ->where('decision_class', 'unknown')
+                                ->count())
+                            ->numeric(),
+                        TextEntry::make('trace_undeliverable')
+                            ->label('Undeliverable traces')
+                            ->state(fn (VerificationJob $record): int => SmtpDecisionTrace::query()
+                                ->where('verification_job_id', (string) $record->id)
+                                ->where('decision_class', 'undeliverable')
+                                ->count())
+                            ->numeric(),
+                        TextEntry::make('trace_latest_policy')
+                            ->label('Latest policy version')
+                            ->state(fn (VerificationJob $record): string => (string) (SmtpDecisionTrace::query()
+                                ->where('verification_job_id', (string) $record->id)
+                                ->whereNotNull('policy_version')
+                                ->latest('observed_at')
+                                ->value('policy_version') ?? '-')),
+                        TextEntry::make('trace_latest_strategy')
+                            ->label('Latest session strategy')
+                            ->state(fn (VerificationJob $record): string => (string) (SmtpDecisionTrace::query()
+                                ->where('verification_job_id', (string) $record->id)
+                                ->whereNotNull('session_strategy_id')
+                                ->latest('observed_at')
+                                ->value('session_strategy_id') ?? '-')),
+                        TextEntry::make('trace_top_reason_tags')
+                            ->label('Top reason tags')
+                            ->state(function (VerificationJob $record): string {
+                                $tags = SmtpDecisionTrace::query()
+                                    ->where('verification_job_id', (string) $record->id)
+                                    ->whereNotNull('reason_tag')
+                                    ->selectRaw('reason_tag, COUNT(*) as aggregate_count')
+                                    ->groupBy('reason_tag')
+                                    ->orderByDesc('aggregate_count')
+                                    ->limit(3)
+                                    ->get()
+                                    ->map(fn ($row): string => sprintf('%s (%d)', (string) $row->reason_tag, (int) $row->aggregate_count))
+                                    ->values()
+                                    ->all();
+
+                                if ($tags === []) {
+                                    return '-';
+                                }
+
+                                return implode(', ', $tags);
+                            })
+                            ->columnSpanFull(),
                     ])
                     ->columns(3),
                 Section::make('Pipeline Breakdown (Internal)')
