@@ -7,18 +7,35 @@ on:
       - "engine-worker-go/**"
       - ".github/workflows/worker-image.yml"
   workflow_dispatch:
+    inputs:
+      promote_digest:
+        description: "Source digest to promote (sha256:...)"
+        required: true
+        type: string
+      promote_channel:
+        description: "Release channel tag"
+        required: true
+        default: stable
+        type: choice
+        options:
+          - stable
+          - canary
 
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: astgd/vev-engine
 
 jobs:
-  build:
+  build-canary:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,12 +50,92 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Compute image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=canary
+            type=sha,format=short,prefix=canary-
+
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ./engine-worker-go
           file: ./engine-worker-go/Dockerfile
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+
+      - name: Scan image for CVEs
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Sign canary digest
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: |
+          cosign sign --yes "$IMAGE_REF"
+
+      - name: Verify canary digest signature
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: |
+          cosign verify \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/worker-image.yml@.*" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$IMAGE_REF"
+
+  promote-channel:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Promote digest to channel tag
+        env:
+          SOURCE_DIGEST: ${{ inputs.promote_digest }}
+          CHANNEL: ${{ inputs.promote_channel }}
+          IMAGE_REPO: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        run: |
+          DIGEST="$SOURCE_DIGEST"
+          if [[ "$DIGEST" != sha256:* ]]; then
+            DIGEST="sha256:$DIGEST"
+          fi
+
+          SOURCE_REF="$IMAGE_REPO@$DIGEST"
+          TARGET_REF="$IMAGE_REPO:$CHANNEL"
+
+          cosign verify \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/worker-image.yml@.*" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$SOURCE_REF"
+
+          docker buildx imagetools create --tag "$TARGET_REF" "$SOURCE_REF"
+
+          cosign sign --yes "$TARGET_REF"
+          cosign verify \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/worker-image.yml@.*" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$TARGET_REF"
