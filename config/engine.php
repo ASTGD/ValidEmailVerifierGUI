@@ -118,6 +118,13 @@ return [
     'smtp_ai_min_samples' => (int) env('SMTP_AI_MIN_SAMPLES', 500),
     'smtp_ai_min_truth_samples' => (int) env('SMTP_AI_MIN_TRUTH_SAMPLES', 50),
     'smtp_ai_precision_floor' => (float) env('SMTP_AI_PRECISION_FLOOR', 0.85),
+    'shadow_sync_alerts_enabled' => (bool) env('ENGINE_SHADOW_SYNC_ALERTS_ENABLED', true),
+    'shadow_sync_alert_cooldown_seconds' => (int) env('ENGINE_SHADOW_SYNC_ALERT_COOLDOWN_SECONDS', 1800),
+    'shadow_sync_alert_cache_prefix' => env('ENGINE_SHADOW_SYNC_ALERT_CACHE_PREFIX', 'engine:shadow-sync:alerts'),
+    'shadow_sync_alert_email' => env('ENGINE_SHADOW_SYNC_ALERT_EMAIL', env('QUEUE_HEALTH_ALERT_EMAIL')),
+    'shadow_sync_alert_slack_webhook_url' => env('ENGINE_SHADOW_SYNC_ALERT_SLACK_WEBHOOK_URL', env('QUEUE_HEALTH_SLACK_WEBHOOK_URL')),
+    'smtp_decision_trace_retention_days' => (int) env('ENGINE_SMTP_DECISION_TRACE_RETENTION_DAYS', 30),
+    'smtp_policy_shadow_run_retention_days' => (int) env('ENGINE_SMTP_POLICY_SHADOW_RUN_RETENTION_DAYS', 60),
     'probe_preferred_pools' => env('PROBE_PREFERRED_POOLS', ''),
     'probe_provider_preferred_pools' => env('PROBE_PROVIDER_PREFERRED_POOLS', ''),
     'probe_routing_weights' => [

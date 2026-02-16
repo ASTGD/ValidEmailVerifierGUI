@@ -4,10 +4,15 @@ namespace App\Console\Commands;
 
 use App\Models\SmtpPolicyActionAudit;
 use App\Models\SmtpPolicyShadowRun;
+use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use Throwable;
 
 class SyncGoPolicyShadowRunsCommand extends Command
 {
@@ -53,6 +58,7 @@ class SyncGoPolicyShadowRunsCommand extends Command
 
         $processed = 0;
         $upserted = 0;
+        $reviewRequiredRuns = [];
         foreach ($rows as $row) {
             if (! is_array($row)) {
                 continue;
@@ -81,6 +87,17 @@ class SyncGoPolicyShadowRunsCommand extends Command
                 ? 'review_required'
                 : 'evaluated';
 
+            if ($status === 'review_required') {
+                $reviewRequiredRuns[] = [
+                    'run_uuid' => $runUuid,
+                    'provider' => $provider,
+                    'candidate_version' => $candidateVersion,
+                    'active_version' => trim((string) data_get($row, 'active_version')) ?: null,
+                    'recommendation' => (string) data_get($row, 'summary.highest_risk_recommendation', 'rollback_candidate'),
+                    'evaluated_at' => $evaluatedAt ?: now()->toIso8601String(),
+                ];
+            }
+
             SmtpPolicyShadowRun::query()->updateOrCreate(
                 ['run_uuid' => $runUuid],
                 [
@@ -105,7 +122,10 @@ class SyncGoPolicyShadowRunsCommand extends Command
             $upserted++;
         }
 
+        $alertsSent = 0;
         if (! $dryRun) {
+            $alertsSent = $this->notifyReviewRequiredRuns($reviewRequiredRuns);
+
             SmtpPolicyActionAudit::query()->create([
                 'action' => 'shadow_run_sync',
                 'policy_version' => null,
@@ -117,6 +137,8 @@ class SyncGoPolicyShadowRunsCommand extends Command
                     'processed' => $processed,
                     'upserted' => $upserted,
                     'limit' => $limit,
+                    'review_required' => count($reviewRequiredRuns),
+                    'alerts_sent' => $alertsSent,
                 ],
                 'created_at' => now(),
             ]);
@@ -128,8 +150,123 @@ class SyncGoPolicyShadowRunsCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->info(sprintf('Go shadow run sync complete. processed=%d upserted=%d', $processed, $upserted));
+        $this->info(sprintf(
+            'Go shadow run sync complete. processed=%d upserted=%d review_required=%d alerts_sent=%d',
+            $processed,
+            $upserted,
+            count($reviewRequiredRuns),
+            $alertsSent
+        ));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * @param  array<int, array{run_uuid:string,provider:string,candidate_version:string,active_version:?string,recommendation:string,evaluated_at:string}>  $runs
+     */
+    private function notifyReviewRequiredRuns(array $runs): int
+    {
+        if (! (bool) config('engine.shadow_sync_alerts_enabled', true) || $runs === []) {
+            return 0;
+        }
+
+        $cooldown = max(60, (int) config('engine.shadow_sync_alert_cooldown_seconds', 1800));
+        $prefix = trim((string) config('engine.shadow_sync_alert_cache_prefix', 'engine:shadow-sync:alerts'));
+        $cachePrefix = $prefix !== '' ? $prefix : 'engine:shadow-sync:alerts';
+        $now = CarbonImmutable::now();
+
+        $alertsSent = 0;
+        foreach ($runs as $run) {
+            $issueKey = sprintf(
+                '%s|%s',
+                strtolower(trim((string) ($run['provider'] ?? 'generic'))),
+                strtolower(trim((string) ($run['candidate_version'] ?? 'unknown')))
+            );
+
+            $stateKey = $cachePrefix.':'.sha1($issueKey);
+            $state = Cache::get($stateKey);
+            $state = is_array($state) ? $state : [];
+            $lastAlertedAt = $this->safeParseTime($state['last_alerted_at'] ?? null);
+
+            if ($lastAlertedAt && $lastAlertedAt->diffInSeconds($now) < $cooldown) {
+                continue;
+            }
+
+            $message = sprintf(
+                'Go shadow policy review required. provider=%s candidate=%s active=%s recommendation=%s run_uuid=%s evaluated_at=%s',
+                (string) ($run['provider'] ?? 'generic'),
+                (string) ($run['candidate_version'] ?? 'unknown'),
+                (string) ($run['active_version'] ?? 'n/a'),
+                (string) ($run['recommendation'] ?? 'rollback_candidate'),
+                (string) ($run['run_uuid'] ?? 'unknown'),
+                (string) ($run['evaluated_at'] ?? $now->toIso8601String())
+            );
+
+            Log::warning('Go shadow policy run requires review', $run);
+            $this->sendAlertEmail($message);
+            $this->sendAlertSlack($message);
+
+            Cache::put($stateKey, [
+                'issue_key' => $issueKey,
+                'last_alerted_at' => $now->toIso8601String(),
+                'run_uuid' => (string) ($run['run_uuid'] ?? ''),
+            ], now()->addDay());
+
+            $alertsSent++;
+        }
+
+        return $alertsSent;
+    }
+
+    private function sendAlertEmail(string $message): void
+    {
+        $to = trim((string) config('engine.shadow_sync_alert_email', config('queue_health.alerts.email', '')));
+        if ($to === '') {
+            return;
+        }
+
+        try {
+            Mail::raw($message, function ($mail) use ($to): void {
+                $mail->to($to)->subject('[Go Shadow Policy][REVIEW REQUIRED]');
+            });
+        } catch (Throwable $exception) {
+            Log::warning('Go shadow policy review email failed', [
+                'error' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    private function sendAlertSlack(string $message): void
+    {
+        $webhook = trim((string) config(
+            'engine.shadow_sync_alert_slack_webhook_url',
+            config('queue_health.alerts.slack_webhook_url', '')
+        ));
+        if ($webhook === '') {
+            return;
+        }
+
+        try {
+            Http::timeout(5)->post($webhook, [
+                'text' => '[Go Shadow Policy][REVIEW REQUIRED]'."\n".$message,
+            ])->throw();
+        } catch (Throwable $exception) {
+            Log::warning('Go shadow policy review Slack alert failed', [
+                'error' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    private function safeParseTime(mixed $value): ?CarbonImmutable
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse($value);
+        } catch (Throwable $exception) {
+            return null;
+        }
     }
 }

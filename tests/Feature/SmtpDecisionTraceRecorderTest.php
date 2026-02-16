@@ -83,4 +83,51 @@ class SmtpDecisionTraceRecorderTest extends TestCase
         $this->assertSame('mailbox_not_found', $invalidTrace->reason_tag);
         $this->assertSame('none', $invalidTrace->retry_strategy);
     }
+
+    public function test_recorder_handles_large_probe_outputs_with_batch_upserts_and_idempotency(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $job = VerificationJob::query()->create([
+            'user_id' => $user->id,
+            'status' => VerificationJobStatus::Processing,
+            'original_filename' => 'emails.csv',
+            'input_disk' => 'local',
+            'input_key' => 'uploads/'.$user->id.'/job/input.csv',
+        ]);
+
+        $chunk = VerificationJobChunk::query()->create([
+            'verification_job_id' => (string) $job->id,
+            'chunk_no' => 2,
+            'status' => 'completed',
+            'processing_stage' => 'smtp_probe',
+            'input_disk' => 'local',
+            'input_key' => 'chunks/'.$job->id.'/2/input.csv',
+            'output_disk' => 'local',
+            'risky_key' => 'results/'.$job->id.'/chunk2-risky.csv',
+            'routing_provider' => 'gmail',
+            'preferred_pool' => 'reputation-b',
+            'last_worker_ids' => ['worker-b'],
+        ]);
+
+        $totalRows = 1105;
+        $lines = ['email,reason'];
+        for ($i = 1; $i <= $totalRows; $i++) {
+            $lines[] = sprintf(
+                'batch%d@example.com,smtp_tempfail:decision=retryable;confidence=medium;tag=greylist;provider=gmail;policy=v3.1.0;rule=tempfail-greylist;smtp=451;enhanced=4.7.1;strategy=tempfail;attempt=2;route=mx:mx.google.test;mx=mx.google.test',
+                $i
+            );
+        }
+
+        Storage::disk('local')->put((string) $chunk->risky_key, implode("\n", $lines));
+
+        $recorder = app(SmtpDecisionTraceRecorder::class);
+        $firstPass = $recorder->recordFromChunk($chunk);
+        $secondPass = $recorder->recordFromChunk($chunk);
+
+        $this->assertSame($totalRows, $firstPass);
+        $this->assertSame($totalRows, $secondPass);
+        $this->assertSame($totalRows, SmtpDecisionTrace::query()->count());
+    }
 }
