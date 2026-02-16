@@ -77,11 +77,15 @@ class Invoice extends Model
      */
     public function calculateBalanceDue(): int
     {
-        $total = $this->total ?? $this->calculateTotal();
-        $paid = $this->transactions()->sum('amount');
-        $creditApplied = $this->credit_applied ?? 0;
+        // Force calculation from items to avoid stale 'total' column issues
+        $total = $this->calculateTotal();
 
-        return max(0, $total - $paid - $creditApplied);
+        // Sum of all transactions (includes both Payments and Credits now)
+        $paid = $this->transactions()->sum('amount');
+
+        // We no longer subtract $this->credit_applied here because 
+        // Credits are now recorded as Transactions in the applyCredit() method.
+        return max(0, $total - $paid);
     }
 
     /**
@@ -147,6 +151,16 @@ class Invoice extends Model
             'amount' => -$amount, // Negative because we're using credit
             'description' => $description ?? "Credit applied to Invoice #{$this->invoice_number}",
             'type' => 'used',
+        ]);
+
+        // Record as a transaction so it appears in logs
+        Transaction::create([
+            'invoice_id' => $this->id,
+            'user_id' => $this->user_id,
+            'transaction_id' => null,
+            'payment_method' => 'Credit Balance',
+            'amount' => $amount,
+            'date' => now(),
         ]);
 
         return true;

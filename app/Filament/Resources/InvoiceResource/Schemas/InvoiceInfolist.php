@@ -51,6 +51,7 @@ class InvoiceInfolist
                                                 <span style="font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Status</span>
                                                 <span style="padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; ' . match ($record->status) {
                                         'Paid' => 'background: #dcfce7; color: #166534;',
+                                        'Partially Paid' => 'background: #ffedd5; color: #9a3412;',
                                         'Unpaid' => 'background: #fee2e2; color: #991b1b;',
                                         'Cancelled' => 'background: #f1f5f9; color: #475569;',
                                         'Refunded' => 'background: #dbeafe; color: #1e40af;',

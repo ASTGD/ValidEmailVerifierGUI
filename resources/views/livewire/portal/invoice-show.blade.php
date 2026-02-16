@@ -113,8 +113,8 @@
             $total = $totalInCents / 100;
             
             $paidInCents = $invoice->transactions->sum('amount');
-            $creditsAppliedInCents = $invoice->credit_applied ?? 0;
-            $paid = ($paidInCents + $creditsAppliedInCents) / 100;
+            // No longer add credit_applied separately because they are now recorded as transactions
+            $paid = $paidInCents / 100;
 
             $balance = ($invoice->status === 'Paid') ? 0 : max(0, $total - $paid);
             $accentColor = $balance > 0 ? '#dc2626' : '#16a34a';
@@ -330,16 +330,21 @@
                     <form wire:submit.prevent="applyCredit" class="space-y-4">
                         <div class="space-y-2">
                             <label class="block text-[10px] font-black text-[#64748B] uppercase tracking-widest ml-1">{{ __('Apply Credit to Invoice') }}</label>
-                            <div class="relative group">
-                                <input type="number" step="0.01" wire:model.defer="applyAmount"
-                                    class="w-full pl-16 pr-4 py-4 rounded-2xl border-2 border-[#F1F5F9] focus:border-[#1E7CCF] focus:ring-0 transition-all font-black text-[#0F172A] placeholder-[#CBD5E1]"
+                            <div class="relative">
+                                <input type="number" step="0.01" wire:model="applyAmount"
+                                    class="w-full px-6 py-4 rounded-2xl border-2 @error('applyAmount') border-red-500 @else border-[#F1F5F9] @enderror focus:border-[#1E7CCF] focus:ring-0 transition-all font-black text-[#0F172A] placeholder-[#CBD5E1]"
                                     placeholder="0.00">
+                                @error('applyAmount')
+                                    <p class="mt-1 text-[10px] text-red-600 font-bold ml-1 italic">{{ $message }}</p>
+                                @enderror
                             </div>
                         </div>
-                        <button type="submit"
-                            class="w-full py-4 bg-[#1E7CCF] hover:bg-[#1669B2] text-white rounded-2xl shadow-lg shadow-blue-100 transition-all font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2">
-                            <i data-lucide="check-circle" class="w-4 h-4"></i>
-                            {{ __('Apply Credit Now') }}
+                        <button type="submit" wire:loading.attr="disabled"
+                            class="w-full py-4 bg-[#1E7CCF] hover:bg-[#1669B2] disabled:opacity-50 text-white rounded-2xl shadow-lg shadow-blue-100 transition-all font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2">
+                            <i wire:loading.remove data-lucide="check-circle" class="w-4 h-4"></i>
+                            <i wire:loading data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                            <span wire:loading.remove>{{ __('Apply Credit Now') }}</span>
+                            <span wire:loading>{{ __('Processing...') }}</span>
                         </button>
                     </form>
                 @endif

@@ -66,10 +66,16 @@ class BillingService
                 'date' => Carbon::now(),
             ]);
 
-            // Recalculate paid totals and update invoice status accordingly
-            $paidTotal = $invoice->transactions()->sum('amount');
+            // Refresh current state
+            $invoice->refresh();
 
-            if ($paidTotal >= $invoice->total) {
+            // Status is handled by the model logic usually, but here we update it directly for legacy/background compatibility
+            $totalCents = $invoice->calculateTotal();
+            $paidTotal = $invoice->getTotalPaidAttribute();
+            $creditsApplied = $invoice->credit_applied ?? 0;
+            $balanceCents = max(0, $totalCents - $paidTotal - $creditsApplied);
+
+            if ($balanceCents <= 0) {
                 $invoice->update([
                     'status' => 'Paid',
                     'paid_at' => Carbon::now(),
@@ -77,8 +83,7 @@ class BillingService
 
                 // If this was a credit add invoice, update user balance
                 $this->processInvoiceItems($invoice);
-            } elseif ($paidTotal > 0) {
-                // Partially paid
+            } elseif (($paidTotal + $creditsApplied) > 0) {
                 $invoice->update([
                     'status' => 'Partially Paid',
                 ]);
@@ -95,7 +100,7 @@ class BillingService
     /**
      * Apply a user's credit balance to an invoice.
      */
-    public function applyCreditToInvoice(Invoice $invoice, int $amount): Transaction
+    public function applyCreditToInvoice(Invoice $invoice, int $amount): bool
     {
         return DB::transaction(function () use ($invoice, $amount) {
             $user = $invoice->user()->lockForUpdate()->first();
@@ -104,44 +109,20 @@ class BillingService
                 throw new \InvalidArgumentException('Amount must be greater than zero.');
             }
 
-            $remaining = $invoice->total - $invoice->transactions()->sum('amount');
-            $maxApplicable = min($user->balance, $remaining);
+            if ($user->balance < $amount) {
+                throw new \InvalidArgumentException('Insufficient credit balance.');
+            }
 
-            if ($amount > $maxApplicable) {
-                throw new \InvalidArgumentException('Insufficient balance or amount exceeds remaining invoice balance.');
+            $currentBalanceDue = $invoice->calculateBalanceDue();
+            if ($amount > $currentBalanceDue) {
+                throw new \InvalidArgumentException('Amount exceeds remaining invoice balance.');
             }
 
             // Deduct from user balance
-            $user->balance -= $amount;
-            $user->save();
+            $user->decrement('balance', $amount);
 
-            // Record transaction
-            $transaction = Transaction::create([
-                'invoice_id' => $invoice->id,
-                'user_id' => $user->id,
-                'transaction_id' => null,
-                'payment_method' => 'Credit Balance',
-                'amount' => $amount,
-                'date' => Carbon::now(),
-            ]);
-
-            // Update invoice status (reuse recordPayment behavior)
-            $paidTotal = $invoice->transactions()->sum('amount');
-
-            if ($paidTotal >= $invoice->total) {
-                $invoice->update([
-                    'status' => 'Paid',
-                    'paid_at' => Carbon::now(),
-                ]);
-
-                $this->processInvoiceItems($invoice);
-            } else {
-                $invoice->update([
-                    'status' => 'Partially Paid',
-                ]);
-            }
-
-            return $transaction;
+            // Use the Invoice model's robust application logic
+            return $invoice->applyCredit($amount, "Credit applied from Client Portal balance");
         });
     }
 
