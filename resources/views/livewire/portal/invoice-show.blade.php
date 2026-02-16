@@ -273,7 +273,7 @@
                                         </td>
                                         <td
                                             class="px-6 py-4 text-sm text-right font-black @if($txn->amount > 0) text-[#059669] @else text-[#dc2626] @endif">
-                                            {{ $txn->amount > 0 ? '+ ' : '' }}{{ number_format($txn->amount / 100, 2) }}
+                                            {{ $txn->amount > 0 ? '' : '' }}{{ number_format($txn->amount / 100, 2) }}
                                             {{ strtoupper($invoice->currency) }}
                                         </td>
                                     </tr>
@@ -307,10 +307,6 @@
                     </div>
                 @elseif($invoice->status === 'Unpaid' || $invoice->status === 'Partially Paid')
                     <div class="flex items-center gap-4 p-5 bg-orange-50 rounded-2xl border border-orange-100 mb-6">
-                        <div
-                            class="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center shrink-0 shadow-lg shadow-orange-200">
-                            <i data-lucide="clock" class="text-white w-6 h-6"></i>
-                        </div>
                         <div>
                             <div class="text-orange-800 font-black text-sm">{{ __('Payment Pending') }}</div>
                             <div class="text-orange-600 text-[10px] font-bold uppercase tracking-widest mt-0.5">
@@ -318,51 +314,54 @@
                         </div>
                     </div>
 
-                    <div class="mb-6 px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl relative overflow-hidden">
-                        <div class="text-[10px] text-[#64748B] font-black uppercase tracking-widest mb-1">
-                            {{ __('Your Available Credit') }}</div>
-                        <div class="text-2xl font-black text-[#1e293b]">
-                            {{ number_format(($invoice->user->balance ?? 0) / 100, 2) }} <span
-                                class="text-sm font-bold text-[#64748b]">{{ strtoupper($invoice->currency) }}</span></div>
-                        <i data-lucide="gift"
-                            class="absolute -right-2 top-1/2 -translate-y-1/2 w-12 h-12 text-blue-500 opacity-5 rotate-12"></i>
+                    <div class="mb-6 px-5 py-4 bg-gradient-to-br from-[#F8FAFC] to-[#F1F5F9] border border-[#E2E8F0] rounded-2xl relative overflow-hidden group">
+                        <div class="flex items-center gap-3 mb-2">
+                            <div class="w-8 h-8 bg-blue-100 text-[#1E7CCF] rounded-lg flex items-center justify-center shadow-sm">
+                                <i data-lucide="wallet" class="w-4 h-4"></i>
+                            </div>
+                            <span class="text-[10px] text-[#64748B] font-black uppercase tracking-[0.1em]">{{ __('Your Available Credit') }}</span>
+                        </div>
+                        <div class="flex items-baseline gap-1">
+                            <span class="text-3xl font-black text-[#0F172A]">{{ number_format(($invoice->user->balance ?? 0) / 100, 2) }}</span>
+                            <span class="text-sm font-extrabold text-[#64748B] tracking-tight">{{ strtoupper($invoice->currency) }}</span>
+                        </div>
                     </div>
 
                     <form wire:submit.prevent="applyCredit" class="space-y-4">
-                        <div>
-                            <label
-                                class="block text-[10px] font-black text-[#64748B] uppercase tracking-widest mb-1.5 ml-1">{{ __('Apply Credit to Invoice') }}</label>
-                            <div class="relative">
-                                <span
-                                    class="absolute left-4 top-1/2 -translate-y-1/2 text-[#94a3b8] font-bold">{{ strtoupper($invoice->currency) }}</span>
+                        <div class="space-y-2">
+                            <label class="block text-[10px] font-black text-[#64748B] uppercase tracking-widest ml-1">{{ __('Apply Credit to Invoice') }}</label>
+                            <div class="relative group">
                                 <input type="number" step="0.01" wire:model.defer="applyAmount"
-                                    class="w-full pl-14 pr-4 py-3 rounded-xl border border-[#E2E8F0] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-bold text-[#1e293b]"
+                                    class="w-full pl-16 pr-4 py-4 rounded-2xl border-2 border-[#F1F5F9] focus:border-[#1E7CCF] focus:ring-0 transition-all font-black text-[#0F172A] placeholder-[#CBD5E1]"
                                     placeholder="0.00">
                             </div>
                         </div>
-                        <div class="flex gap-2">
-                            <button type="submit"
-                                class="flex-1 py-3.5 bg-[#1E7CCF] hover:bg-[#1669B2] text-white rounded-xl shadow-lg shadow-blue-200 transition-all font-black uppercase tracking-widest text-[10px]">{{ __('Apply Now') }}</button>
-                            <button type="button"
-                                onclick="@this.set('applyAmount', {{ min(($invoice->user->balance ?? 0) / 100, $balance) }})"
-                                class="py-3 px-4 bg-white hover:bg-slate-50 rounded-xl border border-[#E2E8F0] font-bold text-xs text-[#64748b] transition-colors">{{ __('Max') }}</button>
-                        </div>
+                        <button type="submit"
+                            class="w-full py-4 bg-[#1E7CCF] hover:bg-[#1669B2] text-white rounded-2xl shadow-lg shadow-blue-100 transition-all font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2">
+                            <i data-lucide="check-circle" class="w-4 h-4"></i>
+                            {{ __('Apply Credit Now') }}
+                        </button>
                     </form>
                 @endif
             </div>
 
             <div
-                class="bg-gradient-to-br from-[#1e293b] to-[#0f172a] p-8 rounded-[2rem] border border-[#1e293b] shadow-xl text-white">
-                <h3 class="font-black text-blue-400 uppercase tracking-widest text-[10px] mb-4">
-                    {{ __('Need Support?') }}</h3>
-                <p class="text-sm text-slate-300 font-medium mb-6 leading-relaxed">
-                    {{ __('If you have any questions regarding this invoice or need to discuss payment terms, our team is here to help.') }}
-                </p>
-                <a href="{{ route('portal.support') }}"
-                    class="inline-flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all text-xs font-bold border border-white/10 group">
-                    {{ __('Open Support Ticket') }}
-                    <i data-lucide="arrow-right" class="w-4 h-4 group-hover:translate-x-1 transition-transform"></i>
-                </a>
+                class="bg-[#0F172A] p-8 rounded-[2rem] border border-[#1e293b] shadow-xl text-white relative overflow-hidden group">
+                <div class="relative z-10">
+                    <h3 class="font-black text-blue-400 uppercase tracking-widest text-[10px] mb-4 flex items-center gap-2">
+                        <span class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                        {{ __('Need Support?') }}
+                    </h3>
+                    <p class="text-sm text-slate-300 font-bold mb-6 leading-relaxed">
+                        {{ __('If you have any questions regarding this invoice or need to discuss payment terms, our team is here to help.') }}
+                    </p>
+                    <a href="{{ route('portal.support') }}"
+                        class="inline-flex items-center gap-3 px-6 py-3 bg-[#1E7CCF] hover:bg-[#1669B2] text-white rounded-xl transition-all text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-500/20">
+                        {{ __('Open Support Ticket') }}
+                        <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                    </a>
+                </div>
+                <i data-lucide="help-circle" class="absolute -right-4 -bottom-4 w-32 h-32 text-white opacity-[0.03] -rotate-12 group-hover:rotate-0 transition-transform duration-1000"></i>
             </div>
         </div>
     </div>
