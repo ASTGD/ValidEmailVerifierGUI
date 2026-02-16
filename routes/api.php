@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\Feedback\FeedbackOutcomesController;
+use App\Http\Controllers\Api\Internal\EngineServerController;
+use App\Http\Controllers\Api\Internal\EngineServerProvisioningBundleController;
 use App\Http\Controllers\Api\Monitor\MonitorChecksController;
 use App\Http\Controllers\Api\Monitor\MonitorConfigController;
 use App\Http\Controllers\Api\Monitor\MonitorServersController;
@@ -100,4 +102,22 @@ Route::middleware(['auth:sanctum', EnsureVerifierService::class, 'throttle:verif
         Route::get('config', MonitorConfigController::class)->name('config');
         Route::get('servers', MonitorServersController::class)->name('servers');
         Route::post('checks', MonitorChecksController::class)->name('checks');
+    });
+
+Route::middleware(['go.internal.token', 'throttle:go-internal-api'])
+    ->prefix('internal')
+    ->name('api.internal.')
+    ->group(function () {
+        Route::get('engine-servers', [EngineServerController::class, 'index'])->name('engine-servers.index');
+        Route::post('engine-servers', [EngineServerController::class, 'store'])->name('engine-servers.store');
+        Route::put('engine-servers/{engineServer}', [EngineServerController::class, 'update'])
+            ->name('engine-servers.update');
+        Route::post(
+            'engine-servers/{engineServer}/provisioning-bundles',
+            [EngineServerProvisioningBundleController::class, 'store']
+        )->name('engine-servers.provisioning-bundles.store');
+        Route::get(
+            'engine-servers/{engineServer}/provisioning-bundles/latest',
+            [EngineServerProvisioningBundleController::class, 'showLatest']
+        )->name('engine-servers.provisioning-bundles.latest');
     });
