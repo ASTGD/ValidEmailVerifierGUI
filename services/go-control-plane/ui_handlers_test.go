@@ -90,6 +90,9 @@ func TestSettingsTemplateRendersRuntimeHelpKeys(t *testing.T) {
 	if !strings.Contains(body, "settings-risk-warning") {
 		t.Fatalf("expected settings page to render risk warning container")
 	}
+	if !strings.Contains(body, "settings-risk-warning__action") {
+		t.Fatalf("expected settings page script to include set recommended action hook")
+	}
 	if !strings.Contains(body, "<strong>If enabled:</strong>") {
 		t.Fatalf("expected settings page to render toggle wording")
 	}
@@ -104,5 +107,8 @@ func TestSettingsTemplateRendersRuntimeHelpKeys(t *testing.T) {
 	}
 	if !strings.Contains(body, "runtime-settings-save-button") {
 		t.Fatalf("expected settings page to include save button id for risk guard")
+	}
+	if !strings.Contains(body, "runtime-settings-set-all-recommended") {
+		t.Fatalf("expected settings page to include set all to recommended button")
 	}
 }
