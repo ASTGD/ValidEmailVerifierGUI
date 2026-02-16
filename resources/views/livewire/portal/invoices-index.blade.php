@@ -55,7 +55,11 @@
                     @forelse($this->invoices as $invoice)
                         <tr class="hover:bg-[#F8FAFC] transition-colors">
                             <td class="px-8 py-5">
-                                <div class="font-bold text-[#0F172A]">{{ $invoice->invoice_number }}</div>
+                                <a href="{{ route('portal.invoices.show', $invoice->id) }}"
+                                    class="text-[#64748B] hover:text-[#1E7CCF] transition-colors inline-block"
+                                    title="{{ __('View Invoice') }}">
+                                    <b># {{ $invoice->invoice_number }}</b>
+                                </a>
                             </td>
                             <td class="px-8 py-5 text-sm font-medium text-[#334155]">
                                 {{ $invoice->date?->format('M d, Y') }}
@@ -69,11 +73,11 @@
                             <td class="px-8 py-5">
                                 <span
                                     class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase
-                                                                                                    @if($invoice->status === 'Paid') bg-green-100 text-green-700
-                                                                                                    @elseif($invoice->status === 'Partially Paid') bg-orange-100 text-orange-700
-                                                                                                    @elseif($invoice->status === 'Unpaid') bg-yellow-100 text-yellow-700
-                                                                                                    @elseif($invoice->status === 'Cancelled') bg-red-100 text-red-700
-                                                                                                    @else bg-gray-100 text-gray-700 @endif">
+                                                                                                                                                                        @if($invoice->status === 'Paid') bg-green-100 text-green-700
+                                                                                                                                                                        @elseif($invoice->status === 'Partially Paid') bg-orange-100 text-orange-700
+                                                                                                                                                                        @elseif($invoice->status === 'Unpaid') bg-yellow-100 text-yellow-700
+                                                                                                                                                                        @elseif($invoice->status === 'Cancelled') bg-red-100 text-red-700
+                                                                                                                                                                        @else bg-gray-100 text-gray-700 @endif">
                                     {{ $invoice->status }}
                                 </span>
                             </td>
