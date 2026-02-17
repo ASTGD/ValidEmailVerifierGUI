@@ -18,6 +18,15 @@
 3. Prefer queue-lane-specific actions over global restarts.
 4. If unsure, use conservative values and monitor for one window.
 
+## Engine Server Fallback (Break-Glass Only)
+1. Normal daily engine operations must be done from Go: `/verifier-engine-room/workers`.
+2. Laravel `/admin/engine-servers` is emergency fallback only.
+3. Fallback is gated by config:
+- `ENGINE_SERVERS_FALLBACK_UI_ENABLED`
+- `ENGINE_SERVERS_FALLBACK_UI_SUPER_ADMIN_ONLY`
+- `ENGINE_SERVERS_FALLBACK_UI_SUPER_ADMIN_EMAILS`
+4. Keep fallback disabled by default in production. Enable only during Go control-plane incident response and disable again after recovery.
+
 ## Related Links
 - Horizon operations: `/internal/docs/horizon/queue-operations`
 - Go runtime settings: `/internal/docs/go/runtime-settings`

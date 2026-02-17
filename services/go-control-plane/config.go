@@ -58,7 +58,10 @@ type Config struct {
 	LaravelInternalAPIBaseURL                 string
 	LaravelInternalAPIToken                   string
 	LaravelInternalAPITimeoutSeconds          int
+	LaravelInternalAPIRetryMax                int
+	LaravelInternalAPIRetryBackoffMS          int
 	ServerRegistryUIEnabled                   bool
+	ServerRegistryRequireRuntimeMatch         bool
 	OpsDocsURL                                string
 	PolicyPayloadStrictValidationEnabled      bool
 	PolicyCanaryAutopilotEnabled              bool
@@ -90,6 +93,7 @@ func LoadConfig() (Config, error) {
 	cfg.LaravelInternalAPIBaseURL = strings.TrimSpace(os.Getenv("LARAVEL_INTERNAL_API_BASE_URL"))
 	cfg.LaravelInternalAPIToken = strings.TrimSpace(os.Getenv("LARAVEL_INTERNAL_API_TOKEN"))
 	cfg.ServerRegistryUIEnabled = parseBool(os.Getenv("GO_SERVER_REGISTRY_UI_ENABLED"))
+	cfg.ServerRegistryRequireRuntimeMatch = parseBool(os.Getenv("GO_SERVER_REGISTRY_REQUIRE_RUNTIME_MATCH"))
 	cfg.OpsDocsURL = strings.TrimSpace(os.Getenv("OPS_DOCS_URL"))
 
 	if cfg.LaravelInternalAPIBaseURL == "" {
@@ -107,6 +111,30 @@ func LoadConfig() (Config, error) {
 		}
 	}
 	cfg.LaravelInternalAPITimeoutSeconds = laravelInternalTimeoutSeconds
+
+	laravelInternalRetryMax := 2
+	if value := strings.TrimSpace(os.Getenv("LARAVEL_INTERNAL_API_RETRY_MAX")); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return cfg, fmt.Errorf("LARAVEL_INTERNAL_API_RETRY_MAX must be an integer")
+		}
+		if parsed >= 0 {
+			laravelInternalRetryMax = parsed
+		}
+	}
+	cfg.LaravelInternalAPIRetryMax = laravelInternalRetryMax
+
+	laravelInternalRetryBackoffMS := 250
+	if value := strings.TrimSpace(os.Getenv("LARAVEL_INTERNAL_API_RETRY_BACKOFF_MS")); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return cfg, fmt.Errorf("LARAVEL_INTERNAL_API_RETRY_BACKOFF_MS must be an integer")
+		}
+		if parsed >= 0 {
+			laravelInternalRetryBackoffMS = parsed
+		}
+	}
+	cfg.LaravelInternalAPIRetryBackoffMS = laravelInternalRetryBackoffMS
 
 	if cfg.Port == "" {
 		return cfg, fmt.Errorf("PORT is required")

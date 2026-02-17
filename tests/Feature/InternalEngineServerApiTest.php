@@ -26,9 +26,9 @@ class InternalEngineServerApiTest extends TestCase
     {
         $this->getJson('/api/internal/engine-servers')
             ->assertUnauthorized()
-            ->assertJson([
-                'error' => 'unauthorized',
-            ]);
+            ->assertJsonPath('error_code', 'unauthorized')
+            ->assertJsonPath('message', 'Unauthorized.')
+            ->assertJsonStructure(['request_id']);
     }
 
     public function test_internal_engine_server_api_lists_and_mutates_servers(): void
@@ -148,6 +148,44 @@ class InternalEngineServerApiTest extends TestCase
             'subject_type' => EngineServer::class,
             'subject_id' => (string) $server->id,
         ]);
+    }
+
+    public function test_internal_engine_server_api_latest_bundle_not_found_uses_error_envelope(): void
+    {
+        $server = EngineServer::query()->create([
+            'name' => 'engine-without-bundle',
+            'ip_address' => '10.0.0.14',
+            'is_active' => true,
+            'drain_mode' => false,
+        ]);
+
+        $this->withHeaders($this->internalHeaders())
+            ->getJson('/api/internal/engine-servers/'.$server->id.'/provisioning-bundles/latest')
+            ->assertStatus(404)
+            ->assertJsonPath('error_code', 'bundle_not_found')
+            ->assertJsonPath('message', 'No provisioning bundle found.')
+            ->assertJsonStructure(['request_id']);
+    }
+
+    public function test_internal_engine_server_api_validation_errors_use_standard_error_envelope(): void
+    {
+        $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/engine-servers', [
+                'name' => '',
+                'ip_address' => '',
+                'is_active' => true,
+                'drain_mode' => false,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('error_code', 'validation_failed')
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonStructure([
+                'request_id',
+                'errors' => [
+                    'name',
+                    'ip_address',
+                ],
+            ]);
     }
 
     /**

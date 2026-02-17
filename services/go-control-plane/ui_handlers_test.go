@@ -132,12 +132,15 @@ func TestWorkersTemplateRendersRegistryTabAndForms(t *testing.T) {
 		ServerRegistry: EngineServerRegistryPageData{
 			Enabled:    true,
 			Configured: true,
+			Filter:     "all",
 			Servers: []LaravelEngineServerRecord{
 				{
-					ID:        7,
-					Name:      "engine-7",
-					IPAddress: "10.0.0.7",
-					Status:    "online",
+					ID:                   7,
+					Name:                 "engine-7",
+					IPAddress:            "10.0.0.7",
+					Status:               "online",
+					RuntimeMatchStatus:   "matched",
+					RuntimeMatchWorkerID: "7",
 				},
 			},
 			VerifierDomains: []LaravelVerifierDomainOption{
@@ -163,6 +166,13 @@ func TestWorkersTemplateRendersRegistryTabAndForms(t *testing.T) {
 				},
 				InstallCommandTemplate: "curl -fsSL \"https://app.test/install.sh\" | bash -s -- --ghcr-user \"<ghcr-username>\" --ghcr-token \"<ghcr-token>\"",
 			},
+			OrphanWorkers: []WorkerSummary{
+				{
+					WorkerID:  "orphan-1",
+					Host:      "orphan-host",
+					IPAddress: "10.9.0.1",
+				},
+			},
 		},
 	})
 
@@ -180,4 +190,87 @@ func TestWorkersTemplateRendersRegistryTabAndForms(t *testing.T) {
 	assertContains("Latest Provisioning Bundle")
 	assertContains("Create Server")
 	assertContains("Save Changes")
+	assertContains("Runtime Match")
+	assertContains("Runtime-only orphan workers")
+	assertContains("registry_filter=matched")
+}
+
+func TestApplyRegistryRuntimeMatchMarksMatchedAndOrphanWorkers(t *testing.T) {
+	servers := []LaravelEngineServerRecord{
+		{ID: 1, Name: "srv-1", IPAddress: "10.0.0.1", Status: "online"},
+		{ID: 2, Name: "srv-2", IPAddress: "10.0.0.2", Status: "offline"},
+	}
+	workers := []WorkerSummary{
+		{WorkerID: "1", Host: "srv-1", IPAddress: "10.0.0.1"},
+		{WorkerID: "orphan-1", Host: "unknown-host", IPAddress: "10.0.0.99"},
+	}
+
+	matched, orphans := applyRegistryRuntimeMatch(servers, workers)
+	if len(matched) != 2 {
+		t.Fatalf("expected 2 servers after match processing, got %d", len(matched))
+	}
+	if matched[0].RuntimeMatchStatus != "matched" {
+		t.Fatalf("expected first server to be matched, got %q", matched[0].RuntimeMatchStatus)
+	}
+	if matched[1].RuntimeMatchStatus != "no_runtime_heartbeat" {
+		t.Fatalf("expected second server to be mismatch, got %q", matched[1].RuntimeMatchStatus)
+	}
+	if len(orphans) != 1 || orphans[0].WorkerID != "orphan-1" {
+		t.Fatalf("expected orphan worker orphan-1, got %#v", orphans)
+	}
+}
+
+func TestMapRegistryActionErrorUsesStatusSpecificMessages(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		expect string
+	}{
+		{
+			name: "unauthorized",
+			err: &LaravelAPIError{
+				StatusCode: 401,
+				Message:    "Unauthorized.",
+				RequestID:  "req-401",
+			},
+			expect: "authentication failed",
+		},
+		{
+			name: "validation",
+			err: &LaravelAPIError{
+				StatusCode: 422,
+				Message:    "Validation failed.",
+				RequestID:  "req-422",
+			},
+			expect: "Validation failed",
+		},
+		{
+			name: "rate_limited",
+			err: &LaravelAPIError{
+				StatusCode: 429,
+				Message:    "Too many requests.",
+				RequestID:  "req-429",
+			},
+			expect: "rate-limited",
+		},
+		{
+			name: "server_error",
+			err: &LaravelAPIError{
+				StatusCode: 500,
+				Message:    "Server error.",
+				RequestID:  "req-500",
+			},
+			expect: "temporarily unavailable",
+		},
+	}
+
+	for _, testCase := range tests {
+		message := mapRegistryActionError("load server registry", testCase.err)
+		if !strings.Contains(message, testCase.expect) {
+			t.Fatalf("%s: expected %q in %q", testCase.name, testCase.expect, message)
+		}
+		if !strings.Contains(message, "request id:") {
+			t.Fatalf("%s: expected request id in %q", testCase.name, message)
+		}
+	}
 }

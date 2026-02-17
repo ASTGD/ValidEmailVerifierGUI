@@ -8,6 +8,8 @@ use App\Filament\Resources\EngineServers\Pages\ListEngineServers;
 use App\Filament\Resources\EngineServers\Schemas\EngineServerForm;
 use App\Filament\Resources\EngineServers\Tables\EngineServersTable;
 use App\Models\EngineServer;
+use App\Models\User;
+use App\Support\EngineServerFallbackAccess;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -28,6 +30,30 @@ class EngineServerResource extends Resource
     protected static string|UnitEnum|null $navigationGroup = 'Verifier Engine';
 
     protected static ?int $navigationSort = 1;
+
+    public static function canAccess(): bool
+    {
+        $user = auth()->user();
+
+        return $user instanceof User
+            ? EngineServerFallbackAccess::userCanAccess($user)
+            : false;
+    }
+
+    public static function canViewAny(): bool
+    {
+        return static::canAccess();
+    }
+
+    public static function canCreate(): bool
+    {
+        return static::canAccess();
+    }
+
+    public static function canEdit(mixed $record): bool
+    {
+        return static::canAccess();
+    }
 
     public static function form(Schema $schema): Schema
     {

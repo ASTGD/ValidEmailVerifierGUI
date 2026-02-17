@@ -31,7 +31,7 @@ class EngineWarmupOverview extends StatsOverviewWidget
             $overallColor = 'warning';
         }
 
-        $serversUrl = EngineServerResource::getUrl('index');
+        $serversUrl = $this->resolveEngineWorkersUrl();
 
         return [
             Stat::make('Healthy servers', $healthy)
@@ -51,5 +51,22 @@ class EngineWarmupOverview extends StatsOverviewWidget
                 ->color($overallColor)
                 ->url($serversUrl),
         ];
+    }
+
+    private function resolveEngineWorkersUrl(): string
+    {
+        $configuredUrl = rtrim((string) config('services.go_control_plane.base_url', ''), '/');
+        if ($configuredUrl !== '') {
+            if (! str_contains($configuredUrl, '/verifier-engine-room')) {
+                return $configuredUrl.'/verifier-engine-room/workers';
+            }
+
+            $normalized = preg_replace('#/verifier-engine-room(?:/(?:overview|alerts|pools|settings|workers))?$#', '/verifier-engine-room', $configuredUrl);
+            $normalized = is_string($normalized) ? rtrim($normalized, '/') : $configuredUrl;
+
+            return $normalized.'/workers';
+        }
+
+        return EngineServerResource::getUrl('index');
     }
 }

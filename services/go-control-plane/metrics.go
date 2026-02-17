@@ -151,6 +151,48 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(&b, "go_control_plane_provider_workers{provider=\"%s\",mode=\"%s\",status=\"%s\"} %d\n", providerLabel, modeLabel, statusLabel, provider.Workers)
 	}
 
+	if s.laravelEngineClient != nil {
+		snapshot := s.laravelEngineClient.MetricsSnapshot()
+
+		b.WriteString("# HELP engine_internal_api_requests_total Go-to-Laravel internal API requests by action and status class.\n")
+		b.WriteString("# TYPE engine_internal_api_requests_total counter\n")
+		for key, count := range snapshot.RequestsByActionClass {
+			parts := strings.SplitN(key, "|", 2)
+			actionLabel := promLabelValue(parts[0])
+			statusClass := "unknown"
+			if len(parts) > 1 {
+				statusClass = promLabelValue(parts[1])
+			}
+			fmt.Fprintf(&b, "engine_internal_api_requests_total{action=\"%s\",status_class=\"%s\"} %d\n", actionLabel, statusClass, count)
+		}
+
+		b.WriteString("# HELP engine_internal_api_failures_total Go-to-Laravel internal API failures by action/status/error_code.\n")
+		b.WriteString("# TYPE engine_internal_api_failures_total counter\n")
+		for key, count := range snapshot.FailuresByActionClass {
+			parts := strings.SplitN(key, "|", 2)
+			actionLabel := promLabelValue(parts[0])
+			statusClass := "unknown"
+			if len(parts) > 1 {
+				statusClass = promLabelValue(parts[1])
+			}
+			fmt.Fprintf(&b, "engine_internal_api_failures_total{action=\"%s\",status_class=\"%s\"} %d\n", actionLabel, statusClass, count)
+		}
+		for key, count := range snapshot.FailureByCode {
+			parts := strings.SplitN(key, "|", 2)
+			actionLabel := promLabelValue(parts[0])
+			errorCode := "unknown"
+			if len(parts) > 1 {
+				errorCode = promLabelValue(parts[1])
+			}
+			fmt.Fprintf(&b, "engine_internal_api_failures_total{action=\"%s\",status_class=\"error\",error_code=\"%s\"} %d\n", actionLabel, errorCode, count)
+		}
+
+		b.WriteString("# HELP engine_provision_bundle_duration_ms Total duration for provisioning bundle API calls in milliseconds.\n")
+		b.WriteString("# TYPE engine_provision_bundle_duration_ms summary\n")
+		fmt.Fprintf(&b, "engine_provision_bundle_duration_ms_sum %s\n", formatPromFloat(snapshot.ProvisionDurationSumMS))
+		fmt.Fprintf(&b, "engine_provision_bundle_duration_ms_count %d\n", snapshot.ProvisionDurationCount)
+	}
+
 	_, _ = w.Write([]byte(b.String()))
 }
 
