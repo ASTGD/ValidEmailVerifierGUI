@@ -142,10 +142,10 @@
                                 <span class="text-sm font-black">{{ number_format(auth()->user()->balance / 100, 2) }}
                                     {{ strtoupper(auth()->user()->currency ?: 'USD') }}</span>
                             </div>
-                            <a href="{{ route('billing.index') }}"
-                                class="bg-white/20 p-1 rounded hover:bg-white/30 transition-colors">
+                            <button @click="Livewire.dispatch('openAddCreditModal')"
+                                class="bg-white/20 p-1 rounded hover:bg-white/30 transition-colors cursor-pointer">
                                 <i data-lucide="plus" class="w-3 h-3 text-white"></i>
-                            </a>
+                            </button>
                         </div>
                         <div class="relative" x-data="{ open: false }">
                             <button @click="open = !open" @click.away="open = false"
@@ -275,6 +275,7 @@
         </div>
     </div>
 
+    @livewire('portal.add-credit-modal')
     @livewireScripts
     <script>
         const initLucide = () => {

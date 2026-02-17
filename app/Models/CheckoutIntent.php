@@ -19,6 +19,7 @@ class CheckoutIntent extends Model
     protected $fillable = [
         'user_id',
         'status',
+        'type',
         'original_filename',
         'temp_disk',
         'temp_key',

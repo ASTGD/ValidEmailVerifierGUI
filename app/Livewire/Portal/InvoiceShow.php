@@ -52,6 +52,26 @@ class InvoiceShow extends Component
         session()->flash('status', __('Credit applied successfully.'));
     }
 
+    public function payNow()
+    {
+        $user = Auth::user();
+        $balanceCents = (int) round($this->invoice->calculateBalanceDue() * 100);
+
+        if ($balanceCents <= 0) {
+            session()->flash('error', __('This invoice is already fully paid.'));
+            return;
+        }
+
+        return $user->checkoutCharge($balanceCents, __('Payment for Invoice #') . $this->invoice->invoice_number, 1, [
+            'success_url' => route('portal.invoices.show', $this->invoice) . '?payment=success',
+            'cancel_url' => route('portal.invoices.show', $this->invoice),
+            'metadata' => [
+                'invoice_id' => $this->invoice->id,
+                'type' => 'invoice_payment',
+            ],
+        ]);
+    }
+
     public function render()
     {
         return view('livewire.portal.invoice-show');

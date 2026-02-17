@@ -168,7 +168,10 @@ class CustomersTable
 
                         $billing->recordPayment($invoice, $amountCents, 'Manual', 'Admin Adjustment');
 
-                        \Filament\Support\Facades\FilamentView::notify('success', 'Credit added successfully.');
+                        \Filament\Notifications\Notification::make()
+                            ->title('Credit added successfully.')
+                            ->success()
+                            ->send();
                     }),
                 ViewAction::make(),
                 EditAction::make(),

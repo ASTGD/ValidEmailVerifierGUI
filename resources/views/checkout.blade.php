@@ -39,26 +39,38 @@
 
             <!-- Left: Order Details (2 Columns) -->
             <div class="lg:col-span-2 space-y-8">
-                <h1 class="text-3xl font-black text-[#0F172A]">{{ __('Complete Your Order') }}</h1>
+                <h1 class="text-3xl font-black text-[#0F172A]">
+                    {{ $intent->type === 'credit' ? __('Add Funds to Balance') : __('Complete Your Order') }}
+                </h1>
 
                 <!-- 1. Review Details -->
                 <div class="bg-white p-8 rounded-3xl border border-[#E2E8F0] shadow-sm">
                     <h3 class="text-lg font-bold mb-6 flex items-center gap-2">
                         <span
                             class="w-8 h-8 bg-[#E9F2FB] text-[#1E7CCF] rounded-full flex items-center justify-center text-sm">1</span>
-                        {{ __('Review Order Details') }}
+                        {{ $intent->type === 'credit' ? __('Review Deposit Details') : __('Review Order Details') }}
                     </h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="p-4 bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0]">
-                            <p class="text-xs font-bold text-[#64748B] uppercase">{{ __('Emails to Verify') }}</p>
-                            <p class="text-2xl font-black text-[#0F172A]">{{ number_format($intent->email_count) }}</p>
-                            <p class="text-xs text-[#94A3B8] mt-2">{{ $intent->original_filename }}</p>
-                        </div>
+                        @if ($intent->type === 'credit')
+                            <div class="p-4 bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0]">
+                                <p class="text-xs font-bold text-[#64748B] uppercase">{{ __('Deposit Type') }}</p>
+                                <p class="text-2xl font-black text-[#0F172A]">{{ __('Credit Balance') }}</p>
+                                <p class="text-xs text-[#94A3B8] mt-2">
+                                    {{ __('Funds will be added to your account balance.') }}
+                                </p>
+                            </div>
+                        @else
+                            <div class="p-4 bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0]">
+                                <p class="text-xs font-bold text-[#64748B] uppercase">{{ __('Emails to Verify') }}</p>
+                                <p class="text-2xl font-black text-[#0F172A]">{{ number_format($intent->email_count) }}</p>
+                                <p class="text-xs text-[#94A3B8] mt-2">{{ $intent->original_filename }}</p>
+                            </div>
+                        @endif
                         <div class="p-4 bg-[#E9F2FB] rounded-2xl border border-[#1E7CCF]/10">
                             <p class="text-xs font-bold text-[#1E7CCF] uppercase">{{ __('Total Price') }}</p>
                             <p class="text-2xl font-black text-[#1E7CCF]">{{ $currencyPrefix }}{{ $formattedTotal }}</p>
                             <p class="text-xs text-[#1E7CCF] mt-2 font-semibold">
-                                {{ $intent->pricingPlan?->name ?? __('Pay-as-you-go') }}
+                                {{ $intent->type === 'credit' ? __('Funds Deposit') : ($intent->pricingPlan?->name ?? __('Pay-as-you-go')) }}
                             </p>
                         </div>
                     </div>
@@ -92,7 +104,7 @@
                             {{ __('Select Payment Method') }}
                         </h3>
 
-                        @if(($totals['available_credit'] ?? 0) > 0)
+                        @if($intent->type !== 'credit' && ($totals['available_credit'] ?? 0) > 0)
                             <div class="mb-6 p-4 rounded-2xl border border-green-200 bg-green-50">
                                 <label class="flex items-center gap-3 cursor-pointer">
                                     <input type="checkbox" x-model="useCredit"

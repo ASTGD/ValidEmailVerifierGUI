@@ -106,11 +106,17 @@ class CheckoutController
             abort(403);
         }
 
-        $order = $service->completeIntent($intent, $request->user());
+        $result = $service->completeIntent($intent, $request->user());
+
+        if ($intent->type === 'credit') {
+            return redirect()
+                ->route('portal.dashboard')
+                ->with('status', __('Funds added to your balance successfully.'));
+        }
 
         return redirect()
             ->route('portal.orders.index')
-            ->with('status', __('Order :id created and awaiting activation.', ['id' => $order->id]));
+            ->with('status', __('Order :id created and awaiting activation.', ['id' => $result->id]));
     }
 
     public function manualPayment(Request $request, CheckoutIntent $intent, CheckoutIntentService $service): RedirectResponse
@@ -120,9 +126,25 @@ class CheckoutController
         }
 
         // Finalize intent as unpaid
-        $order = $service->completeIntent($intent, $request->user(), false);
+        $result = $service->completeIntent($intent, $request->user(), false);
+
+        if ($intent->type === 'credit') {
+            $invoice = \App\Models\Invoice::where('user_id', $request->user()->id)
+                ->where('status', 'Unpaid')
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            if ($invoice) {
+                return redirect()
+                    ->route('portal.invoices.show', $invoice)
+                    ->with('status', __('Unpaid invoice created for your funds deposit.'));
+            }
+
+            return redirect()->route('portal.dashboard');
+        }
 
         // Find the invoice associated with this order
+        $order = $result;
         $invoice = \App\Models\Invoice::whereHas('items', function ($query) use ($order) {
             $query->where('rel_type', get_class($order))->where('rel_id', $order->id);
         })->first();

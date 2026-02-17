@@ -231,9 +231,14 @@
                     <h2
                         class="text-[11px] font-black text-[#64748B] uppercase tracking-widest mb-4 border-b border-[#f1f5f9] pb-3">
                         {{ __('Important Notes') }}</h2>
-                    <p class="text-[#475569] font-medium leading-relaxed text-sm">
-                        {{ $invoice->notes }}
-                    </p>
+                    <ul class="space-y-3">
+                        @foreach(array_filter(explode("\n", $invoice->notes)) as $note)
+                            <li class="flex items-start gap-3">
+                                <span class="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#1E7CCF] shrink-0"></span>
+                                <span class="text-[#475569] font-medium leading-relaxed text-sm">{{ trim($note) }}</span>
+                            </li>
+                        @endforeach
+                    </ul>
                 </div>
             @endif
 
@@ -261,7 +266,7 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-[#f1f5f9]">
-                                @foreach($invoice->transactions as $txn)
+                                @foreach($invoice->transactions->sortByDesc('date') as $txn)
                                     <tr>
                                         <td class="px-6 py-4 text-xs font-medium text-[#475569]">
                                             {{ $txn->date->format('M d, Y - H:i') }}</td>
@@ -307,6 +312,22 @@
                             <div class="text-red-800 font-black text-sm">{{ __('Payment Pending') }}</div>
                             <div class="text-red-600 text-[10px] font-bold uppercase tracking-widest mt-0.5">
                                 {{ __('Due by') }} {{ $invoice->due_date?->format('M d, Y') }}</div>
+                        </div>
+                    </div>
+
+                    <div class="mb-6 space-y-3">
+                         <button wire:click="payNow" wire:loading.attr="disabled"
+                            class="w-full py-5 bg-[#059669] hover:bg-[#047857] text-white rounded-2xl shadow-xl shadow-green-100 transition-all font-black uppercase tracking-widest text-sm flex items-center justify-center gap-3 group">
+                            <i wire:loading.remove data-lucide="credit-card" class="w-5 h-5 group-hover:scale-110 transition-transform"></i>
+                            <i wire:loading data-lucide="loader-2" class="w-5 h-5 animate-spin"></i>
+                            <span wire:loading.remove>{{ __('Pay via Stripe') }}</span>
+                            <span wire:loading>{{ __('Redirecting...') }}</span>
+                        </button>
+                        
+                        <div class="flex items-center gap-2 justify-center py-2">
+                             <span class="h-px bg-[#E2E8F0] flex-1"></span>
+                             <span class="text-[10px] font-black text-[#94A3B8] uppercase tracking-widest px-2">{{ __('Or use credit') }}</span>
+                             <span class="h-px bg-[#E2E8F0] flex-1"></span>
                         </div>
                     </div>
 

@@ -60,6 +60,22 @@ class CheckoutIntentService
         return $intent;
     }
 
+    public function createCreditIntent(int $amountCents, User $user, string $currency = 'usd'): CheckoutIntent
+    {
+        $intent = new CheckoutIntent([
+            'user_id' => $user->id,
+            'status' => CheckoutIntentStatus::Pending,
+            'type' => 'credit',
+            'amount_cents' => $amountCents,
+            'currency' => $currency,
+            'expires_at' => now()->addMinutes((int) config('verifier.checkout_intent_ttl_minutes', 60)),
+        ]);
+        $intent->id = (string) Str::uuid();
+        $intent->save();
+
+        return $intent;
+    }
+
     public function calculateTotals(CheckoutIntent $intent, User $user, bool $useCredit = false): array
     {
         $total = $intent->amount_cents;
@@ -135,14 +151,24 @@ class CheckoutIntentService
         $metadata = [
             'checkout_intent_id' => $intent->id,
             'user_id' => (string) $user->id,
-            'email_count' => (string) $intent->email_count,
+            'type' => $intent->type === 'credit' ? 'credit_deposit' : 'order_payment',
         ];
 
+        if ($intent->email_count) {
+            $metadata['email_count'] = (string) $intent->email_count;
+        }
+
         $brand = config('verifier.brand_name') ?: config('app.name');
-        $productName = $brand ?: __('Email Verification');
-        $description = __('Email verification for :count emails', [
-            'count' => number_format($intent->email_count),
-        ]);
+
+        if ($intent->type === 'credit') {
+            $productName = __('Account Credit');
+            $description = __('Funds deposit to account balance');
+        } else {
+            $productName = $brand ?: __('Email Verification');
+            $description = __('Email verification for :count emails', [
+                'count' => number_format($intent->email_count),
+            ]);
+        }
 
         $lineItems = [
             [
@@ -175,9 +201,12 @@ class CheckoutIntentService
         return $checkout;
     }
 
-    public function completeIntent(CheckoutIntent $intent, User $user, bool $isPaid = true): VerificationOrder
+    public function completeIntent(CheckoutIntent $intent, User $user, bool $isPaid = true): VerificationOrder|bool
     {
         if ($intent->status !== CheckoutIntentStatus::Pending) {
+            if ($intent->type === 'credit') {
+                return true;
+            }
             if ($intent->order) {
                 return $intent->order;
             }
@@ -197,47 +226,39 @@ class CheckoutIntentService
                 $intent->user_id = $user->id;
             }
 
-            // If credit was applied in a partial payment scenario (Stripe flow),
-            // we deduct it now that the Stripe payment succeeded.
-            // If it was a full credit payment, we already deducted it in processPayment.
-            // How to distinguish? processPayment calls completeIntent immediately for full credit.
-            // For Stripe flow, this is called via webhook or success page.
-            // We should only deduct if we haven't already.
-            // But checking if validation order exists handles re-entrancy.
-            // We need to know if we are in the "Stripe callback" flow.
-            // If intent->stripe_session_id is set, it might be Stripe flow.
-            // But simpler: Check if credit_applied > 0.
+            if ($intent->type === 'credit') {
+                $intent->status = CheckoutIntentStatus::Completed;
+                $intent->paid_at = $isPaid ? ($intent->paid_at ?: now()) : null;
+                $intent->save();
 
-            // NOTE: For full credit payment, we deduct BEFORE calling this to ensure balance atomicity in transaction.
-            // For partial payment, we should deduct NOW.
-            // We can re-fetch user to get fresh balance.
+                $invoice = $this->billing->createInvoice($user, [
+                    [
+                        'description' => __('Credit Balance Deposit'),
+                        'amount' => $intent->amount_cents,
+                        'type' => 'Credit',
+                    ]
+                ], [
+                    'status' => $isPaid ? 'Paid' : 'Unpaid',
+                    'date' => now(),
+                    'paid_at' => $isPaid ? now() : null,
+                ]);
 
-            // Let's refine the logic:
-            // ALWAYS deduct credit here if it's set on intent, assuming the caller (processPayment) didn't do it?
-            // "processPayment" for full credit does: deduct, then call completeIntent.
-            // "processPayment" for partial does: set credit_applied, start stripe.
-            // "completeIntent" (called by Stripe success) see credit_applied. It should deduct it.
+                if ($isPaid) {
+                    $gateway = $intent->stripe_payment_intent_id ? 'Stripe' : 'Manual';
+                    $ref = $intent->stripe_payment_intent_id;
+                    $this->billing->recordPayment($invoice, $intent->amount_cents, $gateway, $ref);
 
-            // DANGER: Double deduction if processPayment calls completeIntent.
-            // Solution: processPayment should NOT deduct. calculateTotals is just calculation.
-            // completeIntent should handle ALL deductions.
+                    // User balance is updated by recordPayment or we should do it here if it's credit deposit?
+                    // Usually recordPayment in BillingService handles balance if type is Deposit?
+                    // Let's check BillingService.
+                }
 
-            // Let's revert processPayment deduction logic and put it all in completeIntent.
+                return true;
+            }
 
             $creditToDeduct = $isPaid ? ($intent->credit_applied ?? 0) : 0;
             if ($creditToDeduct > 0) {
                 $user->refresh();
-                // Ensure user still has balance? Even if valid, race condition?
-                // Given we reserved it in intent, strictly speaking we didn't "reserve" it in DB.
-                // But for this app, just deducting it is fine.
-                if ($user->balance < $creditToDeduct) {
-                    // Fail? Or put into negative?
-                    // Let's allow negative for edge cases or fail.
-                    // For now, fail safe:
-                    // throw new \Exception("Insufficient balance.");
-                    // But we already took money from Stripe! We can't fail easily.
-                    // Let's just deduct.
-                }
                 $user->balance -= $creditToDeduct;
                 $user->save();
             }
