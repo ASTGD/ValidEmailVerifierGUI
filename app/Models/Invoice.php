@@ -248,7 +248,7 @@ class Invoice extends Model
 
     public function getFormattedBalanceDueAttribute(): string
     {
-        $balance = $this->balance_due ?? $this->calculateBalanceDue();
+        $balance = $this->calculateBalanceDue();
         return number_format($balance / 100, 2) . ' ' . strtoupper($this->currency);
     }
 }

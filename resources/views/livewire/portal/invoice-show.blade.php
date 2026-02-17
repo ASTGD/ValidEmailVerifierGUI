@@ -295,10 +295,6 @@
 
                 @if($invoice->status === 'Paid')
                     <div class="flex items-center gap-4 p-5 bg-green-50 rounded-2xl border border-green-100">
-                        <div
-                            class="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center shrink-0 shadow-lg shadow-green-200">
-                            <i data-lucide="check" class="text-white w-6 h-6"></i>
-                        </div>
                         <div>
                             <div class="text-green-800 font-black text-sm">{{ __('Invoice Fully Paid') }}</div>
                             <div class="text-green-600 text-[10px] font-bold uppercase tracking-widest mt-0.5">
@@ -306,10 +302,10 @@
                         </div>
                     </div>
                 @elseif($invoice->status === 'Unpaid' || $invoice->status === 'Partially Paid')
-                    <div class="flex items-center gap-4 p-5 bg-orange-50 rounded-2xl border border-orange-100 mb-6">
+                    <div class="flex items-center gap-4 p-5 bg-red-50 rounded-2xl border border-red-100 mb-6">
                         <div>
-                            <div class="text-orange-800 font-black text-sm">{{ __('Payment Pending') }}</div>
-                            <div class="text-orange-600 text-[10px] font-bold uppercase tracking-widest mt-0.5">
+                            <div class="text-red-800 font-black text-sm">{{ __('Payment Pending') }}</div>
+                            <div class="text-red-600 text-[10px] font-bold uppercase tracking-widest mt-0.5">
                                 {{ __('Due by') }} {{ $invoice->due_date?->format('M d, Y') }}</div>
                         </div>
                     </div>

@@ -176,9 +176,8 @@ class InvoiceForm
                                                         $total = max(0, $subtotal + $tax - $discount);
 
                                                         $paidInCents = $record ? $record->transactions()->sum('amount') : 0;
-                                                        $creditAppliedInCents = $record ? ($record->credit_applied ?? 0) : 0;
-
-                                                        $receivedInDollars = ($paidInCents + $creditAppliedInCents) / 100;
+                                                        // No longer add credit_applied separately because they are now recorded as transactions
+                                                        $receivedInDollars = $paidInCents / 100;
                                                         $balanceDue = ($status === 'Paid') ? 0 : max(0, $total - $receivedInDollars);
 
                                                         $accentColor = $balanceDue > 0 ? '#dc2626' : '#16a34a';
@@ -413,11 +412,8 @@ class InvoiceForm
                                             ->content(function ($record) {
                                                 if (!$record)
                                                     return '0.00 USD';
-                                                $availableCredit = \App\Models\Credit::where('user_id', $record->user_id)
-                                                    ->whereNull('invoice_id')
-                                                    ->where('amount', '>', 0)
-                                                    ->sum('amount');
-                                                return '$' . number_format($availableCredit / 100, 2);
+                                                $balance = $record->user?->balance ?? 0;
+                                                return '$' . number_format($balance / 100, 2);
                                             }),
                                         TextInput::make('credit_to_apply')
                                             ->label('Amount to Apply')

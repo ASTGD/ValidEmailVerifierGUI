@@ -100,11 +100,8 @@ class EditInvoice extends EditRecord
                     Forms\Components\Placeholder::make('available_credit')
                         ->label('Available Customer Credit')
                         ->content(function ($record) {
-                            $availableCredit = Credit::where('user_id', $record->user_id)
-                                ->whereNull('invoice_id')
-                                ->where('amount', '>', 0)
-                                ->sum('amount');
-                            return '$' . number_format($availableCredit / 100, 2);
+                            $balance = $record->user?->balance ?? 0;
+                            return '$' . number_format($balance / 100, 2);
                         }),
                     Forms\Components\Placeholder::make('balance_info')
                         ->label('Invoice Balance Due')
@@ -125,10 +122,7 @@ class EditInvoice extends EditRecord
                     $amountInCents = (int) ($data['credit_amount'] * 100);
 
                     // Check if user has enough available credit
-                    $availableCredit = Credit::where('user_id', $record->user_id)
-                        ->whereNull('invoice_id')
-                        ->where('amount', '>', 0)
-                        ->sum('amount');
+                    $availableCredit = $record->user?->balance ?? 0;
 
                     if ($availableCredit < $amountInCents) {
                         Notification::make()
