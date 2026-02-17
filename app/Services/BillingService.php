@@ -66,31 +66,16 @@ class BillingService
                 'date' => Carbon::now(),
             ]);
 
-            // Refresh current state
+            // Refresh current state from DB
             $invoice->refresh();
 
-            // Status is handled by the model logic usually, but here we update it directly for legacy/background compatibility
-            $totalCents = $invoice->calculateTotal();
-            $paidTotal = $invoice->getTotalPaidAttribute();
-            $creditsApplied = $invoice->credit_applied ?? 0;
-            $balanceCents = max(0, $totalCents - $paidTotal - $creditsApplied);
+            // Use unified model logic for status updates
+            $invoice->syncStatus();
+            $invoice->save();
 
-            if ($balanceCents <= 0) {
-                $invoice->update([
-                    'status' => 'Paid',
-                    'paid_at' => Carbon::now(),
-                ]);
-
-                // If this was a credit add invoice, update user balance
+            // If the invoice is now Paid, process any programmatic items (like adding credit)
+            if ($invoice->status === 'Paid') {
                 $this->processInvoiceItems($invoice);
-            } elseif (($paidTotal + $creditsApplied) > 0) {
-                $invoice->update([
-                    'status' => 'Partially Paid',
-                ]);
-            } else {
-                $invoice->update([
-                    'status' => 'Unpaid',
-                ]);
             }
 
             return $transaction;

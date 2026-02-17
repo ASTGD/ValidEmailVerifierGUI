@@ -127,9 +127,8 @@ class InvoiceInfolist
                                         $totalInDollars = $totalInCents / 100;
 
                                         $paidInCents = $record->transactions()->sum('amount');
-                                        $creditAppliedInCents = $record->credit_applied ?? 0;
-
-                                        $receivedInDollars = ($paidInCents + $creditAppliedInCents) / 100;
+                                        // No longer add credit_applied separately because they are now recorded as transactions
+                                        $receivedInDollars = $paidInCents / 100;
                                         $balanceDue = ($record->status === 'Paid') ? 0 : max(0, $totalInDollars - $receivedInDollars);
 
                                         $accentColor = $balanceDue > 0 ? '#dc2626' : '#16a34a';
