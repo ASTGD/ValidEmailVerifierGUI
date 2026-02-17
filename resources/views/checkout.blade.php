@@ -154,7 +154,15 @@
                                     {{ __('Fake Pay (Dev)') }}
                                 </button>
                             </form>
-                            <p class="mt-2 text-xs text-[#94A3B8]">{{ __('Available only in local/testing environments.') }}</p>
+                            <div class="mt-4 flex justify-between items-center text-xs text-[#94A3B8]">
+                                <p>{{ __('Available only in local/testing environments.') }}</p>
+                                <form method="POST" action="{{ route('checkout.manual-payment', $intent) }}">
+                                    @csrf
+                                    <button type="submit" class="text-red-500 font-bold hover:underline">
+                                        {{ __('Payment later / manual payment') }}
+                                    </button>
+                                </form>
+                            </div>
                         @endif
                     @endauth
                 </div>

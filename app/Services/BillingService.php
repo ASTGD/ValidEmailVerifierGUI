@@ -103,10 +103,7 @@ class BillingService
                 throw new \InvalidArgumentException('Amount exceeds remaining invoice balance.');
             }
 
-            // Deduct from user balance
-            $user->decrement('balance', $amount);
-
-            // Use the Invoice model's robust application logic
+            // Use the Invoice model's robust application logic which now handles balance deduction
             return $invoice->applyCredit($amount, "Credit applied from Client Portal balance");
         });
     }

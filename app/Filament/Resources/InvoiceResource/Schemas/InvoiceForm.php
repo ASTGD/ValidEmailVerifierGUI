@@ -418,7 +418,17 @@ class InvoiceForm
                                         TextInput::make('credit_to_apply')
                                             ->label('Amount to Apply')
                                             ->numeric()
-                                            ->prefix('$'),
+                                            ->prefix('$')
+                                            ->maxValue(function ($record) {
+                                                if (!$record || !$record->user)
+                                                    return 0;
+                                                return $record->user->balance / 100;
+                                            })
+                                            ->helperText(function ($record) {
+                                                if (!$record || !$record->user)
+                                                    return 'No user associated with this invoice.';
+                                                return 'Maximum available: $' . number_format($record->user->balance / 100, 2);
+                                            }),
                                     ]),
                             ]),
                         Tab::make('Notes')

@@ -175,7 +175,7 @@ class CheckoutIntentService
         return $checkout;
     }
 
-    public function completeIntent(CheckoutIntent $intent, User $user): VerificationOrder
+    public function completeIntent(CheckoutIntent $intent, User $user, bool $isPaid = true): VerificationOrder
     {
         if ($intent->status !== CheckoutIntentStatus::Pending) {
             if ($intent->order) {
@@ -192,7 +192,7 @@ class CheckoutIntentService
             abort(410, __('Checkout intent has expired.'));
         }
 
-        return DB::transaction(function () use ($intent, $user) {
+        return DB::transaction(function () use ($intent, $user, $isPaid) {
             if (!$intent->user_id) {
                 $intent->user_id = $user->id;
             }
@@ -224,7 +224,7 @@ class CheckoutIntentService
 
             // Let's revert processPayment deduction logic and put it all in completeIntent.
 
-            $creditToDeduct = $intent->credit_applied ?? 0;
+            $creditToDeduct = $isPaid ? ($intent->credit_applied ?? 0) : 0;
             if ($creditToDeduct > 0) {
                 $user->refresh();
                 // Ensure user still has balance? Even if valid, race condition?
@@ -262,10 +262,9 @@ class CheckoutIntentService
             $this->storage->moveToOrder($intent, $order, $this->orderStorage);
 
             $intent->status = CheckoutIntentStatus::Completed;
-            $intent->paid_at = $intent->paid_at ?: now();
+            $intent->paid_at = $isPaid ? ($intent->paid_at ?: now()) : null;
             $intent->save();
 
-            // Create Invoice
             $invoice = $this->billing->createInvoice($user, [
                 [
                     'description' => __('Email verification for :count emails', ['count' => number_format($intent->email_count)]),
@@ -275,24 +274,24 @@ class CheckoutIntentService
                     'rel_id' => $order->id,
                 ]
             ], [
-                'status' => 'Paid',
+                'status' => $isPaid ? 'Paid' : 'Unpaid',
                 'date' => now(),
-                'paid_at' => now(),
+                'paid_at' => $isPaid ? now() : null,
             ]);
 
-            // Record Transactions
-            if ($creditToDeduct > 0) {
-                $this->billing->recordPayment($invoice, $creditToDeduct, 'Credit Balance', null);
-            }
+            // Record Transactions only if paid
+            if ($isPaid) {
+                if ($creditToDeduct > 0) {
+                    $this->billing->recordPayment($invoice, $creditToDeduct, 'Credit Balance', null);
+                }
 
-            // Record Stripe Payment (Remainder)
-            // Amount paid via stripe is Total - Credit
-            $stripeAmount = $intent->amount_cents - $creditToDeduct;
-            if ($stripeAmount > 0) {
-                // Determine gateway. If stripe_payment_intent_id is there, use Stripe.
-                $gateway = $intent->stripe_payment_intent_id ? 'Stripe' : 'Manual';
-                $ref = $intent->stripe_payment_intent_id;
-                $this->billing->recordPayment($invoice, $stripeAmount, $gateway, $ref);
+                // Record Stripe Payment (Remainder)
+                $stripeAmount = $intent->amount_cents - $creditToDeduct;
+                if ($stripeAmount > 0) {
+                    $gateway = $intent->stripe_payment_intent_id ? 'Stripe' : 'Manual';
+                    $ref = $intent->stripe_payment_intent_id;
+                    $this->billing->recordPayment($invoice, $stripeAmount, $gateway, $ref);
+                }
             }
 
             \App\Support\AdminAuditLogger::log('order_placed', $order);

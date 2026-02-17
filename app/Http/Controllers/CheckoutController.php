@@ -112,4 +112,29 @@ class CheckoutController
             ->route('portal.orders.index')
             ->with('status', __('Order :id created and awaiting activation.', ['id' => $order->id]));
     }
+
+    public function manualPayment(Request $request, CheckoutIntent $intent, CheckoutIntentService $service): RedirectResponse
+    {
+        if (!$request->user()) {
+            return redirect()->route('checkout.show', $intent);
+        }
+
+        // Finalize intent as unpaid
+        $order = $service->completeIntent($intent, $request->user(), false);
+
+        // Find the invoice associated with this order
+        $invoice = \App\Models\Invoice::whereHas('items', function ($query) use ($order) {
+            $query->where('rel_type', get_class($order))->where('rel_id', $order->id);
+        })->first();
+
+        if ($invoice) {
+            return redirect()
+                ->route('portal.invoices.show', $invoice)
+                ->with('status', __('Invoice created. You can now apply credit or pay manually.'));
+        }
+
+        return redirect()
+            ->route('portal.orders.index')
+            ->with('status', __('Order placed. Please check your invoices for payment.'));
+    }
 }

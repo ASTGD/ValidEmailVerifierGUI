@@ -41,6 +41,9 @@ Route::post('checkout/{intent}/pay', [CheckoutController::class, 'pay'])
 Route::post('checkout/{intent}/fake-pay', [CheckoutController::class, 'fakePay'])
     ->middleware(['auth', 'verified'])
     ->name('checkout.fake-pay');
+Route::post('checkout/{intent}/manual-payment', [CheckoutController::class, 'manualPayment'])
+    ->middleware(['auth', 'verified'])
+    ->name('checkout.manual-payment');
 
 Route::view('profile', 'profile')
     ->middleware(['auth'])

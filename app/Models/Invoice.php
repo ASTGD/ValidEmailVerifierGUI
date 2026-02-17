@@ -128,23 +128,37 @@ class Invoice extends Model
      */
     public function applyCredit(int $amount, string $description = null): bool
     {
-        $maxCredit = $this->calculateBalanceDue();
-        $amount = min($amount, $maxCredit);
+        $user = $this->user;
+        if (!$user) {
+            return false;
+        }
+
+        // 1. Validation: Don't apply more than invoice balance
+        $maxInvoiceCredit = $this->calculateBalanceDue();
+        $amount = min($amount, $maxInvoiceCredit);
+
+        // 2. Validation: Don't apply more than user has available
+        if ($amount > $user->balance) {
+            return false;
+        }
 
         if ($amount <= 0) {
             return false;
         }
 
-        // Update credit_applied
+        // Deduct from User Balance (The Source of Truth)
+        $user->balance -= $amount;
+        $user->save();
+
+        // Update Invoice credit record
         $this->credit_applied = ($this->credit_applied ?? 0) + $amount;
         $this->balance_due = $this->calculateBalanceDue();
 
         // Sync status using the new unified logic
         $this->syncStatus();
-
         $this->save();
 
-        // Record credit transaction
+        // Record credit history record
         Credit::create([
             'user_id' => $this->user_id,
             'invoice_id' => $this->id,

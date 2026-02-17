@@ -260,9 +260,19 @@ class EditInvoice extends EditRecord
         // 2. Apply Credit from "Credit" Tab
         if (!empty($data['credit_to_apply']) && (float) $data['credit_to_apply'] > 0) {
             $amountInCents = (int) ($data['credit_to_apply'] * 100);
-            $success = $record->applyCredit($amountInCents);
-            if ($success) {
-                $hasChanged = true;
+            $availableCredit = $record->user?->balance ?? 0;
+
+            if ($availableCredit < $amountInCents) {
+                Notification::make()
+                    ->title('Insufficient Credit')
+                    ->danger()
+                    ->body("Customer only has $" . number_format($availableCredit / 100, 2) . " available credit. Credit was NOT applied.")
+                    ->send();
+            } else {
+                $success = $record->applyCredit($amountInCents);
+                if ($success) {
+                    $hasChanged = true;
+                }
             }
         }
 
