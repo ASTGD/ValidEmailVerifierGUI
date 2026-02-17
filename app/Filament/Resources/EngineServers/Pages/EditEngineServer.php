@@ -4,8 +4,9 @@ namespace App\Filament\Resources\EngineServers\Pages;
 
 use App\Filament\Resources\EngineServers\EngineServerResource;
 use App\Filament\Resources\EngineServers\Pages\Concerns\HandlesProvisioningBundle;
-use App\Support\AdminAuditLogger;
 use App\Services\EngineServerReputationService;
+use App\Support\AdminAuditLogger;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 
 class EditEngineServer extends EditRecord
@@ -14,9 +15,20 @@ class EditEngineServer extends EditRecord
 
     protected static string $resource = EngineServerResource::class;
 
+    public function getSubheading(): ?string
+    {
+        return 'Emergency fallback UI only. Use Go Verifier Engine Room for daily operations.';
+    }
+
     public function mount(int|string $record): void
     {
         parent::mount($record);
+
+        Notification::make()
+            ->title('Emergency fallback UI')
+            ->body('Use this page only when Go Verifier Engine Room is unavailable.')
+            ->warning()
+            ->send();
 
         $this->loadProvisioningBundle();
     }
@@ -33,6 +45,9 @@ class EditEngineServer extends EditRecord
 
     protected function afterSave(): void
     {
-        AdminAuditLogger::log('engine_server_updated', $this->record);
+        AdminAuditLogger::log('engine_server_updated', $this->record, [
+            'source' => 'filament_fallback_ui',
+            'triggered_by' => 'filament-admin',
+        ]);
     }
 }

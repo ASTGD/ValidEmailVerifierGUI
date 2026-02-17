@@ -9,11 +9,14 @@ use App\Models\EngineServerProvisioningBundle;
 use App\Models\VerifierDomain;
 use App\Support\AdminAuditLogger;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class EngineServerController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $requestId = $this->requestId($request);
         $servers = EngineServer::query()
             ->with([
                 'verifierDomain:id,domain',
@@ -35,6 +38,8 @@ class EngineServerController extends Controller
                     'domain' => $domain->domain,
                 ])->values(),
             ],
+        ], 200, [
+            'X-Request-Id' => $requestId,
         ]);
     }
 
@@ -49,9 +54,13 @@ class EngineServerController extends Controller
             'triggered_by' => $this->triggeredBy($request),
         ]);
 
+        $requestId = $this->requestId($request);
+
         return response()->json([
             'data' => $this->serializeServer($server),
-        ], 201);
+        ], 201, [
+            'X-Request-Id' => $requestId,
+        ]);
     }
 
     public function update(EngineServerUpsertRequest $request, EngineServer $engineServer): JsonResponse
@@ -65,8 +74,12 @@ class EngineServerController extends Controller
             'triggered_by' => $this->triggeredBy($request),
         ]);
 
+        $requestId = $this->requestId($request);
+
         return response()->json([
             'data' => $this->serializeServer($engineServer),
+        ], 200, [
+            'X-Request-Id' => $requestId,
         ]);
     }
 
@@ -113,5 +126,15 @@ class EngineServerController extends Controller
         $triggeredBy = trim((string) $request->header('X-Triggered-By', 'go-control-plane'));
 
         return $triggeredBy !== '' ? $triggeredBy : 'go-control-plane';
+    }
+
+    private function requestId(Request $request): string
+    {
+        $existing = trim((string) $request->header('X-Request-Id', ''));
+        if ($existing !== '') {
+            return $existing;
+        }
+
+        return (string) Str::uuid();
     }
 }

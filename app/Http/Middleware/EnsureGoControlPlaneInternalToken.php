@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -16,11 +17,15 @@ class EnsureGoControlPlaneInternalToken
      */
     public function handle(Request $request, Closure $next): Response
     {
+        $requestId = $this->requestId($request);
         $expectedToken = trim((string) config('services.go_control_plane.internal_api_token', ''));
         if ($expectedToken === '') {
-            return new JsonResponse([
-                'error' => 'internal token is not configured',
-            ], Response::HTTP_SERVICE_UNAVAILABLE);
+            return $this->errorResponse(
+                'internal_token_missing',
+                'Internal token is not configured.',
+                Response::HTTP_SERVICE_UNAVAILABLE,
+                $requestId
+            );
         }
 
         $providedToken = trim((string) $request->header('X-Internal-Token', ''));
@@ -32,11 +37,38 @@ class EnsureGoControlPlaneInternalToken
         }
 
         if ($providedToken === '' || ! hash_equals($expectedToken, $providedToken)) {
-            return new JsonResponse([
-                'error' => 'unauthorized',
-            ], Response::HTTP_UNAUTHORIZED);
+            return $this->errorResponse(
+                'unauthorized',
+                'Unauthorized.',
+                Response::HTTP_UNAUTHORIZED,
+                $requestId
+            );
         }
 
-        return $next($request);
+        $response = $next($request);
+        $response->headers->set('X-Request-Id', $requestId);
+
+        return $response;
+    }
+
+    private function requestId(Request $request): string
+    {
+        $existing = trim((string) $request->headers->get('X-Request-Id', ''));
+        if ($existing !== '') {
+            return $existing;
+        }
+
+        return (string) Str::uuid();
+    }
+
+    private function errorResponse(string $errorCode, string $message, int $status, string $requestId): JsonResponse
+    {
+        return new JsonResponse([
+            'error_code' => $errorCode,
+            'message' => $message,
+            'request_id' => $requestId,
+        ], $status, [
+            'X-Request-Id' => $requestId,
+        ]);
     }
 }

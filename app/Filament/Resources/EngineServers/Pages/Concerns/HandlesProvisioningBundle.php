@@ -48,6 +48,8 @@ trait HandlesProvisioningBundle
             $this->bundleGenerated = true;
 
             AdminAuditLogger::log('engine_worker_bundle_generated', $this->getRecord(), [
+                'source' => 'filament_fallback_ui',
+                'triggered_by' => 'filament-admin',
                 'bundle_id' => $bundle->id,
                 'expires_at' => $bundle->expires_at?->toDateTimeString(),
             ]);
@@ -131,7 +133,7 @@ trait HandlesProvisioningBundle
             $lines[] = $this->envLine('IDENTITY_DOMAIN', $identityDomain);
         }
 
-        return implode("\n", $lines) . "\n";
+        return implode("\n", $lines)."\n";
     }
 
     protected function resolveWorkerEnv(
@@ -237,6 +239,6 @@ trait HandlesProvisioningBundle
 
     protected function envLine(string $key, string $value): string
     {
-        return $key . '=' . $value;
+        return $key.'='.$value;
     }
 }

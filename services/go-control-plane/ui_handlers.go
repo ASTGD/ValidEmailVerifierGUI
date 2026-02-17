@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -56,6 +57,7 @@ type EngineServerRegistryPageData struct {
 	Configured               bool
 	Notice                   string
 	Error                    string
+	Warning                  string
 	Servers                  []LaravelEngineServerRecord
 	VerifierDomains          []LaravelVerifierDomainOption
 	EditServerID             int
@@ -63,6 +65,9 @@ type EngineServerRegistryPageData struct {
 	ProvisionBundleServerID  int
 	ProvisionBundle          *LaravelProvisioningBundleDetails
 	ProvisionBundleLoadError string
+	Filter                   string
+	OrphanWorkers            []WorkerSummary
+	RequireRuntimeMatch      bool
 }
 
 type PoolsPageData struct {
@@ -243,7 +248,7 @@ func (s *Server) handleUIWorkers(w http.ResponseWriter, r *http.Request) {
 		activeTab = "runtime"
 	}
 
-	registryData := s.buildEngineServerRegistryData(r)
+	registryData := s.buildEngineServerRegistryData(r, stats.Workers)
 	if activeTab == "registry" && !registryData.Enabled {
 		activeTab = "runtime"
 	}
@@ -267,10 +272,12 @@ func (s *Server) handleUIWorkers(w http.ResponseWriter, r *http.Request) {
 	s.views.Render(w, data)
 }
 
-func (s *Server) buildEngineServerRegistryData(r *http.Request) EngineServerRegistryPageData {
+func (s *Server) buildEngineServerRegistryData(r *http.Request, runtimeWorkers []WorkerSummary) EngineServerRegistryPageData {
 	data := EngineServerRegistryPageData{
-		Enabled:    s.cfg.ServerRegistryUIEnabled,
-		Configured: s.laravelEngineClient != nil,
+		Enabled:             s.cfg.ServerRegistryUIEnabled,
+		Configured:          s.laravelEngineClient != nil,
+		Filter:              normalizeRegistryFilter(r.URL.Query().Get("registry_filter")),
+		RequireRuntimeMatch: s.cfg.ServerRegistryRequireRuntimeMatch,
 	}
 
 	if !data.Enabled {
@@ -284,12 +291,14 @@ func (s *Server) buildEngineServerRegistryData(r *http.Request) EngineServerRegi
 
 	servers, domains, err := s.laravelEngineClient.ListServers(r.Context())
 	if err != nil {
-		data.Error = fmt.Sprintf("Unable to load server registry: %s", err.Error())
+		data.Error = mapRegistryActionError("load server registry", err)
 		return data
 	}
 
-	data.Servers = servers
+	servers, orphanWorkers := applyRegistryRuntimeMatch(servers, runtimeWorkers)
+	data.Servers = filterRegistryServers(servers, data.Filter)
 	data.VerifierDomains = domains
+	data.OrphanWorkers = orphanWorkers
 
 	if notice := strings.TrimSpace(r.URL.Query().Get("registry_notice")); notice != "" {
 		data.Notice = notice
@@ -315,9 +324,21 @@ func (s *Server) buildEngineServerRegistryData(r *http.Request) EngineServerRegi
 		data.ProvisionBundleServerID = provisionBundleServerID
 		bundle, bundleErr := s.laravelEngineClient.LatestProvisioningBundle(r.Context(), provisionBundleServerID)
 		if bundleErr != nil {
-			data.ProvisionBundleLoadError = bundleErr.Error()
+			data.ProvisionBundleLoadError = mapRegistryActionError("load latest provisioning bundle", bundleErr)
 		} else {
 			data.ProvisionBundle = bundle
+		}
+	}
+
+	if data.RequireRuntimeMatch {
+		mismatchCount := 0
+		for _, server := range data.Servers {
+			if server.RuntimeMatchStatus != "matched" {
+				mismatchCount++
+			}
+		}
+		if mismatchCount > 0 {
+			data.Warning = fmt.Sprintf("Runtime match required: %d server(s) currently have no runtime heartbeat match.", mismatchCount)
 		}
 	}
 
@@ -346,7 +367,7 @@ func (s *Server) handleUICreateEngineServer(w http.ResponseWriter, r *http.Reque
 
 	if _, err := s.laravelEngineClient.CreateServer(r.Context(), payload, uiTriggeredBy(r)); err != nil {
 		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{err.Error()},
+			"registry_error": []string{mapRegistryActionError("create server", err)},
 		})
 		return
 	}
@@ -387,7 +408,7 @@ func (s *Server) handleUIUpdateEngineServer(w http.ResponseWriter, r *http.Reque
 
 	if _, err := s.laravelEngineClient.UpdateServer(r.Context(), serverID, payload, uiTriggeredBy(r)); err != nil {
 		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{err.Error()},
+			"registry_error": []string{mapRegistryActionError("update server", err)},
 			"edit_server_id": []string{strconv.Itoa(serverID)},
 		})
 		return
@@ -421,7 +442,7 @@ func (s *Server) handleUIProvisionEngineServer(w http.ResponseWriter, r *http.Re
 
 	if _, err := s.laravelEngineClient.GenerateProvisioningBundle(r.Context(), serverID, uiTriggeredBy(r)); err != nil {
 		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{err.Error()},
+			"registry_error": []string{mapRegistryActionError("generate provisioning bundle", err)},
 			"edit_server_id": []string{strconv.Itoa(serverID)},
 		})
 		return
@@ -500,6 +521,136 @@ func parseFormBoolean(raw string) bool {
 	default:
 		return false
 	}
+}
+
+func mapRegistryActionError(action string, err error) string {
+	if err == nil {
+		return ""
+	}
+
+	apiErr := &LaravelAPIError{}
+	if !errors.As(err, &apiErr) {
+		return fmt.Sprintf("Unable to %s: %s", action, err.Error())
+	}
+
+	requestSuffix := ""
+	if strings.TrimSpace(apiErr.RequestID) != "" {
+		requestSuffix = fmt.Sprintf(" (request id: %s)", apiErr.RequestID)
+	}
+
+	switch apiErr.StatusCode {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return "Laravel internal API authentication failed. Check internal token configuration." + requestSuffix
+	case http.StatusUnprocessableEntity:
+		return "Validation failed. Review the form values and retry." + requestSuffix
+	case http.StatusTooManyRequests:
+		return "Laravel internal API is rate-limited. Retry shortly." + requestSuffix
+	default:
+		if apiErr.StatusCode >= 500 {
+			return "Laravel internal API is temporarily unavailable. Retry shortly." + requestSuffix
+		}
+
+		return fmt.Sprintf("Unable to %s: %s%s", action, apiErr.Message, requestSuffix)
+	}
+}
+
+func normalizeRegistryFilter(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "matched", "mismatch", "offline":
+		return strings.ToLower(strings.TrimSpace(raw))
+	default:
+		return "all"
+	}
+}
+
+func applyRegistryRuntimeMatch(servers []LaravelEngineServerRecord, workers []WorkerSummary) ([]LaravelEngineServerRecord, []WorkerSummary) {
+	serverIDs := make(map[string]struct{}, len(servers))
+	serverIPs := make(map[string]struct{}, len(servers))
+	serverNames := make(map[string]struct{}, len(servers))
+	workerMatched := make(map[string]bool, len(workers))
+
+	for index := range servers {
+		server := &servers[index]
+		serverID := strings.TrimSpace(strconv.Itoa(server.ID))
+		serverIDs[serverID] = struct{}{}
+		if ip := strings.TrimSpace(server.IPAddress); ip != "" {
+			serverIPs[strings.ToLower(ip)] = struct{}{}
+		}
+		if name := strings.TrimSpace(server.Name); name != "" {
+			serverNames[strings.ToLower(name)] = struct{}{}
+		}
+
+		server.RuntimeMatchStatus = "no_runtime_heartbeat"
+		server.RuntimeMatchWorkerID = ""
+		server.RuntimeMatchDetail = "No runtime heartbeat"
+
+		for _, worker := range workers {
+			workerID := strings.TrimSpace(worker.WorkerID)
+			workerHost := strings.ToLower(strings.TrimSpace(worker.Host))
+			workerIP := strings.ToLower(strings.TrimSpace(worker.IPAddress))
+			workerServerIDMatch := workerID == serverID
+			workerIPMatch := workerIP != "" && strings.EqualFold(workerIP, strings.TrimSpace(server.IPAddress))
+			workerHostMatch := workerHost != "" && strings.EqualFold(workerHost, strings.TrimSpace(server.Name))
+
+			if !workerServerIDMatch && !workerIPMatch && !workerHostMatch {
+				continue
+			}
+
+			server.RuntimeMatchStatus = "matched"
+			server.RuntimeMatchWorkerID = worker.WorkerID
+			server.RuntimeMatchDetail = fmt.Sprintf("Matched runtime worker %s", worker.WorkerID)
+			workerMatched[worker.WorkerID] = true
+			break
+		}
+	}
+
+	orphanWorkers := make([]WorkerSummary, 0)
+	for _, worker := range workers {
+		if workerMatched[worker.WorkerID] {
+			continue
+		}
+
+		workerID := strings.TrimSpace(worker.WorkerID)
+		workerHost := strings.ToLower(strings.TrimSpace(worker.Host))
+		workerIP := strings.ToLower(strings.TrimSpace(worker.IPAddress))
+		if _, exists := serverIDs[workerID]; exists {
+			continue
+		}
+		if _, exists := serverIPs[workerIP]; exists {
+			continue
+		}
+		if _, exists := serverNames[workerHost]; exists {
+			continue
+		}
+
+		orphanWorkers = append(orphanWorkers, worker)
+	}
+
+	return servers, orphanWorkers
+}
+
+func filterRegistryServers(servers []LaravelEngineServerRecord, filter string) []LaravelEngineServerRecord {
+	filtered := make([]LaravelEngineServerRecord, 0, len(servers))
+	for _, server := range servers {
+		switch filter {
+		case "matched":
+			if server.RuntimeMatchStatus != "matched" {
+				continue
+			}
+		case "mismatch":
+			if server.RuntimeMatchStatus == "matched" {
+				continue
+			}
+		case "offline":
+			if strings.ToLower(strings.TrimSpace(server.Status)) != "offline" {
+				continue
+			}
+		}
+
+		filtered = append(filtered, server)
+	}
+
+	return filtered
 }
 
 func (s *Server) handleUIPools(w http.ResponseWriter, r *http.Request) {

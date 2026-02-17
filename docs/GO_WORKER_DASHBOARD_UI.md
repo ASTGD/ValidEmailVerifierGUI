@@ -12,10 +12,17 @@ A single Go-native operations surface for worker control, provider quality, poli
 - Live updates via SSE (`/verifier-engine-room/events`)
 
 2. **Workers**
-- Worker status, desired state, quarantine state
-- Current job/chunk context
-- Stage + SMTP + provider telemetry
-- Control actions: pause/resume/drain/stop/quarantine
+- **Runtime Workers tab**
+  - Worker status, desired state, quarantine state
+  - Current job/chunk context
+  - Stage + SMTP + provider telemetry
+  - Control actions: pause/resume/drain/stop/quarantine
+- **Server Registry & Provisioning tab** (Laravel-backed)
+  - Server create/edit
+  - Bundle generation + signed install/env links
+  - Runtime match status (`matched` / `no runtime heartbeat`)
+  - Runtime-only orphan worker warning list
+  - Filter chips: `All`, `Matched`, `Mismatch`, `Offline`
 
 3. **Pools**
 - Online vs desired per pool
@@ -48,6 +55,14 @@ A single Go-native operations surface for worker control, provider quality, poli
 - Control plane heartbeat is operational truth.
 - Laravel heartbeat remains fallback identity/liveness path.
 - Policy payloads are sourced from Laravel policy-version endpoint.
+- Engine server registry/provisioning remains Laravel DB truth; Go is the daily operator UI.
+
+## Break-Glass Fallback
+- Laravel `/admin/engine-servers` is emergency-only fallback.
+- Fallback visibility is controlled by:
+  - `ENGINE_SERVERS_FALLBACK_UI_ENABLED`
+  - `ENGINE_SERVERS_FALLBACK_UI_SUPER_ADMIN_ONLY`
+  - `ENGINE_SERVERS_FALLBACK_UI_SUPER_ADMIN_EMAILS`
 
 ## Operator Workflow (Policy)
 1. Validate policy payload in Laravel admin (`SMTP Policy Versions`).

@@ -10,11 +10,13 @@ use App\Support\AdminAuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 
 class EngineServerProvisioningBundleController extends Controller
 {
     public function store(Request $request, EngineServer $engineServer, EngineWorkerProvisioningService $service): JsonResponse
     {
+        $requestId = $this->requestId($request);
         $bundle = $service->createBundle($engineServer, null);
 
         AdminAuditLogger::log('engine_worker_bundle_generated', $engineServer, [
@@ -26,20 +28,29 @@ class EngineServerProvisioningBundleController extends Controller
 
         return response()->json([
             'data' => $this->serializeBundle($bundle),
-        ], 201);
+        ], 201, [
+            'X-Request-Id' => $requestId,
+        ]);
     }
 
-    public function showLatest(EngineServer $engineServer): JsonResponse
+    public function showLatest(Request $request, EngineServer $engineServer): JsonResponse
     {
+        $requestId = $this->requestId($request);
         $bundle = $engineServer->provisioningBundles()->latest()->first();
         if (! $bundle) {
             return response()->json([
-                'error' => 'no provisioning bundle found',
-            ], 404);
+                'error_code' => 'bundle_not_found',
+                'message' => 'No provisioning bundle found.',
+                'request_id' => $requestId,
+            ], 404, [
+                'X-Request-Id' => $requestId,
+            ]);
         }
 
         return response()->json([
             'data' => $this->serializeBundle($bundle),
+        ], 200, [
+            'X-Request-Id' => $requestId,
         ]);
     }
 
@@ -111,5 +122,15 @@ class EngineServerProvisioningBundleController extends Controller
         $triggeredBy = trim((string) $request->header('X-Triggered-By', 'go-control-plane'));
 
         return $triggeredBy !== '' ? $triggeredBy : 'go-control-plane';
+    }
+
+    private function requestId(Request $request): string
+    {
+        $existing = trim((string) $request->header('X-Request-Id', ''));
+        if ($existing !== '') {
+            return $existing;
+        }
+
+        return (string) Str::uuid();
     }
 }
