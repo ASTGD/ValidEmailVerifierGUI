@@ -52,24 +52,22 @@ class InvoiceShow extends Component
         session()->flash('status', __('Credit applied successfully.'));
     }
 
-    public function payNow()
+    public function payNow(\App\Services\CheckoutIntentService $service)
     {
         $user = Auth::user();
-        $balanceCents = (int) round($this->invoice->calculateBalanceDue() * 100);
 
-        if ($balanceCents <= 0) {
+        if ($this->invoice->calculateBalanceDue() <= 0) {
             session()->flash('error', __('This invoice is already fully paid.'));
             return;
         }
 
-        return $user->checkoutCharge($balanceCents, __('Payment for Invoice #') . $this->invoice->invoice_number, 1, [
-            'success_url' => route('portal.invoices.show', $this->invoice) . '?payment=success',
-            'cancel_url' => route('portal.invoices.show', $this->invoice),
-            'metadata' => [
-                'invoice_id' => $this->invoice->id,
-                'type' => 'invoice_payment',
-            ],
-        ]);
+        try {
+            $intent = $service->createInvoiceIntent($this->invoice, $user);
+            return redirect()->route('checkout.show', $intent);
+        } catch (\Exception $e) {
+            session()->flash('error', $e->getMessage());
+            return;
+        }
     }
 
     public function render()

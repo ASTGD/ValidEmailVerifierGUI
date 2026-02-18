@@ -32,7 +32,8 @@
                                 <h2 class="text-3xl font-black tracking-tight leading-none mb-2">{{ __('Add Balance') }}
                                 </h2>
                                 <p class="text-white/70 text-sm font-medium">
-                                    {{ __('Top up your account for automatic verifications.') }}</p>
+                                    {{ __('Top up your account for automatic verifications.') }}
+                                </p>
                             </div>
                         </div>
                         <button @click="open = false"
@@ -72,7 +73,7 @@
                             @foreach([10, 50, 100] as $preset)
                                 <button type="button" @click="$wire.set('amount', {{ $preset }})"
                                     class="py-4 rounded-2xl border-2 font-black transition-all text-sm
-                                        {{ (float) $amount === (float) $preset ? 'bg-[#E9F2FB] border-[#1E7CCF] text-[#1E7CCF] shadow-sm' : 'bg-white border-[#F1F5F9] text-[#64748B] hover:border-[#CBD5E1]' }}">
+                                            {{ (float) $amount === (float) $preset ? 'bg-[#E9F2FB] border-[#1E7CCF] text-[#1E7CCF] shadow-sm' : 'bg-white border-[#F1F5F9] text-[#64748B] hover:border-[#CBD5E1]' }}">
                                     ${{ $preset }}
                                 </button>
                             @endforeach

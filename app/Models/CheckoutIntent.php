@@ -58,4 +58,9 @@ class CheckoutIntent extends Model
     {
         return $this->hasOne(VerificationOrder::class);
     }
+
+    public function invoice(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class);
+    }
 }

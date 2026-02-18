@@ -53,7 +53,7 @@ class CheckoutController
             $intent->save();
         }
 
-        $intent->load('pricingPlan');
+        $intent->load(['pricingPlan', 'invoice']);
 
         $totals = $user ? $service->calculateTotals($intent, $user, true) : null;
 

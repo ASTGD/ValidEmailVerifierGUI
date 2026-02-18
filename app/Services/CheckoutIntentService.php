@@ -76,6 +76,43 @@ class CheckoutIntentService
         return $intent;
     }
 
+    public function createInvoiceIntent(\App\Models\Invoice $invoice, User $user): CheckoutIntent
+    {
+        // Cancel any pending intents for this invoice to avoid clutter
+        CheckoutIntent::where('invoice_id', $invoice->id)
+            ->where('status', CheckoutIntentStatus::Pending)
+            ->update(['status' => CheckoutIntentStatus::Expired]);
+
+        $intent = new CheckoutIntent([
+            'user_id' => $user->id,
+            'status' => CheckoutIntentStatus::Pending,
+            'type' => 'invoice',
+            'amount_cents' => (int) round($invoice->calculateBalanceDue() * 100), // Invoice uses cents if calculateBalanceDue returns cents, check Invoice model. 
+            // Warning: Invoice model stores bigInteger 'total' etc. assuming cents?
+            // "table->bigInteger('total')->default(0);" usually implies cents or smallest unit.
+            // But line 260 of Invoice.php: "number_format($this->calculateTotal() / 100, 2)" implies it is stored in cents.
+            // So calculateBalanceDue() returns CENTS.
+            // CheckoutIntent amount_cents expects CENTS.
+            // "round($invoice->calculateBalanceDue() * 100)" would be wrong if it's already cents.
+            // Remove * 100 if it calls calculateBalanceDue which returns cents.
+            // Let's re-verify Invoice model line 78.
+            // "public function calculateBalanceDue(): int"
+            // "return max(0, $total - $paid);" where $total is from calculateTotal().
+            // calculateTotal sums 'amount' from items.
+            // InvoiceItem amount is bigInteger.
+            // So yes, it returns cents.
+            // So I should NOT multiply by 100.
+            'amount_cents' => $invoice->calculateBalanceDue(),
+            'currency' => $invoice->currency,
+            'invoice_id' => $invoice->id,
+            'expires_at' => now()->addMinutes((int) config('verifier.checkout_intent_ttl_minutes', 60)),
+        ]);
+        $intent->id = (string) Str::uuid();
+        $intent->save();
+
+        return $intent;
+    }
+
     public function calculateTotals(CheckoutIntent $intent, User $user, bool $useCredit = false): array
     {
         $total = $intent->amount_cents;
@@ -105,6 +142,7 @@ class CheckoutIntentService
         $intent->save();
 
         if ($totals['pay_now'] === 0) {
+            // For invoices, if balance is 0, it means fully paid by credit
             return $this->completeIntent($intent, $user);
         }
 
@@ -151,8 +189,16 @@ class CheckoutIntentService
         $metadata = [
             'checkout_intent_id' => $intent->id,
             'user_id' => (string) $user->id,
-            'type' => $intent->type === 'credit' ? 'credit_deposit' : 'order_payment',
+            'type' => match ($intent->type) {
+                'credit' => 'credit_deposit',
+                'invoice' => 'invoice_payment',
+                default => 'order_payment',
+            },
         ];
+
+        if ($intent->type === 'invoice') {
+            $metadata['invoice_id'] = $intent->invoice_id; // For webhook content matching
+        }
 
         if ($intent->email_count) {
             $metadata['email_count'] = (string) $intent->email_count;
@@ -163,6 +209,10 @@ class CheckoutIntentService
         if ($intent->type === 'credit') {
             $productName = __('Account Credit');
             $description = __('Funds deposit to account balance');
+        } elseif ($intent->type === 'invoice') {
+            $invoice = \App\Models\Invoice::find($intent->invoice_id);
+            $productName = __('Payment for Invoice #:number', ['number' => $invoice?->invoice_number ?? 'Unknown']);
+            $description = __('Payment for outstanding invoice balance');
         } else {
             $productName = $brand ?: __('Email Verification');
             $description = __('Email verification for :count emails', [
@@ -253,6 +303,32 @@ class CheckoutIntentService
                     // Let's check BillingService.
                 }
 
+                return true;
+            }
+
+            if ($intent->type === 'invoice') {
+                $intent->status = CheckoutIntentStatus::Completed;
+                $intent->paid_at = $isPaid ? ($intent->paid_at ?: now()) : null;
+                $intent->save();
+
+                $invoice = \App\Models\Invoice::find($intent->invoice_id);
+                if ($invoice && $isPaid) {
+                    $creditToDeduct = $intent->credit_applied ?? 0;
+
+                    if ($creditToDeduct > 0) {
+                        $user->refresh();
+                        $user->balance -= $creditToDeduct;
+                        $user->save();
+                        $this->billing->recordPayment($invoice, $creditToDeduct, 'Credit Balance', null);
+                    }
+
+                    $stripeAmount = $intent->amount_cents - $creditToDeduct;
+                    if ($stripeAmount > 0) {
+                        $gateway = $intent->stripe_payment_intent_id ? 'Stripe' : 'Manual';
+                        $ref = $intent->stripe_payment_intent_id;
+                        $this->billing->recordPayment($invoice, $stripeAmount, $gateway, $ref);
+                    }
+                }
                 return true;
             }
 

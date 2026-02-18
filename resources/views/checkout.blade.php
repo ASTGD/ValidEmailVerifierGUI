@@ -40,7 +40,7 @@
             <!-- Left: Order Details (2 Columns) -->
             <div class="lg:col-span-2 space-y-8">
                 <h1 class="text-3xl font-black text-[#0F172A]">
-                    {{ $intent->type === 'credit' ? __('Add Funds to Balance') : __('Complete Your Order') }}
+                    {{ $intent->type === 'credit' ? __('Add Funds to Balance') : ($intent->type === 'invoice' ? __('Complete Payment') : __('Complete Your Order')) }}
                 </h1>
 
                 <!-- 1. Review Details -->
@@ -48,7 +48,7 @@
                     <h3 class="text-lg font-bold mb-6 flex items-center gap-2">
                         <span
                             class="w-8 h-8 bg-[#E9F2FB] text-[#1E7CCF] rounded-full flex items-center justify-center text-sm">1</span>
-                        {{ $intent->type === 'credit' ? __('Review Deposit Details') : __('Review Order Details') }}
+                        {{ $intent->type === 'credit' ? __('Review Deposit Details') : ($intent->type === 'invoice' ? __('Review Payment Details') : __('Review Order Details')) }}
                     </h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         @if ($intent->type === 'credit')
@@ -57,6 +57,15 @@
                                 <p class="text-2xl font-black text-[#0F172A]">{{ __('Credit Balance') }}</p>
                                 <p class="text-xs text-[#94A3B8] mt-2">
                                     {{ __('Funds will be added to your account balance.') }}
+                                </p>
+                            </div>
+                        @elseif ($intent->type === 'invoice')
+                            <div class="p-4 bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0]">
+                                <p class="text-xs font-bold text-[#64748B] uppercase">{{ __('Payment For') }}</p>
+                                <p class="text-2xl font-black text-[#0F172A]">
+                                    {{ __('Invoice #') }}{{ $intent->invoice?->invoice_number }}</p>
+                                <p class="text-xs text-[#94A3B8] mt-2">
+                                    {{ __('Payment for outstanding invoice balance.') }}
                                 </p>
                             </div>
                         @else
@@ -70,7 +79,7 @@
                             <p class="text-xs font-bold text-[#1E7CCF] uppercase">{{ __('Total Price') }}</p>
                             <p class="text-2xl font-black text-[#1E7CCF]">{{ $currencyPrefix }}{{ $formattedTotal }}</p>
                             <p class="text-xs text-[#1E7CCF] mt-2 font-semibold">
-                                {{ $intent->type === 'credit' ? __('Funds Deposit') : ($intent->pricingPlan?->name ?? __('Pay-as-you-go')) }}
+                                {{ $intent->type === 'credit' ? __('Funds Deposit') : ($intent->type === 'invoice' ? __('Invoice Payment') : ($intent->pricingPlan?->name ?? __('Pay-as-you-go'))) }}
                             </p>
                         </div>
                     </div>

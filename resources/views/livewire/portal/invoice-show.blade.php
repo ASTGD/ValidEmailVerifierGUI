@@ -316,12 +316,10 @@
                     </div>
 
                     <div class="mb-6 space-y-3">
-                         <button wire:click="payNow" wire:loading.attr="disabled"
-                            class="w-full py-5 bg-[#059669] hover:bg-[#047857] text-white rounded-2xl shadow-xl shadow-green-100 transition-all font-black uppercase tracking-widest text-sm flex items-center justify-center gap-3 group">
-                            <i wire:loading.remove data-lucide="credit-card" class="w-5 h-5 group-hover:scale-110 transition-transform"></i>
-                            <i wire:loading data-lucide="loader-2" class="w-5 h-5 animate-spin"></i>
-                            <span wire:loading.remove>{{ __('Pay via Stripe') }}</span>
-                            <span wire:loading>{{ __('Redirecting...') }}</span>
+                        <button wire:click="payNow" wire:loading.attr="disabled"
+                            class="w-full bg-[#1E7CCF] hover:bg-[#1669B2] text-white py-5 rounded-2xl font-bold text-lg shadow-xl shadow-blue-100 transition-all opacity-100">
+                            <span wire:loading.remove wire:target="payNow">{{ __('Proceed to Checkout') }}</span>
+                            <span wire:loading wire:target="payNow">{{ __('Redirecting...') }}</span>
                         </button>
                         
                         <div class="flex items-center gap-2 justify-center py-2">
