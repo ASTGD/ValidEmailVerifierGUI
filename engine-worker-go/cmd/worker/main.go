@@ -48,6 +48,8 @@ func main() {
 	smtpRateLimit := envInt("SMTP_RATE_LIMIT_PER_MINUTE", 0)
 	providerPolicyEngineEnabled := envBool("PROVIDER_POLICY_ENGINE_ENABLED", false)
 	adaptiveRetryEnabled := envBool("ADAPTIVE_RETRY_ENABLED", false)
+	probeAttemptChainEnabled := envBool("PROBE_ATTEMPT_CHAIN_ENABLED", true)
+	unknownReasonTaxonomyEnabled := envBool("UNKNOWN_REASON_TAXONOMY_ENABLED", true)
 	controlPlaneHeartbeatEnabled := envBool(
 		"CONTROL_PLANE_HEARTBEAT_ENABLED",
 		controlPlaneBaseURL != "" && controlPlaneToken != "",
@@ -159,6 +161,8 @@ func main() {
 		LaravelHeartbeatEnabled:       laravelHeartbeatEnabled,
 		LaravelHeartbeatEveryN:        laravelHeartbeatEveryN,
 		ControlPlanePolicySyncEnabled: controlPlanePolicySyncEnabled,
+		ProbeAttemptChainEnabled:      probeAttemptChainEnabled,
+		UnknownReasonTaxonomyEnabled:  unknownReasonTaxonomyEnabled,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

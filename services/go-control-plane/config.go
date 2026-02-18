@@ -71,6 +71,7 @@ type Config struct {
 	PolicyCanaryTempfailRecoveryDropThreshold float64
 	PolicyCanaryPolicyBlockSpikeThreshold     float64
 	PolicyCanaryMinProviderWorkers            int
+	PolicyShadowPromoteGateEnforced           bool
 }
 
 func LoadConfig() (Config, error) {
@@ -434,6 +435,7 @@ func LoadConfig() (Config, error) {
 	if cfg.PolicyCanaryMinProviderWorkers < 1 {
 		cfg.PolicyCanaryMinProviderWorkers = 1
 	}
+	cfg.PolicyShadowPromoteGateEnforced = parseBoolWithDefault("POLICY_SHADOW_PROMOTE_GATE_ENFORCED", false)
 
 	if value := os.Getenv("SMTP_PORT"); value != "" {
 		parsed, err := strconv.Atoi(value)

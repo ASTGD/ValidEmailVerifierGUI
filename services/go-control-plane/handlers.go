@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
 	"strconv"
@@ -266,6 +267,18 @@ func (s *Server) handleProvidersUnknownClusters(w http.ResponseWriter, r *http.R
 	})
 }
 
+func (s *Server) handleProvidersUnknownReasons(w http.ResponseWriter, r *http.Request) {
+	stats, err := s.collectControlPlaneStats(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, ProviderUnknownReasonResponse{
+		Data: providerUnknownReasonConcentrationFromWorkers(stats.Workers),
+	})
+}
+
 func (s *Server) handleProviderMode(w http.ResponseWriter, r *http.Request) {
 	provider := chi.URLParam(r, "provider")
 	if provider == "" {
@@ -379,6 +392,11 @@ func (s *Server) handlePolicyPromote(w http.ResponseWriter, r *http.Request) {
 
 	if strings.TrimSpace(payload.TriggeredBy) == "" {
 		payload.TriggeredBy = "api"
+	}
+
+	if err := s.guardPolicyPromoteByShadowCompare(r.Context(), payload.Version); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
 	}
 
 	record, err := s.store.PromoteSMTPPolicyVersion(
@@ -561,6 +579,73 @@ func (s *Server) handlePolicyShadowRuns(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, PolicyShadowRunListResponse{Data: runs})
+}
+
+func (s *Server) handlePolicyShadowCompare(w http.ResponseWriter, r *http.Request) {
+	stats, err := s.collectControlPlaneStats(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	candidateVersion := strings.TrimSpace(r.URL.Query().Get("candidate_version"))
+	compare := s.buildPolicyShadowCompare(stats, candidateVersion)
+	writeJSON(w, http.StatusOK, PolicyShadowCompareResponse{Data: compare})
+}
+
+func (s *Server) handleDecisionsTrace(w http.ResponseWriter, r *http.Request) {
+	if s.laravelEngineClient == nil {
+		writeError(w, http.StatusServiceUnavailable, "laravel internal api is not configured")
+		return
+	}
+
+	query := r.URL.Query()
+	filter := LaravelDecisionTraceFilter{
+		Provider:      strings.TrimSpace(query.Get("provider")),
+		DecisionClass: strings.TrimSpace(query.Get("decision_class")),
+		ReasonTag:     strings.TrimSpace(query.Get("reason_tag")),
+		PolicyVersion: strings.TrimSpace(query.Get("policy_version")),
+		Limit:         25,
+	}
+	if value := strings.TrimSpace(query.Get("limit")); value != "" {
+		parsed, parseErr := strconv.Atoi(value)
+		if parseErr != nil || parsed < 1 || parsed > 100 {
+			writeError(w, http.StatusBadRequest, "limit must be between 1 and 100")
+			return
+		}
+		filter.Limit = parsed
+	}
+	if value := strings.TrimSpace(query.Get("before_id")); value != "" {
+		parsed, parseErr := strconv.ParseInt(value, 10, 64)
+		if parseErr != nil || parsed < 1 {
+			writeError(w, http.StatusBadRequest, "before_id must be a positive integer")
+			return
+		}
+		filter.BeforeID = parsed
+	}
+
+	result, err := s.laravelEngineClient.ListDecisionTraces(r.Context(), filter)
+	if err != nil {
+		laravelErr := &LaravelAPIError{}
+		if errors.As(err, &laravelErr) {
+			status := laravelErr.StatusCode
+			if status < 400 {
+				status = http.StatusBadGateway
+			}
+			writeError(w, status, laravelErr.Error())
+			return
+		}
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	response := DecisionTraceResponse{
+		Data: result.Records,
+	}
+	response.Meta.Limit = filter.Limit
+	response.Meta.NextBeforeID = result.NextBeforeID
+
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) handleQuarantineWorker(enabled bool) http.HandlerFunc {
@@ -786,6 +871,247 @@ func providerUnknownClustersFromWorkers(workers []WorkerSummary) []ProviderUnkno
 	}
 
 	return results
+}
+
+func providerUnknownReasonConcentrationFromWorkers(workers []WorkerSummary) []ProviderUnknownReasonSummary {
+	clusters := providerUnknownClustersFromWorkers(workers)
+	if len(clusters) == 0 {
+		return []ProviderUnknownReasonSummary{}
+	}
+
+	providerTotals := make(map[string]int64, len(clusters))
+	for _, cluster := range clusters {
+		if cluster.Count <= 0 {
+			continue
+		}
+		providerTotals[cluster.Provider] += cluster.Count
+	}
+
+	reasons := make([]ProviderUnknownReasonSummary, 0, len(clusters))
+	for _, cluster := range clusters {
+		if cluster.Count <= 0 {
+			continue
+		}
+
+		total := providerTotals[cluster.Provider]
+		share := 0.0
+		if total > 0 {
+			share = float64(cluster.Count) / float64(total)
+		}
+
+		reasons = append(reasons, ProviderUnknownReasonSummary{
+			Provider:      cluster.Provider,
+			Tag:           cluster.Tag,
+			Count:         cluster.Count,
+			Share:         share,
+			SharePercent:  share * 100,
+			SampleWorkers: cluster.SampleWorkers,
+		})
+	}
+
+	sort.Slice(reasons, func(i, j int) bool {
+		if reasons[i].Provider == reasons[j].Provider {
+			if reasons[i].Share == reasons[j].Share {
+				if reasons[i].Count == reasons[j].Count {
+					return reasons[i].Tag < reasons[j].Tag
+				}
+				return reasons[i].Count > reasons[j].Count
+			}
+			return reasons[i].Share > reasons[j].Share
+		}
+		return reasons[i].Provider < reasons[j].Provider
+	})
+
+	if len(reasons) > 100 {
+		return reasons[:100]
+	}
+
+	return reasons
+}
+
+func (s *Server) guardPolicyPromoteByShadowCompare(ctx context.Context, candidateVersion string) error {
+	if !s.cfg.PolicyShadowPromoteGateEnforced {
+		return nil
+	}
+
+	stats, err := s.collectControlPlaneStats(ctx)
+	if err != nil {
+		return err
+	}
+
+	compare := s.buildPolicyShadowCompare(stats, candidateVersion)
+	if compare.Eligible {
+		return nil
+	}
+
+	if len(compare.Violations) == 0 {
+		return errors.New("policy promotion blocked by shadow compare gate")
+	}
+
+	return errors.New("policy promotion blocked: " + strings.Join(compare.Violations, "; "))
+}
+
+func (s *Server) buildPolicyShadowCompare(stats ControlPlaneStats, candidateVersion string) PolicyShadowCompareData {
+	unknownThreshold := stats.Settings.PolicyCanaryUnknownRegressionThreshold
+	if unknownThreshold <= 0 {
+		unknownThreshold = s.cfg.PolicyCanaryUnknownRegressionThreshold
+	}
+	if unknownThreshold <= 0 {
+		unknownThreshold = 0.05
+	}
+
+	tempfailDropThreshold := stats.Settings.PolicyCanaryTempfailRecoveryDropThreshold
+	if tempfailDropThreshold <= 0 {
+		tempfailDropThreshold = s.cfg.PolicyCanaryTempfailRecoveryDropThreshold
+	}
+	if tempfailDropThreshold <= 0 {
+		tempfailDropThreshold = 0.10
+	}
+
+	policyBlockSpikeThreshold := stats.Settings.PolicyCanaryPolicyBlockSpikeThreshold
+	if policyBlockSpikeThreshold <= 0 {
+		policyBlockSpikeThreshold = s.cfg.PolicyCanaryPolicyBlockSpikeThreshold
+	}
+	if policyBlockSpikeThreshold <= 0 {
+		policyBlockSpikeThreshold = 0.10
+	}
+
+	compare := PolicyShadowCompareData{
+		CandidateVersion: strings.TrimSpace(candidateVersion),
+		ActiveVersion:    strings.TrimSpace(stats.ProviderPolicies.ActiveVersion),
+		Eligible:         true,
+		GateMode:         "warn_only",
+		Thresholds: PolicyShadowCompareThresholds{
+			UnknownRegressionThreshold:    unknownThreshold,
+			TempfailRecoveryDropThreshold: tempfailDropThreshold,
+			PolicyBlockSpikeThreshold:     policyBlockSpikeThreshold,
+		},
+		Violations: []string{},
+		Providers:  []PolicyShadowCompareProviderSummary{},
+	}
+	if s.cfg.PolicyShadowPromoteGateEnforced {
+		compare.GateMode = "enforce"
+	}
+
+	if strings.TrimSpace(compare.CandidateVersion) == "" && len(stats.PolicyShadowRuns) > 0 {
+		compare.CandidateVersion = strings.TrimSpace(stats.PolicyShadowRuns[0].CandidateVersion)
+		if compare.ActiveVersion == "" {
+			compare.ActiveVersion = strings.TrimSpace(stats.PolicyShadowRuns[0].ActiveVersion)
+		}
+	}
+
+	if strings.TrimSpace(compare.CandidateVersion) == "" {
+		compare.Eligible = false
+		compare.Violations = append(compare.Violations, "candidate_version_missing")
+		return compare
+	}
+
+	latestRun := latestShadowRunForCandidate(stats.PolicyShadowRuns, compare.CandidateVersion, compare.ActiveVersion)
+	if latestRun == nil {
+		compare.Eligible = false
+		compare.Violations = append(compare.Violations, "shadow_run_missing")
+		return compare
+	}
+
+	compare.EvaluatedAt = strings.TrimSpace(latestRun.EvaluatedAt)
+	liveByProvider := make(map[string]ProviderHealthSummary, len(stats.ProviderHealth))
+	for _, provider := range stats.ProviderHealth {
+		name := strings.ToLower(strings.TrimSpace(provider.Provider))
+		if name == "" {
+			continue
+		}
+		liveByProvider[name] = provider
+	}
+
+	tempfailDropThresholdPct := tempfailDropThreshold * 100
+
+	for _, result := range latestRun.Results {
+		provider := strings.ToLower(strings.TrimSpace(result.Provider))
+		if provider == "" {
+			continue
+		}
+
+		live, hasLive := liveByProvider[provider]
+		liveUnknownRate := live.UnknownRate
+		livePolicyBlockedRate := live.PolicyBlockedRate
+		if !hasLive {
+			liveUnknownRate = stats.Settings.ProviderUnknownWarnRate
+			if liveUnknownRate <= 0 {
+				liveUnknownRate = 0.20
+			}
+			livePolicyBlockedRate = 0
+		}
+
+		liveTempfailRecovery := 1.0 - liveUnknownRate
+		if liveTempfailRecovery < 0 {
+			liveTempfailRecovery = 0
+		}
+		if liveTempfailRecovery > 1 {
+			liveTempfailRecovery = 1
+		}
+		liveTempfailRecoveryPct := liveTempfailRecovery * 100
+
+		row := PolicyShadowCompareProviderSummary{
+			Provider:               provider,
+			UnknownRateShadow:      result.UnknownRate,
+			UnknownRateLive:        liveUnknownRate,
+			UnknownDelta:           result.UnknownRate - liveUnknownRate,
+			TempfailRecoveryShadow: result.TempfailRecoveryPct,
+			TempfailRecoveryLive:   liveTempfailRecoveryPct,
+			TempfailRecoveryDelta:  result.TempfailRecoveryPct - liveTempfailRecoveryPct,
+			PolicyBlockedShadow:    result.PolicyBlockedRate,
+			PolicyBlockedLive:      livePolicyBlockedRate,
+			PolicyBlockedDelta:     result.PolicyBlockedRate - livePolicyBlockedRate,
+			Recommendation:         strings.TrimSpace(result.Recommendation),
+		}
+		compare.Providers = append(compare.Providers, row)
+
+		if row.UnknownDelta > unknownThreshold {
+			compare.Eligible = false
+			compare.Violations = append(compare.Violations, provider+":unknown_delta_exceeded")
+		}
+		if row.TempfailRecoveryDelta < -tempfailDropThresholdPct {
+			compare.Eligible = false
+			compare.Violations = append(compare.Violations, provider+":tempfail_recovery_drop_exceeded")
+		}
+		if row.PolicyBlockedDelta > policyBlockSpikeThreshold {
+			compare.Eligible = false
+			compare.Violations = append(compare.Violations, provider+":policy_block_delta_exceeded")
+		}
+		if strings.EqualFold(row.Recommendation, "rollback_candidate") {
+			compare.Eligible = false
+			compare.Violations = append(compare.Violations, provider+":rollback_candidate")
+		}
+	}
+
+	sort.Strings(compare.Violations)
+	sort.Slice(compare.Providers, func(i, j int) bool {
+		return compare.Providers[i].Provider < compare.Providers[j].Provider
+	})
+
+	if len(compare.Providers) == 0 {
+		compare.Eligible = false
+		compare.Violations = append(compare.Violations, "shadow_run_empty")
+	}
+
+	return compare
+}
+
+func latestShadowRunForCandidate(runs []PolicyShadowRunRecord, candidateVersion string, activeVersion string) *PolicyShadowRunRecord {
+	candidateVersion = strings.TrimSpace(candidateVersion)
+	activeVersion = strings.TrimSpace(activeVersion)
+	for index := range runs {
+		run := &runs[index]
+		if strings.TrimSpace(run.CandidateVersion) != candidateVersion {
+			continue
+		}
+		if activeVersion != "" && strings.TrimSpace(run.ActiveVersion) != "" && strings.TrimSpace(run.ActiveVersion) != activeVersion {
+			continue
+		}
+		return run
+	}
+
+	return nil
 }
 
 func filterProviderDrift(

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\EngineServer;
+use App\Models\SmtpDecisionTrace;
 use App\Models\VerifierDomain;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -25,6 +26,12 @@ class InternalEngineServerApiTest extends TestCase
     public function test_internal_engine_server_api_requires_internal_token(): void
     {
         $this->getJson('/api/internal/engine-servers')
+            ->assertUnauthorized()
+            ->assertJsonPath('error_code', 'unauthorized')
+            ->assertJsonPath('message', 'Unauthorized.')
+            ->assertJsonStructure(['request_id']);
+
+        $this->getJson('/api/internal/smtp-decision-traces')
             ->assertUnauthorized()
             ->assertJsonPath('error_code', 'unauthorized')
             ->assertJsonPath('message', 'Unauthorized.')
@@ -185,6 +192,67 @@ class InternalEngineServerApiTest extends TestCase
                     'name',
                     'ip_address',
                 ],
+            ]);
+    }
+
+    public function test_internal_engine_server_api_lists_smtp_decision_traces_with_filters(): void
+    {
+        SmtpDecisionTrace::query()->create([
+            'verification_job_id' => (string) fake()->uuid(),
+            'verification_job_chunk_id' => (string) fake()->uuid(),
+            'email_hash' => str_repeat('a', 64),
+            'provider' => 'gmail',
+            'policy_version' => 'v4.1.0',
+            'matched_rule_id' => 'rule-gmail-tempfail',
+            'decision_class' => 'unknown',
+            'smtp_code' => '451',
+            'enhanced_code' => '4.7.1',
+            'retry_strategy' => 'tempfail',
+            'reason_tag' => 'provider_tempfail_unresolved',
+            'confidence_hint' => 'medium',
+            'session_strategy_id' => 'gmail:normal',
+            'attempt_route' => [
+                'route' => 'mx:mx1.gmail.test',
+                'mx_host' => 'mx1.gmail.test',
+                'attempt_number' => 1,
+                'worker_id' => 'worker-a',
+                'pool' => 'pool-a',
+                'provider' => 'gmail',
+            ],
+            'trace_payload' => [
+                'attempt_chain' => [
+                    ['attempt_number' => 1, 'mx_host' => 'mx1.gmail.test', 'reason_tag' => 'provider_tempfail_unresolved'],
+                ],
+            ],
+            'observed_at' => now()->subMinute(),
+        ]);
+
+        SmtpDecisionTrace::query()->create([
+            'verification_job_id' => (string) fake()->uuid(),
+            'verification_job_chunk_id' => (string) fake()->uuid(),
+            'email_hash' => str_repeat('b', 64),
+            'provider' => 'yahoo',
+            'policy_version' => 'v4.1.0',
+            'matched_rule_id' => 'rule-yahoo-valid',
+            'decision_class' => 'deliverable',
+            'reason_tag' => 'mailbox_exists',
+            'confidence_hint' => 'high',
+            'session_strategy_id' => 'yahoo:normal',
+            'attempt_route' => ['route' => 'mx:mx.yahoo.test'],
+            'trace_payload' => ['attempt_chain' => []],
+            'observed_at' => now(),
+        ]);
+
+        $this->withHeaders($this->internalHeaders())
+            ->getJson('/api/internal/smtp-decision-traces?provider=gmail&decision_class=unknown&limit=10')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.provider', 'gmail')
+            ->assertJsonPath('data.0.reason_tag', 'provider_tempfail_unresolved')
+            ->assertJsonPath('data.0.attempt_chain.0.mx_host', 'mx1.gmail.test')
+            ->assertJsonPath('meta.limit', 10)
+            ->assertJsonStructure([
+                'meta' => ['next_before_id'],
             ]);
     }
 

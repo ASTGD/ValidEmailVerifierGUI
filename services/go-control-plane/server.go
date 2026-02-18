@@ -65,6 +65,7 @@ func (s *Server) Router() http.Handler {
 		router.Get("/api/providers/accuracy/calibration", s.handleProvidersAccuracyCalibration)
 		router.Get("/api/providers/quality/drift", s.handleProvidersQualityDrift)
 		router.Get("/api/providers/unknown/clusters", s.handleProvidersUnknownClusters)
+		router.Get("/api/providers/unknown/reasons", s.handleProvidersUnknownReasons)
 		router.Get("/api/providers/retry-effectiveness", s.handleProvidersRetryEffectiveness)
 		router.Get("/api/providers/modes/semantics", s.handleProviderModeSemantics)
 		router.Get("/api/providers/routing/quality", s.handleProviderRoutingQuality)
@@ -79,6 +80,8 @@ func (s *Server) Router() http.Handler {
 		router.Post("/api/policies/rollback", s.handlePolicyRollback)
 		router.Post("/api/policies/shadow/evaluate", s.handlePolicyShadowEvaluate)
 		router.Get("/api/policies/shadow/runs", s.handlePolicyShadowRuns)
+		router.Get("/api/policies/shadow/compare", s.handlePolicyShadowCompare)
+		router.Get("/api/decisions/trace", s.handleDecisionsTrace)
 		router.Get("/metrics", s.handleMetrics)
 
 		router.Get("/ui", s.handleUIRedirect)

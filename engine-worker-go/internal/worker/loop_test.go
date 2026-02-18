@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -332,7 +333,23 @@ func TestReasonWithEvidenceIncludesAttemptMetadata(t *testing.T) {
 		AttemptNumber:      2,
 		AttemptRoute:       "mx:mx.gmail.test",
 		EvidenceStrength:   "medium",
-	})
+		AttemptChain: []verifier.AttemptEvidence{
+			{
+				AttemptNumber:    1,
+				MXHost:           "mx.gmail.test",
+				AttemptRoute:     "mx:mx.gmail.test",
+				DecisionClass:    verifier.DecisionRetryable,
+				ReasonCode:       "smtp_tempfail",
+				ReasonTag:        "greylist",
+				RetryStrategy:    "greylist",
+				SMTPCode:         451,
+				EnhancedCode:     "4.7.1",
+				ProviderProfile:  "gmail",
+				ConfidenceHint:   "medium",
+				EvidenceStrength: "medium",
+			},
+		},
+	}, true, true)
 
 	if !strings.Contains(reason, "mx=mx.gmail.test") {
 		t.Fatalf("expected reason metadata to include mx host, got %q", reason)
@@ -346,4 +363,97 @@ func TestReasonWithEvidenceIncludesAttemptMetadata(t *testing.T) {
 	if !strings.Contains(reason, "evidence=medium") {
 		t.Fatalf("expected reason metadata to include evidence strength, got %q", reason)
 	}
+	if !strings.Contains(reason, "attempt_chain=") {
+		t.Fatalf("expected reason metadata to include attempt chain, got %q", reason)
+	}
+
+	token := parseReasonMetadataValue(reason, "attempt_chain")
+	if token == "" {
+		t.Fatalf("expected attempt_chain metadata token")
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		t.Fatalf("failed to decode attempt_chain token: %v", err)
+	}
+
+	var attempts []verifier.AttemptEvidence
+	if err := json.Unmarshal(decoded, &attempts); err != nil {
+		t.Fatalf("failed to decode attempt chain json: %v", err)
+	}
+	if len(attempts) != 1 {
+		t.Fatalf("expected one attempt evidence entry, got %d", len(attempts))
+	}
+	if attempts[0].ReasonCode != "smtp_tempfail" {
+		t.Fatalf("expected smtp_tempfail reason code, got %q", attempts[0].ReasonCode)
+	}
+}
+
+func TestReasonWithEvidenceNormalizesUnknownReasonTags(t *testing.T) {
+	t.Parallel()
+
+	reason := reasonWithEvidence(verifier.Result{
+		Category:      verifier.CategoryRisky,
+		Reason:        "smtp_tempfail",
+		DecisionClass: verifier.DecisionRetryable,
+		ReasonTag:     "greylist",
+	}, true, true)
+	if !strings.Contains(reason, "tag=provider_tempfail_unresolved") {
+		t.Fatalf("expected normalized provider_tempfail_unresolved tag, got %q", reason)
+	}
+
+	identityReason := reasonWithEvidence(verifier.Result{
+		Category: verifier.CategoryRisky,
+		Reason:   "smtp_probe_identity_missing",
+	}, true, true)
+	if !strings.Contains(identityReason, "tag=identity_rejected") {
+		t.Fatalf("expected normalized identity_rejected tag, got %q", identityReason)
+	}
+
+	connectionReason := reasonWithEvidence(verifier.Result{
+		Category: verifier.CategoryRisky,
+		Reason:   "smtp_connect_timeout",
+	}, true, true)
+	if !strings.Contains(connectionReason, "tag=connection_unstable") {
+		t.Fatalf("expected normalized connection_unstable tag, got %q", connectionReason)
+	}
+}
+
+func TestReasonWithEvidenceRespectsFeatureFlags(t *testing.T) {
+	t.Parallel()
+
+	reason := reasonWithEvidence(verifier.Result{
+		Category:      verifier.CategoryRisky,
+		Reason:        "smtp_tempfail",
+		DecisionClass: verifier.DecisionRetryable,
+		ReasonTag:     "greylist",
+		AttemptChain: []verifier.AttemptEvidence{
+			{AttemptNumber: 1, MXHost: "mx.example.test"},
+		},
+	}, false, false)
+
+	if strings.Contains(reason, "attempt_chain=") {
+		t.Fatalf("expected attempt_chain metadata to be disabled, got %q", reason)
+	}
+	if !strings.Contains(reason, "tag=greylist") {
+		t.Fatalf("expected original reason tag when taxonomy flag is disabled, got %q", reason)
+	}
+}
+
+func parseReasonMetadataValue(reason, key string) string {
+	separator := strings.Index(reason, ":")
+	if separator < 0 || separator+1 >= len(reason) {
+		return ""
+	}
+
+	for _, token := range strings.Split(reason[separator+1:], ";") {
+		token = strings.TrimSpace(token)
+		prefix := key + "="
+		if !strings.HasPrefix(token, prefix) {
+			continue
+		}
+
+		return strings.TrimSpace(strings.TrimPrefix(token, prefix))
+	}
+
+	return ""
 }

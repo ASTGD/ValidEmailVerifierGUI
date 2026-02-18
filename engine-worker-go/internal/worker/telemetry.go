@@ -270,6 +270,20 @@ func unknownReasonTagCounters(source map[string]int64) map[string]int64 {
 		return map[string]int64{}
 	}
 
+	allowed := map[string]string{
+		"unknown_transient":            "unknown_transient",
+		"policy_blocked_ambiguous":     "policy_blocked_ambiguous",
+		"provider_tempfail_unresolved": "provider_tempfail_unresolved",
+		"connection_unstable":          "connection_unstable",
+		"identity_rejected":            "identity_rejected",
+		"other_unknown":                "other_unknown",
+		// Backward compatibility aliases.
+		"policy_blocked": "policy_blocked_ambiguous",
+		"greylist":       "provider_tempfail_unresolved",
+		"rate_limit":     "provider_tempfail_unresolved",
+		"auth_required":  "identity_rejected",
+	}
+
 	filtered := make(map[string]int64)
 	for key, value := range source {
 		normalized := strings.ToLower(strings.TrimSpace(key))
@@ -277,11 +291,8 @@ func unknownReasonTagCounters(source map[string]int64) map[string]int64 {
 			continue
 		}
 
-		if strings.Contains(normalized, "unknown") ||
-			normalized == "greylist" ||
-			normalized == "rate_limit" ||
-			normalized == "policy_blocked" {
-			filtered[normalized] = value
+		if mapped, ok := allowed[normalized]; ok {
+			filtered[mapped] += value
 		}
 	}
 

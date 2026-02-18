@@ -30,6 +30,7 @@ type OverviewData struct {
 	ProviderHealth         []ProviderHealthSummary
 	ProviderAccuracy       []ProviderAccuracyCalibrationSummary
 	UnknownClusters        []ProviderUnknownClusterSummary
+	UnknownReasons         []ProviderUnknownReasonSummary
 	PolicyShadowRuns       []PolicyShadowRunRecord
 	ProviderPolicies       ProviderPoliciesData
 	RoutingQuality         RoutingQualitySummary
@@ -50,6 +51,15 @@ type WorkersPageData struct {
 	PollIntervalSeconds int
 	ActiveTab           string
 	ServerRegistry      EngineServerRegistryPageData
+	DecisionTraces      WorkerDecisionTracePageData
+}
+
+type WorkerDecisionTracePageData struct {
+	Enabled      bool
+	Error        string
+	Records      []LaravelDecisionTraceRecord
+	Filter       LaravelDecisionTraceFilter
+	NextBeforeID int64
 }
 
 type EngineServerRegistryPageData struct {
@@ -206,6 +216,7 @@ func (s *Server) handleUIOverview(w http.ResponseWriter, r *http.Request) {
 		ProviderHealth:         stats.ProviderHealth,
 		ProviderAccuracy:       stats.ProviderAccuracy,
 		UnknownClusters:        stats.UnknownClusters,
+		UnknownReasons:         stats.UnknownReasons,
 		PolicyShadowRuns:       stats.PolicyShadowRuns,
 		ProviderPolicies:       stats.ProviderPolicies,
 		RoutingQuality:         stats.RoutingQuality,
@@ -252,6 +263,10 @@ func (s *Server) handleUIWorkers(w http.ResponseWriter, r *http.Request) {
 	if activeTab == "registry" && !registryData.Enabled {
 		activeTab = "runtime"
 	}
+	decisionTraceData := s.buildWorkerDecisionTraceData(r)
+	if activeTab == "registry" {
+		decisionTraceData = WorkerDecisionTracePageData{}
+	}
 
 	data := WorkersPageData{
 		BasePageData: BasePageData{
@@ -267,9 +282,49 @@ func (s *Server) handleUIWorkers(w http.ResponseWriter, r *http.Request) {
 		PollIntervalSeconds: settings.UIWorkersRefreshSecond,
 		ActiveTab:           activeTab,
 		ServerRegistry:      registryData,
+		DecisionTraces:      decisionTraceData,
 	}
 
 	s.views.Render(w, data)
+}
+
+func (s *Server) buildWorkerDecisionTraceData(r *http.Request) WorkerDecisionTracePageData {
+	filter := LaravelDecisionTraceFilter{
+		Provider:      strings.ToLower(strings.TrimSpace(r.URL.Query().Get("trace_provider"))),
+		DecisionClass: strings.ToLower(strings.TrimSpace(r.URL.Query().Get("trace_decision_class"))),
+		ReasonTag:     strings.ToLower(strings.TrimSpace(r.URL.Query().Get("trace_reason_tag"))),
+		PolicyVersion: strings.TrimSpace(r.URL.Query().Get("trace_policy_version")),
+		Limit:         20,
+	}
+	if value := strings.TrimSpace(r.URL.Query().Get("trace_limit")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed >= 1 && parsed <= 100 {
+			filter.Limit = parsed
+		}
+	}
+	if value := strings.TrimSpace(r.URL.Query().Get("trace_before_id")); value != "" {
+		if parsed, err := strconv.ParseInt(value, 10, 64); err == nil && parsed > 0 {
+			filter.BeforeID = parsed
+		}
+	}
+
+	data := WorkerDecisionTracePageData{
+		Enabled: s.laravelEngineClient != nil,
+		Filter:  filter,
+	}
+	if s.laravelEngineClient == nil {
+		data.Error = "Decision trace integration is unavailable. Configure Laravel internal API credentials."
+		return data
+	}
+
+	response, err := s.laravelEngineClient.ListDecisionTraces(r.Context(), filter)
+	if err != nil {
+		data.Error = mapRegistryActionError("load decision traces", err)
+		return data
+	}
+
+	data.Records = response.Records
+	data.NextBeforeID = response.NextBeforeID
+	return data
 }
 
 func (s *Server) buildEngineServerRegistryData(r *http.Request, runtimeWorkers []WorkerSummary) EngineServerRegistryPageData {
@@ -1104,6 +1159,11 @@ func (s *Server) handleUIPolicyPromote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	notes := strings.TrimSpace(r.FormValue("notes"))
+	if err := s.guardPolicyPromoteByShadowCompare(r.Context(), version); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+
 	if _, err := s.store.PromoteSMTPPolicyVersion(r.Context(), version, canaryPercent, uiTriggeredBy(r), notes); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

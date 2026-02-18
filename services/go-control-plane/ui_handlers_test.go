@@ -195,6 +195,150 @@ func TestWorkersTemplateRendersRegistryTabAndForms(t *testing.T) {
 	assertContains("registry_filter=matched")
 }
 
+func TestWorkersTemplateRendersDecisionTraceExplorer(t *testing.T) {
+	renderer, err := NewViewRenderer()
+	if err != nil {
+		t.Fatalf("failed to create renderer: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	renderer.Render(recorder, WorkersPageData{
+		BasePageData: BasePageData{
+			Title:           "Verifier Engine Room · Workers",
+			Subtitle:        "Live worker status",
+			ActiveNav:       "workers",
+			ContentTemplate: "workers",
+			BasePath:        "/verifier-engine-room",
+		},
+		ActiveTab: "runtime",
+		Workers: []WorkerSummary{
+			{
+				WorkerID:      "worker-1",
+				Host:          "host-1",
+				Pool:          "pool-a",
+				Status:        "online",
+				DesiredState:  "running",
+				LastHeartbeat: "2026-02-18T12:00:00Z",
+			},
+		},
+		DecisionTraces: WorkerDecisionTracePageData{
+			Enabled: true,
+			Filter: LaravelDecisionTraceFilter{
+				Provider:      "gmail",
+				DecisionClass: "unknown",
+				ReasonTag:     "provider_tempfail_unresolved",
+				PolicyVersion: "v4.2.0",
+				Limit:         20,
+			},
+			Records: []LaravelDecisionTraceRecord{
+				{
+					ID:            1,
+					Provider:      "gmail",
+					DecisionClass: "unknown",
+					ReasonTag:     "provider_tempfail_unresolved",
+					PolicyVersion: "v4.2.0",
+					MatchedRuleID: "rule-1",
+					SMTPCode:      "451",
+					EnhancedCode:  "4.7.1",
+					AttemptChain:  []map[string]interface{}{{"attempt_number": 1}},
+					ObservedAt:    "2026-02-18T12:00:00Z",
+				},
+			},
+			NextBeforeID: 10,
+		},
+	})
+
+	body := recorder.Body.String()
+	assertContains := func(needle string) {
+		if !strings.Contains(body, needle) {
+			t.Fatalf("expected workers runtime template to contain %q", needle)
+		}
+	}
+
+	assertContains("Decision Trace Explorer")
+	assertContains("trace_provider")
+	assertContains("provider_tempfail_unresolved")
+	assertContains("Load More")
+	assertContains("retryable")
+}
+
+func TestWorkersTemplateRendersStoppedWorkerAsRedWithStartAction(t *testing.T) {
+	renderer, err := NewViewRenderer()
+	if err != nil {
+		t.Fatalf("failed to create renderer: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	renderer.Render(recorder, WorkersPageData{
+		BasePageData: BasePageData{
+			Title:           "Verifier Engine Room · Workers",
+			Subtitle:        "Live worker status",
+			ActiveNav:       "workers",
+			ContentTemplate: "workers",
+			BasePath:        "/verifier-engine-room",
+		},
+		ActiveTab: "runtime",
+		Workers: []WorkerSummary{
+			{
+				WorkerID:      "worker-stopped",
+				Host:          "host-1",
+				Pool:          "pool-a",
+				Status:        "stopped",
+				DesiredState:  "stopped",
+				LastHeartbeat: "2026-02-18T12:00:00Z",
+			},
+		},
+	})
+
+	body := recorder.Body.String()
+	if !strings.Contains(body, "bg-red-500/20 text-red-300") {
+		t.Fatalf("expected stopped worker status to render in red")
+	}
+	if !strings.Contains(body, "/verifier-engine-room/workers/worker-stopped/resume") {
+		t.Fatalf("expected stopped worker to expose resume endpoint")
+	}
+	if !strings.Contains(body, ">Start</button>") {
+		t.Fatalf("expected stopped worker action to render Start button")
+	}
+}
+
+func TestWorkersTemplateRendersStartingStateWithoutStartAction(t *testing.T) {
+	renderer, err := NewViewRenderer()
+	if err != nil {
+		t.Fatalf("failed to create renderer: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	renderer.Render(recorder, WorkersPageData{
+		BasePageData: BasePageData{
+			Title:           "Verifier Engine Room · Workers",
+			Subtitle:        "Live worker status",
+			ActiveNav:       "workers",
+			ContentTemplate: "workers",
+			BasePath:        "/verifier-engine-room",
+		},
+		ActiveTab: "runtime",
+		Workers: []WorkerSummary{
+			{
+				WorkerID:      "worker-starting",
+				Host:          "host-1",
+				Pool:          "pool-a",
+				Status:        "stopped",
+				DesiredState:  "running",
+				LastHeartbeat: "2026-02-18T12:00:00Z",
+			},
+		},
+	})
+
+	body := recorder.Body.String()
+	if !strings.Contains(body, ">starting<") {
+		t.Fatalf("expected transition state label to render as starting")
+	}
+	if strings.Contains(body, "/verifier-engine-room/workers/worker-starting/resume") && strings.Contains(body, ">Start</button>") {
+		t.Fatalf("expected no Start action while desired state is running")
+	}
+}
+
 func TestApplyRegistryRuntimeMatchMarksMatchedAndOrphanWorkers(t *testing.T) {
 	servers := []LaravelEngineServerRecord{
 		{ID: 1, Name: "srv-1", IPAddress: "10.0.0.1", Status: "online"},

@@ -5,6 +5,7 @@ namespace App\Services\SmtpDecisionTracing;
 use App\Models\SmtpDecisionTrace;
 use App\Models\VerificationJobChunk;
 use App\Support\EmailHashing;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
 
 class SmtpDecisionTraceRecorder
@@ -106,15 +107,34 @@ class SmtpDecisionTraceRecorder
             );
             $reasonTag = $this->normalizeReasonTag((string) ($parsed['tag'] ?? ''), (string) ($parsed['base_reason'] ?? ''));
             $provider = $this->normalizeProvider((string) ($parsed['provider'] ?? $defaultProvider));
+            $attemptChain = $this->normalizeAttemptChain(
+                $this->decodeAttemptChain($parsed['attempt_chain'] ?? null),
+                $provider,
+                $lastWorkerId !== '' ? $lastWorkerId : null,
+                $chunk->preferred_pool
+            );
 
             $attemptNumber = (int) ($parsed['attempt'] ?? 0);
+            if ($attemptNumber <= 0 && $attemptChain !== []) {
+                $attemptNumber = (int) Arr::get($attemptChain, count($attemptChain) - 1 .'.attempt_number', 0);
+            }
+            $attemptRouteValue = $parsed['route'] ?? null;
+            if (($attemptRouteValue === null || $attemptRouteValue === '') && $attemptChain !== []) {
+                $attemptRouteValue = Arr::get($attemptChain, count($attemptChain) - 1 .'.attempt_route');
+            }
+            $mxHostValue = $parsed['mx'] ?? null;
+            if (($mxHostValue === null || $mxHostValue === '') && $attemptChain !== []) {
+                $mxHostValue = Arr::get($attemptChain, count($attemptChain) - 1 .'.mx_host');
+            }
             $attemptRoute = [
-                'route' => $parsed['route'] ?? null,
-                'mx_host' => $parsed['mx'] ?? null,
+                'route' => $attemptRouteValue,
+                'mx_host' => $mxHostValue,
                 'attempt_number' => $attemptNumber > 0 ? $attemptNumber : null,
                 'worker_id' => $lastWorkerId !== '' ? $lastWorkerId : null,
+                'pool' => $chunk->preferred_pool,
                 'preferred_pool' => $chunk->preferred_pool,
-                'routing_provider' => $chunk->routing_provider,
+                'provider' => $provider,
+                'routing_provider' => $provider,
             ];
 
             $rows[] = [
@@ -136,6 +156,7 @@ class SmtpDecisionTraceRecorder
                     'bucket' => $bucket,
                     'reason_raw' => $reason,
                     'base_reason' => $parsed['base_reason'] ?? null,
+                    'attempt_chain' => $attemptChain,
                     'metadata' => $parsed,
                 ], JSON_UNESCAPED_SLASHES),
                 'observed_at' => $now,
@@ -244,5 +265,78 @@ class SmtpDecisionTraceRecorder
         return in_array($provider, ['gmail', 'microsoft', 'yahoo', 'generic'], true)
             ? $provider
             : 'generic';
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function decodeAttemptChain(mixed $encoded): array
+    {
+        $encoded = trim((string) $encoded);
+        if ($encoded === '') {
+            return [];
+        }
+
+        $normalized = strtr($encoded, '-_', '+/');
+        $padding = strlen($normalized) % 4;
+        if ($padding > 0) {
+            $normalized .= str_repeat('=', 4 - $padding);
+        }
+
+        $decoded = base64_decode($normalized, true);
+        if ($decoded === false) {
+            return [];
+        }
+
+        $parsed = json_decode($decoded, true);
+        if (! is_array($parsed)) {
+            return [];
+        }
+
+        return array_values(array_filter($parsed, static fn (mixed $item): bool => is_array($item)));
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $attemptChain
+     * @return array<int, array<string, mixed>>
+     */
+    private function normalizeAttemptChain(array $attemptChain, string $provider, ?string $workerId, ?string $pool): array
+    {
+        if ($attemptChain === []) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($attemptChain as $entry) {
+            $attemptNumber = (int) ($entry['attempt_number'] ?? 0);
+            $smtpCode = (int) ($entry['smtp_code'] ?? 0);
+            $normalizedEntry = [
+                'attempt_number' => $attemptNumber > 0 ? $attemptNumber : null,
+                'mx_host' => $this->nullableString($entry['mx_host'] ?? null),
+                'attempt_route' => $this->nullableString($entry['attempt_route'] ?? null),
+                'decision_class' => $this->nullableString($entry['decision_class'] ?? null),
+                'reason_code' => $this->nullableString($entry['reason_code'] ?? null),
+                'reason_tag' => $this->nullableString($entry['reason_tag'] ?? null),
+                'retry_strategy' => $this->nullableString($entry['retry_strategy'] ?? null),
+                'smtp_code' => $smtpCode > 0 ? $smtpCode : null,
+                'enhanced_code' => $this->nullableString($entry['enhanced_code'] ?? null),
+                'provider_profile' => $this->normalizeProvider((string) ($entry['provider_profile'] ?? $provider)),
+                'confidence_hint' => $this->normalizeConfidence((string) ($entry['confidence_hint'] ?? '')),
+                'evidence_strength' => $this->normalizeConfidence((string) ($entry['evidence_strength'] ?? '')),
+                'worker_id' => $workerId,
+                'pool' => $pool,
+                'provider' => $provider,
+            ];
+            $normalized[] = $normalizedEntry;
+        }
+
+        return $normalized;
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
     }
 }

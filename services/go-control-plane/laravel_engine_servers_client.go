@@ -59,6 +59,41 @@ type LaravelProvisioningBundleDetails struct {
 	InstallCommandTemplate string            `json:"install_command_template"`
 }
 
+type LaravelDecisionTraceFilter struct {
+	Provider      string
+	DecisionClass string
+	ReasonTag     string
+	PolicyVersion string
+	Limit         int
+	BeforeID      int64
+}
+
+type LaravelDecisionTraceRecord struct {
+	ID                     int64                    `json:"id"`
+	VerificationJobID      string                   `json:"verification_job_id"`
+	VerificationJobChunkID string                   `json:"verification_job_chunk_id"`
+	EmailHash              string                   `json:"email_hash"`
+	Provider               string                   `json:"provider"`
+	PolicyVersion          string                   `json:"policy_version"`
+	MatchedRuleID          string                   `json:"matched_rule_id"`
+	DecisionClass          string                   `json:"decision_class"`
+	SMTPCode               string                   `json:"smtp_code"`
+	EnhancedCode           string                   `json:"enhanced_code"`
+	RetryStrategy          string                   `json:"retry_strategy"`
+	ReasonTag              string                   `json:"reason_tag"`
+	ConfidenceHint         string                   `json:"confidence_hint"`
+	SessionStrategyID      string                   `json:"session_strategy_id"`
+	AttemptRoute           map[string]interface{}   `json:"attempt_route"`
+	AttemptChain           []map[string]interface{} `json:"attempt_chain"`
+	ObservedAt             string                   `json:"observed_at"`
+	CreatedAt              string                   `json:"created_at"`
+}
+
+type LaravelDecisionTraceResponse struct {
+	Records      []LaravelDecisionTraceRecord
+	NextBeforeID int64
+}
+
 type LaravelEngineServerUpsertPayload struct {
 	Name             string `json:"name"`
 	IPAddress        string `json:"ip_address"`
@@ -243,6 +278,55 @@ func (c *LaravelEngineServerClient) LatestProvisioningBundle(ctx context.Context
 	}
 
 	return &responseBody.Data, nil
+}
+
+func (c *LaravelEngineServerClient) ListDecisionTraces(
+	ctx context.Context,
+	filter LaravelDecisionTraceFilter,
+) (*LaravelDecisionTraceResponse, error) {
+	if c == nil {
+		return nil, fmt.Errorf("laravel engine server client is not configured")
+	}
+
+	params := url.Values{}
+	if provider := strings.ToLower(strings.TrimSpace(filter.Provider)); provider != "" {
+		params.Set("provider", provider)
+	}
+	if decisionClass := strings.ToLower(strings.TrimSpace(filter.DecisionClass)); decisionClass != "" {
+		params.Set("decision_class", decisionClass)
+	}
+	if reasonTag := strings.ToLower(strings.TrimSpace(filter.ReasonTag)); reasonTag != "" {
+		params.Set("reason_tag", reasonTag)
+	}
+	if policyVersion := strings.TrimSpace(filter.PolicyVersion); policyVersion != "" {
+		params.Set("policy_version", policyVersion)
+	}
+	if filter.Limit > 0 {
+		params.Set("limit", strconv.Itoa(filter.Limit))
+	}
+	if filter.BeforeID > 0 {
+		params.Set("before_id", strconv.FormatInt(filter.BeforeID, 10))
+	}
+
+	path := "/api/internal/smtp-decision-traces"
+	if encoded := params.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+
+	responseBody := struct {
+		Data []LaravelDecisionTraceRecord `json:"data"`
+		Meta struct {
+			NextBeforeID int64 `json:"next_before_id"`
+		} `json:"meta"`
+	}{}
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, "", &responseBody); err != nil {
+		return nil, err
+	}
+
+	return &LaravelDecisionTraceResponse{
+		Records:      responseBody.Data,
+		NextBeforeID: responseBody.Meta.NextBeforeID,
+	}, nil
 }
 
 func (c *LaravelEngineServerClient) doJSON(ctx context.Context, method string, path string, payload interface{}, triggeredBy string, target interface{}) error {
@@ -484,6 +568,8 @@ func internalAPIAction(method string, path string) string {
 		return "list_servers"
 	case normalized == "/api/internal/engine-servers" && strings.EqualFold(method, http.MethodPost):
 		return "create_server"
+	case strings.HasPrefix(normalized, "/api/internal/smtp-decision-traces") && strings.EqualFold(method, http.MethodGet):
+		return "list_decision_traces"
 	case strings.HasSuffix(normalized, "/provisioning-bundles/latest"):
 		return "latest_bundle"
 	case strings.HasSuffix(normalized, "/provisioning-bundles"):

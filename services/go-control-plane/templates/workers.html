@@ -321,7 +321,19 @@
                             <td class="py-3 text-slate-300">{{ .Host }}</td>
                             <td class="py-3 text-slate-300">{{ if .Pool }}{{ .Pool }}{{ else }}-{{ end }}</td>
                             <td class="py-3">
-                                <span class="rounded-full bg-slate-800 px-3 py-1 text-xs">{{ .Status }}</span>
+                                {{ if eq .DesiredState "stopped" }}
+                                    <span class="rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300">stopped</span>
+                                {{ else if and (eq .Status "stopped") (eq .DesiredState "running") }}
+                                    <span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-200">starting</span>
+                                {{ else if and (eq .Status "running") (eq .DesiredState "stopped") }}
+                                    <span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-200">stopping</span>
+                                {{ else if eq .Status "online" }}
+                                    <span class="rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300">online</span>
+                                {{ else if eq .Status "offline" }}
+                                    <span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-200">offline</span>
+                                {{ else }}
+                                    <span class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200">{{ .Status }}</span>
+                                {{ end }}
                             </td>
                             <td class="py-3">
                                 <span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300">{{ .DesiredState }}</span>
@@ -332,6 +344,11 @@
                             <td class="py-3 text-slate-400">{{ .LastHeartbeat }}</td>
                             <td class="py-3">
                                 <div class="flex flex-wrap gap-2">
+                                    {{ if eq .DesiredState "stopped" }}
+                                    <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/resume">
+                                        <button class="rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-500/30" type="submit">Start</button>
+                                    </form>
+                                    {{ else }}
                                     <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/pause">
                                         <button class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700" type="submit">Pause</button>
                                     </form>
@@ -344,6 +361,7 @@
                                     <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/stop">
                                         <button class="rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300 hover:bg-red-500/30" type="submit">Stop</button>
                                     </form>
+                                    {{ end }}
                                     {{ if .Quarantined }}
                                     <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/unquarantine">
                                         <button class="rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-500/30" type="submit">Unquarantine</button>
@@ -364,6 +382,106 @@
                     </tbody>
                 </table>
             </div>
+        </section>
+
+        <section class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold">Decision Trace Explorer</h2>
+                    <p class="text-sm text-slate-400">Inspect risky/unknown probe decisions with attempt-chain evidence.</p>
+                </div>
+            </div>
+
+            {{ if .DecisionTraces.Error }}
+                <div class="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                    {{ .DecisionTraces.Error }}
+                </div>
+            {{ end }}
+
+            <form method="GET" action="{{ .BasePath }}/workers" class="mt-4 grid gap-3 md:grid-cols-5">
+                <input type="hidden" name="tab" value="runtime" />
+                <label class="space-y-1 text-xs text-slate-400">
+                    <span>Provider</span>
+                    <select name="trace_provider" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+                        <option value="">All providers</option>
+                        <option value="gmail" {{ if eq .DecisionTraces.Filter.Provider "gmail" }}selected{{ end }}>gmail</option>
+                        <option value="microsoft" {{ if eq .DecisionTraces.Filter.Provider "microsoft" }}selected{{ end }}>microsoft</option>
+                        <option value="yahoo" {{ if eq .DecisionTraces.Filter.Provider "yahoo" }}selected{{ end }}>yahoo</option>
+                        <option value="generic" {{ if eq .DecisionTraces.Filter.Provider "generic" }}selected{{ end }}>generic</option>
+                    </select>
+                </label>
+                <label class="space-y-1 text-xs text-slate-400">
+                    <span>Decision class</span>
+                    <select name="trace_decision_class" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+                        <option value="">All decisions</option>
+                        <option value="unknown" {{ if eq .DecisionTraces.Filter.DecisionClass "unknown" }}selected{{ end }}>unknown</option>
+                        <option value="retryable" {{ if eq .DecisionTraces.Filter.DecisionClass "retryable" }}selected{{ end }}>retryable</option>
+                        <option value="policy_blocked" {{ if eq .DecisionTraces.Filter.DecisionClass "policy_blocked" }}selected{{ end }}>policy_blocked</option>
+                        <option value="deliverable" {{ if eq .DecisionTraces.Filter.DecisionClass "deliverable" }}selected{{ end }}>deliverable</option>
+                        <option value="undeliverable" {{ if eq .DecisionTraces.Filter.DecisionClass "undeliverable" }}selected{{ end }}>undeliverable</option>
+                    </select>
+                </label>
+                <label class="space-y-1 text-xs text-slate-400">
+                    <span>Unknown reason tag</span>
+                    <input name="trace_reason_tag" value="{{ .DecisionTraces.Filter.ReasonTag }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" placeholder="provider_tempfail_unresolved" />
+                </label>
+                <label class="space-y-1 text-xs text-slate-400">
+                    <span>Policy version</span>
+                    <input name="trace_policy_version" value="{{ .DecisionTraces.Filter.PolicyVersion }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" placeholder="v4.0.0" />
+                </label>
+                <label class="space-y-1 text-xs text-slate-400">
+                    <span>Limit</span>
+                    <input name="trace_limit" type="number" min="1" max="100" value="{{ if gt .DecisionTraces.Filter.Limit 0 }}{{ .DecisionTraces.Filter.Limit }}{{ else }}20{{ end }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <div class="md:col-span-5 flex flex-wrap items-center gap-2">
+                    <button type="submit" class="rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-400">Apply Filters</button>
+                    <a href="{{ .BasePath }}/workers?tab=runtime" class="rounded-full bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700">Reset</a>
+                </div>
+            </form>
+
+            <div class="mt-4 overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="text-xs uppercase text-slate-500">
+                        <tr>
+                            <th class="py-2">Observed</th>
+                            <th class="py-2">Provider</th>
+                            <th class="py-2">Decision</th>
+                            <th class="py-2">Reason</th>
+                            <th class="py-2">SMTP</th>
+                            <th class="py-2">Policy</th>
+                            <th class="py-2">Rule</th>
+                            <th class="py-2">Attempts</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800">
+                        {{ range .DecisionTraces.Records }}
+                            <tr>
+                                <td class="py-3 text-slate-400">{{ if .ObservedAt }}{{ .ObservedAt }}{{ else }}{{ .CreatedAt }}{{ end }}</td>
+                                <td class="py-3 text-slate-200">{{ .Provider }}</td>
+                                <td class="py-3 text-slate-200">{{ .DecisionClass }}</td>
+                                <td class="py-3 text-slate-300">{{ .ReasonTag }}</td>
+                                <td class="py-3 text-slate-300">{{ if .SMTPCode }}{{ .SMTPCode }}{{ else }}-{{ end }} {{ if .EnhancedCode }}({{ .EnhancedCode }}){{ end }}</td>
+                                <td class="py-3 text-slate-300">{{ if .PolicyVersion }}{{ .PolicyVersion }}{{ else }}-{{ end }}</td>
+                                <td class="py-3 text-slate-300">{{ if .MatchedRuleID }}{{ .MatchedRuleID }}{{ else }}-{{ end }}</td>
+                                <td class="py-3 text-slate-300">{{ len .AttemptChain }}</td>
+                            </tr>
+                        {{ else }}
+                            <tr>
+                                <td colspan="8" class="py-6 text-center text-slate-400">No decision traces found for this filter.</td>
+                            </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+
+            {{ if gt .DecisionTraces.NextBeforeID 0 }}
+                <div class="mt-4">
+                    <a
+                        href="{{ .BasePath }}/workers?tab=runtime&trace_provider={{ .DecisionTraces.Filter.Provider }}&trace_decision_class={{ .DecisionTraces.Filter.DecisionClass }}&trace_reason_tag={{ .DecisionTraces.Filter.ReasonTag }}&trace_policy_version={{ .DecisionTraces.Filter.PolicyVersion }}&trace_limit={{ .DecisionTraces.Filter.Limit }}&trace_before_id={{ .DecisionTraces.NextBeforeID }}"
+                        class="rounded-full bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                    >Load More</a>
+                </div>
+            {{ end }}
         </section>
     {{ end }}
 </section>
@@ -392,13 +510,18 @@
             </form>
         `;
 
-        const renderActions = (workerID, quarantined) => {
-            const base = [
-                actionButton({ workerID, name: 'pause' }, 'Pause', 'rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700'),
-                actionButton({ workerID, name: 'resume' }, 'Resume', 'rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700'),
-                actionButton({ workerID, name: 'drain' }, 'Drain', 'rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300 hover:bg-amber-500/30'),
-                actionButton({ workerID, name: 'stop' }, 'Stop', 'rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300 hover:bg-red-500/30'),
-            ];
+        const renderActions = (workerID, quarantined, desiredState) => {
+            const isStopped = desiredState === 'stopped';
+            const base = isStopped
+                ? [
+                    actionButton({ workerID, name: 'resume' }, 'Start', 'rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-500/30'),
+                ]
+                : [
+                    actionButton({ workerID, name: 'pause' }, 'Pause', 'rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700'),
+                    actionButton({ workerID, name: 'resume' }, 'Resume', 'rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700'),
+                    actionButton({ workerID, name: 'drain' }, 'Drain', 'rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300 hover:bg-amber-500/30'),
+                    actionButton({ workerID, name: 'stop' }, 'Stop', 'rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300 hover:bg-red-500/30'),
+                ];
             if (quarantined) {
                 base.push(actionButton({ workerID, name: 'unquarantine' }, 'Unquarantine', 'rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-500/30'));
             } else {
@@ -424,21 +547,41 @@
                 const pool = escapeHtml(worker.pool || '-');
                 const status = escapeHtml(worker.status || 'unknown');
                 const desired = escapeHtml(worker.desired_state || 'running');
+                const statusLower = String(worker.status || 'unknown').toLowerCase();
+                const desiredLower = String(worker.desired_state || 'running').toLowerCase();
                 const heartbeat = escapeHtml(worker.last_heartbeat_at || '-');
                 const quarantined = Boolean(worker.quarantined);
                 const quarantineClass = quarantined ? 'bg-red-500/20 text-red-300' : 'bg-emerald-500/20 text-emerald-300';
                 const quarantineText = quarantined ? 'on' : 'off';
+                let statusClass = 'bg-slate-800 text-slate-200';
+                if (desiredLower === 'stopped') {
+                    statusClass = 'bg-red-500/20 text-red-300';
+                } else if (statusLower === 'online') {
+                    statusClass = 'bg-emerald-500/20 text-emerald-300';
+                } else if (statusLower === 'offline') {
+                    statusClass = 'bg-amber-500/20 text-amber-200';
+                }
+                let statusText = status;
+                if (desiredLower === 'stopped') {
+                    statusText = 'stopped';
+                } else if (statusLower === 'stopped' && desiredLower === 'running') {
+                    statusClass = 'bg-amber-500/20 text-amber-200';
+                    statusText = 'starting';
+                } else if (statusLower === 'running' && desiredLower === 'stopped') {
+                    statusClass = 'bg-amber-500/20 text-amber-200';
+                    statusText = 'stopping';
+                }
 
                 return `
                     <tr>
                         <td class="py-3 font-medium">${workerID}</td>
                         <td class="py-3 text-slate-300">${host || '-'}</td>
                         <td class="py-3 text-slate-300">${pool}</td>
-                        <td class="py-3"><span class="rounded-full bg-slate-800 px-3 py-1 text-xs">${status}</span></td>
+                        <td class="py-3"><span class="rounded-full px-3 py-1 text-xs ${statusClass}">${statusText}</span></td>
                         <td class="py-3"><span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300">${desired}</span></td>
                         <td class="py-3"><span class="rounded-full px-3 py-1 text-xs ${quarantineClass}">${quarantineText}</span></td>
                         <td class="py-3 text-slate-400">${heartbeat}</td>
-                        <td class="py-3">${renderActions(rawWorkerID, quarantined)}</td>
+                        <td class="py-3">${renderActions(rawWorkerID, quarantined, desiredLower)}</td>
                     </tr>
                 `;
             });

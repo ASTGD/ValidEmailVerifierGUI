@@ -130,4 +130,96 @@ class SmtpDecisionTraceRecorderTest extends TestCase
         $this->assertSame($totalRows, $secondPass);
         $this->assertSame($totalRows, SmtpDecisionTrace::query()->count());
     }
+
+    public function test_recorder_persists_attempt_chain_from_reason_metadata(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $job = VerificationJob::query()->create([
+            'user_id' => $user->id,
+            'status' => VerificationJobStatus::Processing,
+            'original_filename' => 'emails.csv',
+            'input_disk' => 'local',
+            'input_key' => 'uploads/'.$user->id.'/job/input.csv',
+        ]);
+
+        $chunk = VerificationJobChunk::query()->create([
+            'verification_job_id' => (string) $job->id,
+            'chunk_no' => 3,
+            'status' => 'completed',
+            'processing_stage' => 'smtp_probe',
+            'input_disk' => 'local',
+            'input_key' => 'chunks/'.$job->id.'/3/input.csv',
+            'output_disk' => 'local',
+            'risky_key' => 'results/'.$job->id.'/chunk3-risky.csv',
+            'routing_provider' => 'gmail',
+            'preferred_pool' => 'reputation-c',
+            'last_worker_ids' => ['worker-c'],
+        ]);
+
+        $attemptChain = [
+            [
+                'attempt_number' => 1,
+                'mx_host' => 'mx1.gmail.test',
+                'attempt_route' => 'mx:mx1.gmail.test',
+                'decision_class' => 'retryable',
+                'reason_code' => 'smtp_tempfail',
+                'reason_tag' => 'provider_tempfail_unresolved',
+                'retry_strategy' => 'tempfail',
+                'smtp_code' => 451,
+                'enhanced_code' => '4.7.1',
+                'provider_profile' => 'gmail',
+                'confidence_hint' => 'medium',
+                'evidence_strength' => 'medium',
+            ],
+            [
+                'attempt_number' => 2,
+                'mx_host' => 'mx2.gmail.test',
+                'attempt_route' => 'mx:mx2.gmail.test',
+                'decision_class' => 'unknown',
+                'reason_code' => 'smtp_timeout',
+                'reason_tag' => 'connection_unstable',
+                'retry_strategy' => 'unknown',
+                'smtp_code' => 0,
+                'enhanced_code' => '',
+                'provider_profile' => 'gmail',
+                'confidence_hint' => 'low',
+                'evidence_strength' => 'low',
+            ],
+        ];
+        $encodedAttemptChain = rtrim(strtr(base64_encode((string) json_encode($attemptChain, JSON_UNESCAPED_SLASHES)), '+/', '-_'), '=');
+
+        Storage::disk('local')->put($chunk->risky_key, implode("\n", [
+            'email,reason',
+            sprintf(
+                'chain@example.com,smtp_timeout:decision=unknown;confidence=low;tag=connection_unstable;provider=gmail;policy=v3.2.0;rule=tempfail-chain;strategy=unknown;attempt=2;route=mx:mx2.gmail.test;mx=mx2.gmail.test;attempt_chain=%s',
+                $encodedAttemptChain
+            ),
+        ]));
+
+        $recorder = app(SmtpDecisionTraceRecorder::class);
+        $count = $recorder->recordFromChunk($chunk);
+
+        $this->assertSame(1, $count);
+
+        $trace = SmtpDecisionTrace::query()
+            ->where('verification_job_chunk_id', (string) $chunk->id)
+            ->where('email_hash', hash('sha256', 'chain@example.com'))
+            ->first();
+
+        $this->assertNotNull($trace);
+        $tracePayload = is_array($trace->trace_payload) ? $trace->trace_payload : [];
+        $this->assertCount(2, $tracePayload['attempt_chain'] ?? []);
+        $this->assertSame('mx1.gmail.test', data_get($tracePayload, 'attempt_chain.0.mx_host'));
+        $this->assertSame('reputation-c', data_get($tracePayload, 'attempt_chain.0.pool'));
+        $this->assertSame('worker-c', data_get($tracePayload, 'attempt_chain.1.worker_id'));
+        $this->assertSame('gmail', data_get($tracePayload, 'attempt_chain.1.provider'));
+
+        $attemptRoute = is_array($trace->attempt_route) ? $trace->attempt_route : [];
+        $this->assertSame('mx:mx2.gmail.test', $attemptRoute['route'] ?? null);
+        $this->assertSame('mx2.gmail.test', $attemptRoute['mx_host'] ?? null);
+        $this->assertSame('reputation-c', $attemptRoute['pool'] ?? null);
+        $this->assertSame('gmail', $attemptRoute['provider'] ?? null);
+    }
 }
