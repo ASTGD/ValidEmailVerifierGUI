@@ -2,17 +2,23 @@
 
 namespace App\Filament\Resources\Customers\RelationManagers;
 
-use App\Enums\VerificationOrderStatus;
-use App\Filament\Resources\VerificationOrders\VerificationOrderResource;
-use App\Models\VerificationOrder;
+use App\Models\Invoice;
 use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Actions\ViewAction;
+use Filament\Tables;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Filament\Actions\CreateAction;
+use Filament\Actions\ViewAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\Action;
+use Filament\Schemas\Schema;
 
 class InvoicesRelationManager extends RelationManager
 {
-    protected static string $relationship = 'verificationOrders';
+    protected static string $relationship = 'invoices';
 
     protected static ?string $title = 'Invoices';
 
@@ -20,65 +26,96 @@ class InvoicesRelationManager extends RelationManager
 
     public static function getBadge(\Illuminate\Database\Eloquent\Model $ownerRecord, string $pageClass): ?string
     {
-        return $ownerRecord->verificationOrders()->count();
+        return $ownerRecord->invoices()->count();
+    }
+
+    public function form(Schema $form): Schema
+    {
+        return \App\Filament\Resources\InvoiceResource\Schemas\InvoiceForm::configure($form);
+    }
+
+    public function infolist(Schema $infolist): Schema
+    {
+        return \App\Filament\Resources\InvoiceResource\Schemas\InvoiceInfolist::configure($infolist);
     }
 
     public function table(Table $table): Table
     {
         return $table
-            ->recordTitleAttribute('order_number')
-            ->defaultSort('created_at', 'desc')
+            ->recordTitleAttribute('invoice_number')
+            ->defaultSort('date', 'desc')
             ->columns([
-                TextColumn::make('order_number')
+                TextColumn::make('invoice_number')
                     ->label('Invoice Number')
                     ->sortable()
                     ->searchable()
                     ->weight('bold')
-                    ->color('warning')
-                    ->url(fn(VerificationOrder $record): string => VerificationOrderResource::getUrl('view', ['record' => $record])),
-                TextColumn::make('created_at')
+                    ->color('warning'),
+                TextColumn::make('date')
                     ->label('Invoice Date')
                     ->sortable()
                     ->dateTime(),
-                TextColumn::make('created_at')
+                TextColumn::make('due_date')
                     ->label('Due Date')
                     ->dateTime()
-                    ->sortable()
-                    ->color('gray'), // Placeholder as we don't have due_date in model
-                TextColumn::make('refunded_at')
+                    ->sortable(),
+                TextColumn::make('paid_at')
                     ->label('Date Paid')
                     ->dateTime()
                     ->sortable()
                     ->placeholder('-'),
-                TextColumn::make('amount_cents')
+                TextColumn::make('total')
                     ->label('Total')
-                    ->formatStateUsing(function ($state, VerificationOrder $record): string {
+                    ->formatStateUsing(function ($state, Invoice $record): string {
                         $currency = strtoupper((string) ($record->currency ?: 'usd'));
-                        $amount = $state !== null ? ((int) $state) / 100 : 0;
+                        $amount = ((int) $state) / 100;
                         return sprintf('%s %.2f', $currency, $amount);
                     }),
-                TextColumn::make('payment_method')
-                    ->label('Payment Method')
-                    ->state(fn(VerificationOrder $record): string => $record->paymentMethodLabel()),
-                TextColumn::make('payment_status')
+                TextColumn::make('status')
                     ->label('Status')
                     ->badge()
-                    ->state(fn(VerificationOrder $record): string => $record->paymentStatusLabel())
-                    ->color(function (VerificationOrder $record): string {
-                        return match ($record->paymentStatusKey()) {
-                            'paid' => 'success',
-                            'failed' => 'danger',
-                            'refunded' => 'warning',
-                            default => 'gray',
-                        };
+                    ->color(fn(string $state): string => match ($state) {
+                        'Paid' => 'success',
+                        'Unpaid' => 'warning',
+                        'Cancelled' => 'danger',
+                        'Refunded' => 'gray',
+                        default => 'gray',
                     }),
             ])
             ->filters([])
-            ->headerActions([])
-            ->actions([
-                ViewAction::make()
-                    ->url(fn($record) => VerificationOrderResource::getUrl('view', ['record' => $record])),
+            ->headerActions([
+                CreateAction::make()
+                    ->icon('heroicon-m-plus')
+                    ->color('primary'),
             ])
-            ->bulkActions([]);
+            ->actions([
+                ViewAction::make(),
+                Action::make('edit')
+                    ->label('Edit')
+                    ->icon('heroicon-m-pencil-square')
+                    ->url(fn(Invoice $record): string => \App\Filament\Resources\InvoiceResource::getUrl('edit', ['record' => $record])),
+
+                Action::make('delete')
+                    ->label('Delete')
+                    ->icon('heroicon-m-trash')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->action(fn(Invoice $record) => $record->delete()),
+
+                Action::make('download_manual')
+                    ->label('PDF')
+                    ->icon('heroicon-m-arrow-down-tray')
+                    ->color('info')
+                    ->action(function (Invoice $record) {
+                        return response()->streamDownload(function () use ($record) {
+                            echo \Barryvdh\DomPDF\Facade\Pdf::loadView('invoices.pdf', ['invoice' => $record])->output();
+                        }, 'invoice-' . $record->invoice_number . '.pdf');
+                    }),
+            ])
+            ->bulkActions([
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
+                ]),
+            ]);
     }
 }

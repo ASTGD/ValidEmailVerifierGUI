@@ -17,7 +17,7 @@ class CheckoutController
         $maxKb = $maxMb * 1024;
 
         $validated = $request->validate([
-            'file' => ['required', 'file', 'mimes:csv,txt,xls,xlsx', 'max:'.$maxKb],
+            'file' => ['required', 'file', 'mimes:csv,txt,xls,xlsx', 'max:' . $maxKb],
         ]);
 
         $file = $validated['file'];
@@ -27,7 +27,7 @@ class CheckoutController
         return redirect()->route('checkout.show', $intent);
     }
 
-    public function show(Request $request, CheckoutIntent $intent): View|RedirectResponse
+    public function show(Request $request, CheckoutIntent $intent, CheckoutIntentService $service): View|RedirectResponse
     {
         if ($intent->status === CheckoutIntentStatus::Completed && $request->user()) {
             return redirect()
@@ -48,16 +48,19 @@ class CheckoutController
             abort(403);
         }
 
-        if ($user && ! $intent->user_id) {
+        if ($user && !$intent->user_id) {
             $intent->user_id = $user->id;
             $intent->save();
         }
 
-        $intent->load('pricingPlan');
+        $intent->load(['pricingPlan', 'invoice']);
+
+        $totals = $user ? $service->calculateTotals($intent, $user, true) : null;
 
         return view('checkout', [
             'intent' => $intent,
             'formattedTotal' => number_format($intent->amount_cents / 100, 2),
+            'totals' => $totals,
             'canFakePay' => (bool) config('verifier.allow_fake_payments') && app()->environment(['local', 'testing']),
         ]);
     }
@@ -78,11 +81,11 @@ class CheckoutController
 
     public function pay(Request $request, CheckoutIntent $intent, CheckoutIntentService $service)
     {
-        if (! $request->user()) {
+        if (!$request->user()) {
             return redirect()->route('checkout.show', $intent);
         }
 
-        if (! config('cashier.secret') || ! config('cashier.key')) {
+        if (!config('cashier.secret') || !config('cashier.key')) {
             return redirect()
                 ->route('checkout.show', $intent)
                 ->with('status', __('Payment gateway is not configured yet.'));
@@ -94,19 +97,66 @@ class CheckoutController
                 ->with('status', __('Pricing is not configured yet.'));
         }
 
-        return $service->startPayment($intent, $request->user());
+        return $service->processPayment($intent, $request->user(), $request->boolean('use_credit'));
     }
 
     public function fakePay(Request $request, CheckoutIntent $intent, CheckoutIntentService $service): RedirectResponse
     {
-        if (! config('verifier.allow_fake_payments') || ! app()->environment(['local', 'testing'])) {
+        if (!config('verifier.allow_fake_payments') || !app()->environment(['local', 'testing'])) {
             abort(403);
         }
 
-        $order = $service->completeIntent($intent, $request->user());
+        $result = $service->completeIntent($intent, $request->user());
+
+        if ($intent->type === 'credit') {
+            return redirect()
+                ->route('portal.dashboard')
+                ->with('status', __('Funds added to your balance successfully.'));
+        }
 
         return redirect()
             ->route('portal.orders.index')
-            ->with('status', __('Order :id created and awaiting activation.', ['id' => $order->id]));
+            ->with('status', __('Order :id created and awaiting activation.', ['id' => $result->id]));
+    }
+
+    public function manualPayment(Request $request, CheckoutIntent $intent, CheckoutIntentService $service): RedirectResponse
+    {
+        if (!$request->user()) {
+            return redirect()->route('checkout.show', $intent);
+        }
+
+        // Finalize intent as unpaid
+        $result = $service->completeIntent($intent, $request->user(), false);
+
+        if ($intent->type === 'credit') {
+            $invoice = \App\Models\Invoice::where('user_id', $request->user()->id)
+                ->where('status', 'Unpaid')
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            if ($invoice) {
+                return redirect()
+                    ->route('portal.invoices.show', $invoice)
+                    ->with('status', __('Unpaid invoice created for your funds deposit.'));
+            }
+
+            return redirect()->route('portal.dashboard');
+        }
+
+        // Find the invoice associated with this order
+        $order = $result;
+        $invoice = \App\Models\Invoice::whereHas('items', function ($query) use ($order) {
+            $query->where('rel_type', get_class($order))->where('rel_id', $order->id);
+        })->first();
+
+        if ($invoice) {
+            return redirect()
+                ->route('portal.invoices.show', $invoice)
+                ->with('status', __('Invoice created. You can now apply credit or pay manually.'));
+        }
+
+        return redirect()
+            ->route('portal.orders.index')
+            ->with('status', __('Order placed. Please check your invoices for payment.'));
     }
 }

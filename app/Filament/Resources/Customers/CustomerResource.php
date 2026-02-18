@@ -61,6 +61,7 @@ class CustomerResource extends Resource
             RelationManagers\VerificationOrdersRelationManager::class,
             RelationManagers\InvoicesRelationManager::class,
             RelationManagers\SupportTicketsRelationManager::class,
+            RelationManagers\CreditsRelationManager::class,
             RelationManagers\AuditLogsRelationManager::class,
         ];
     }

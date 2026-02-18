@@ -19,6 +19,7 @@ class CheckoutIntent extends Model
     protected $fillable = [
         'user_id',
         'status',
+        'type',
         'original_filename',
         'temp_disk',
         'temp_key',
@@ -31,12 +32,14 @@ class CheckoutIntent extends Model
         'payment_method',
         'paid_at',
         'expires_at',
+        'credit_applied',
     ];
 
     protected $casts = [
         'status' => CheckoutIntentStatus::class,
         'email_count' => 'integer',
         'amount_cents' => 'integer',
+        'credit_applied' => 'integer',
         'paid_at' => 'datetime',
         'expires_at' => 'datetime',
     ];
@@ -54,5 +57,10 @@ class CheckoutIntent extends Model
     public function order(): HasOne
     {
         return $this->hasOne(VerificationOrder::class);
+    }
+
+    public function invoice(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class);
     }
 }

@@ -18,6 +18,7 @@ use App\Http\Controllers\Portal\VerificationJobDownloadController;
 use App\Http\Controllers\ProvisioningBundleDownloadController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Livewire\Portal\Dashboard;
+use App\Livewire\Portal\InvoicesIndex;
 use App\Livewire\Portal\JobShow;
 use App\Livewire\Portal\JobsIndex;
 use App\Livewire\Portal\OrdersIndex;
@@ -49,6 +50,9 @@ Route::post('checkout/{intent}/pay', [CheckoutController::class, 'pay'])
 Route::post('checkout/{intent}/fake-pay', [CheckoutController::class, 'fakePay'])
     ->middleware(['auth', 'verified'])
     ->name('checkout.fake-pay');
+Route::post('checkout/{intent}/manual-payment', [CheckoutController::class, 'manualPayment'])
+    ->middleware(['auth', 'verified'])
+    ->name('checkout.manual-payment');
 
 Route::view('profile', 'profile')
     ->middleware(['auth'])
@@ -76,6 +80,8 @@ Route::middleware(['auth', 'verified'])
             ->whereUuid('job')
             ->name('jobs.seed-send-report');
         Route::get('orders', OrdersIndex::class)->name('orders.index');
+        Route::get('invoices', InvoicesIndex::class)->name('invoices.index');
+        Route::get('invoices/{invoice}', \App\Livewire\Portal\InvoiceShow::class)->name('invoices.show');
         Route::get('settings', Settings::class)->name('settings');
         Route::get('support', Support::class)->name('support');
         // Add this line inside the portal route group

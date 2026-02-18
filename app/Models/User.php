@@ -29,6 +29,7 @@ class User extends Authenticatable implements FilamentUser
         'email',
         'password',
         'enhanced_enabled',
+        'balance',
         'first_name',
         'last_name',
         'company_name',
@@ -83,7 +84,18 @@ class User extends Authenticatable implements FilamentUser
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'enhanced_enabled' => 'boolean',
+            'balance' => 'integer',
         ];
+    }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    public function transactions(): HasMany
+    {
+        return $this->hasMany(Transaction::class);
     }
 
     public function canAccessPanel(Panel $panel): bool
@@ -113,6 +125,11 @@ class User extends Authenticatable implements FilamentUser
     public function supportTickets(): HasMany
     {
         return $this->hasMany(SupportTicket::class);
+    }
+
+    public function credits(): HasMany
+    {
+        return $this->hasMany(Credit::class);
     }
 
     public function auditLogs(): HasMany
