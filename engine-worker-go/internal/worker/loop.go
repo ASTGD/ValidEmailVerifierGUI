@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -35,6 +36,8 @@ type Config struct {
 	LaravelHeartbeatEnabled       bool
 	LaravelHeartbeatEveryN        int
 	ControlPlanePolicySyncEnabled bool
+	ProbeAttemptChainEnabled      bool
+	UnknownReasonTaxonomyEnabled  bool
 }
 
 type Worker struct {
@@ -326,7 +329,13 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 	} else {
 		engineVerifier = w.verifierForMode(mode, policy, hasPolicy)
 	}
-	outputs, err := buildOutputs(ctx, reader, engineVerifier)
+	outputs, err := buildOutputs(
+		ctx,
+		reader,
+		engineVerifier,
+		w.cfg.ProbeAttemptChainEnabled,
+		w.cfg.UnknownReasonTaxonomyEnabled,
+	)
 	if err != nil {
 		return w.failChunk(ctx, chunkID, processingStage, "failed to parse input", err, false)
 	}
@@ -443,7 +452,13 @@ func uploadSigned(ctx context.Context, url string, data []byte) error {
 	return nil
 }
 
-func buildOutputs(ctx context.Context, reader io.Reader, engineVerifier verifier.Verifier) (*chunkOutputs, error) {
+func buildOutputs(
+	ctx context.Context,
+	reader io.Reader,
+	engineVerifier verifier.Verifier,
+	probeAttemptChainEnabled bool,
+	unknownReasonTaxonomyEnabled bool,
+) (*chunkOutputs, error) {
 	if engineVerifier == nil {
 		return nil, fmt.Errorf("verifier not configured")
 	}
@@ -480,7 +495,7 @@ func buildOutputs(ctx context.Context, reader io.Reader, engineVerifier verifier
 
 		output.EmailCount++
 		result := engineVerifier.Verify(ctx, line)
-		reason := reasonWithEvidence(result)
+		reason := reasonWithEvidence(result, probeAttemptChainEnabled, unknownReasonTaxonomyEnabled)
 		baseReason := baseReasonOnly(reason)
 		output.ReasonCounts[baseReason]++
 		if reasonTag := reasonTagFrom(reason); reasonTag != "" {
@@ -582,13 +597,17 @@ func isHeaderLine(line string) bool {
 	return !strings.Contains(line, "@")
 }
 
-func reasonWithEvidence(result verifier.Result) string {
+func reasonWithEvidence(
+	result verifier.Result,
+	probeAttemptChainEnabled bool,
+	unknownReasonTaxonomyEnabled bool,
+) string {
 	reason := strings.TrimSpace(result.Reason)
 	if reason == "" {
 		reason = "unknown"
 	}
 
-	segments := make([]string, 0, 6)
+	segments := make([]string, 0, 12)
 	if decisionClass := strings.TrimSpace(result.DecisionClass); decisionClass != "" {
 		segments = append(segments, "decision="+decisionClass)
 	}
@@ -604,7 +623,11 @@ func reasonWithEvidence(result verifier.Result) string {
 	if rule := strings.TrimSpace(result.MatchedRuleID); rule != "" {
 		segments = append(segments, "rule="+rule)
 	}
-	if reasonTag := strings.TrimSpace(result.ReasonTag); reasonTag != "" {
+	reasonTag := strings.TrimSpace(result.ReasonTag)
+	if unknownReasonTaxonomyEnabled {
+		reasonTag = normalizedReasonTag(result, reason)
+	}
+	if reasonTag != "" {
 		segments = append(segments, "tag="+reasonTag)
 	}
 	if mode := strings.TrimSpace(result.ProviderMode); mode != "" {
@@ -628,12 +651,85 @@ func reasonWithEvidence(result verifier.Result) string {
 	if evidenceStrength := strings.TrimSpace(result.EvidenceStrength); evidenceStrength != "" {
 		segments = append(segments, "evidence="+evidenceStrength)
 	}
+	if probeAttemptChainEnabled {
+		if attemptChain := encodeAttemptChain(result.AttemptChain); attemptChain != "" {
+			segments = append(segments, "attempt_chain="+attemptChain)
+		}
+	}
 
 	if len(segments) == 0 {
 		return reason
 	}
 
 	return reason + ":" + strings.Join(segments, ";")
+}
+
+func encodeAttemptChain(chain []verifier.AttemptEvidence) string {
+	if len(chain) == 0 {
+		return ""
+	}
+
+	encoded, err := json.Marshal(chain)
+	if err != nil {
+		return ""
+	}
+
+	return base64.RawURLEncoding.EncodeToString(encoded)
+}
+
+func normalizedReasonTag(result verifier.Result, baseReason string) string {
+	currentTag := strings.ToLower(strings.TrimSpace(result.ReasonTag))
+	baseReason = strings.ToLower(strings.TrimSpace(baseReason))
+	decisionClass := strings.ToLower(strings.TrimSpace(result.DecisionClass))
+
+	if result.Category != verifier.CategoryRisky {
+		return currentTag
+	}
+
+	switch {
+	case baseReason == "smtp_probe_identity_missing",
+		strings.Contains(baseReason, "mailfrom"),
+		currentTag == "auth_required":
+		return "identity_rejected"
+	case strings.Contains(baseReason, "connect_timeout"),
+		strings.Contains(baseReason, "read_error"),
+		baseReason == "smtp_timeout":
+		return "connection_unstable"
+	case decisionClass == verifier.DecisionPolicyBlocked,
+		currentTag == "policy_blocked",
+		strings.Contains(baseReason, "policy_blocked"):
+		return "policy_blocked_ambiguous"
+	case decisionClass == verifier.DecisionRetryable,
+		baseReason == "smtp_tempfail",
+		currentTag == "greylist",
+		currentTag == "rate_limit":
+		return "provider_tempfail_unresolved"
+	case decisionClass == verifier.DecisionUnknown:
+		if currentTag == "unknown_transient" || currentTag == "" {
+			return "unknown_transient"
+		}
+		return "other_unknown"
+	}
+
+	if currentTag == "" {
+		return "other_unknown"
+	}
+
+	switch currentTag {
+	case "unknown_transient",
+		"policy_blocked_ambiguous",
+		"provider_tempfail_unresolved",
+		"connection_unstable",
+		"identity_rejected",
+		"other_unknown":
+		return currentTag
+	case "policy_blocked":
+		return "policy_blocked_ambiguous"
+	case "greylist", "rate_limit":
+		return "provider_tempfail_unresolved"
+	}
+
+	return "other_unknown"
 }
 
 func firstError(errors ...error) error {
@@ -1401,7 +1497,9 @@ func (v staticRiskyVerifier) Verify(context.Context, string) verifier.Result {
 	}
 
 	return verifier.Result{
-		Category: verifier.CategoryRisky,
-		Reason:   reason,
+		Category:      verifier.CategoryRisky,
+		Reason:        reason,
+		ReasonCode:    reason,
+		DecisionClass: verifier.DecisionUnknown,
 	}
 }

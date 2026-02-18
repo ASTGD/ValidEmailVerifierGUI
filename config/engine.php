@@ -112,6 +112,7 @@ return [
     'probe_max_mx_hosts' => (int) env('PROBE_MAX_MX_HOSTS', 2),
     'probe_routing_enabled' => (bool) env('PROBE_ROUTING_ENABLED', true),
     'probe_rotation_retry_enabled' => (bool) env('PROBE_ROTATION_RETRY_ENABLED', true),
+    'retry_anti_affinity_hard_enabled' => (bool) env('RETRY_ANTI_AFFINITY_HARD_ENABLED', true),
     'probe_autoprotect_enabled' => (bool) env('PROBE_AUTOPROTECT_ENABLED', false),
     'smtp_ai_suggestion_enabled' => (bool) env('SMTP_AI_SUGGESTION_ENABLED', false),
     'smtp_ai_unknown_rate_threshold' => (float) env('SMTP_AI_UNKNOWN_RATE_THRESHOLD', 0.20),

@@ -7,18 +7,19 @@ import (
 )
 
 type ReplyEvidence struct {
-	ReasonCode       string `json:"reason_code,omitempty"`
-	ReasonTag        string `json:"reason_tag,omitempty"`
-	MXHost           string `json:"mx_host,omitempty"`
-	AttemptNumber    int    `json:"attempt_number,omitempty"`
-	AttemptRoute     string `json:"attempt_route,omitempty"`
-	EvidenceStrength string `json:"evidence_strength,omitempty"`
-	SMTPCode         int    `json:"smtp_code,omitempty"`
-	EnhancedCode     string `json:"enhanced_code,omitempty"`
-	ProviderProfile  string `json:"provider_profile,omitempty"`
-	DecisionClass    string `json:"decision_class,omitempty"`
-	ConfidenceHint   string `json:"confidence_hint,omitempty"`
-	SessionStrategy  string `json:"session_strategy_id,omitempty"`
+	ReasonCode       string            `json:"reason_code,omitempty"`
+	ReasonTag        string            `json:"reason_tag,omitempty"`
+	MXHost           string            `json:"mx_host,omitempty"`
+	AttemptNumber    int               `json:"attempt_number,omitempty"`
+	AttemptRoute     string            `json:"attempt_route,omitempty"`
+	AttemptChain     []AttemptEvidence `json:"attempt_chain,omitempty"`
+	EvidenceStrength string            `json:"evidence_strength,omitempty"`
+	SMTPCode         int               `json:"smtp_code,omitempty"`
+	EnhancedCode     string            `json:"enhanced_code,omitempty"`
+	ProviderProfile  string            `json:"provider_profile,omitempty"`
+	DecisionClass    string            `json:"decision_class,omitempty"`
+	ConfidenceHint   string            `json:"confidence_hint,omitempty"`
+	SessionStrategy  string            `json:"session_strategy_id,omitempty"`
 }
 
 type ProviderReplyPolicyEngine struct {

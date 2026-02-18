@@ -185,3 +185,63 @@ func TestLaravelEngineServerClientDoesNotRetryValidationErrors(t *testing.T) {
 		t.Fatalf("expected 422 status, got %d", apiErr.StatusCode)
 	}
 }
+
+func TestLaravelEngineServerClientListDecisionTraces(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/internal/smtp-decision-traces" {
+			t.Fatalf("unexpected request path %q", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("provider"); got != "gmail" {
+			t.Fatalf("expected provider=gmail, got %q", got)
+		}
+		if got := r.URL.Query().Get("decision_class"); got != "unknown" {
+			t.Fatalf("expected decision_class=unknown, got %q", got)
+		}
+		if got := r.URL.Query().Get("limit"); got != "10" {
+			t.Fatalf("expected limit=10, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{
+					"id":                  101,
+					"provider":            "gmail",
+					"decision_class":      "unknown",
+					"reason_tag":          "provider_tempfail_unresolved",
+					"attempt_chain":       []map[string]any{{"attempt_number": 1}},
+					"verification_job_id": "job-1",
+				},
+			},
+			"meta": map[string]any{
+				"next_before_id": 99,
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewLaravelEngineServerClient(Config{
+		LaravelInternalAPIBaseURL: server.URL,
+		LaravelInternalAPIToken:   "internal-token",
+	})
+	if client == nil {
+		t.Fatal("expected configured client")
+	}
+
+	response, err := client.ListDecisionTraces(context.Background(), LaravelDecisionTraceFilter{
+		Provider:      "gmail",
+		DecisionClass: "unknown",
+		Limit:         10,
+	})
+	if err != nil {
+		t.Fatalf("expected list decision traces to succeed, got %v", err)
+	}
+	if len(response.Records) != 1 {
+		t.Fatalf("expected one trace record, got %d", len(response.Records))
+	}
+	if response.Records[0].Provider != "gmail" {
+		t.Fatalf("expected provider gmail, got %s", response.Records[0].Provider)
+	}
+	if response.NextBeforeID != 99 {
+		t.Fatalf("expected next_before_id 99, got %d", response.NextBeforeID)
+	}
+}

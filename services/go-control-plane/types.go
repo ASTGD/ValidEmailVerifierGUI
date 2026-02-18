@@ -286,6 +286,19 @@ type ProviderUnknownClusterResponse struct {
 	Data []ProviderUnknownClusterSummary `json:"data"`
 }
 
+type ProviderUnknownReasonSummary struct {
+	Provider      string  `json:"provider"`
+	Tag           string  `json:"tag"`
+	Count         int64   `json:"count"`
+	Share         float64 `json:"share"`
+	SharePercent  float64 `json:"share_percent"`
+	SampleWorkers int     `json:"sample_workers"`
+}
+
+type ProviderUnknownReasonResponse struct {
+	Data []ProviderUnknownReasonSummary `json:"data"`
+}
+
 type PolicyShadowEvaluateRequest struct {
 	CandidateVersion string   `json:"candidate_version"`
 	Providers        []string `json:"providers,omitempty"`
@@ -334,6 +347,49 @@ type PolicyShadowRunRecord struct {
 
 type PolicyShadowRunListResponse struct {
 	Data []PolicyShadowRunRecord `json:"data"`
+}
+
+type PolicyShadowCompareProviderSummary struct {
+	Provider               string  `json:"provider"`
+	UnknownRateShadow      float64 `json:"unknown_rate_shadow"`
+	UnknownRateLive        float64 `json:"unknown_rate_live"`
+	UnknownDelta           float64 `json:"unknown_delta"`
+	TempfailRecoveryShadow float64 `json:"tempfail_recovery_shadow"`
+	TempfailRecoveryLive   float64 `json:"tempfail_recovery_live"`
+	TempfailRecoveryDelta  float64 `json:"tempfail_recovery_delta"`
+	PolicyBlockedShadow    float64 `json:"policy_blocked_shadow"`
+	PolicyBlockedLive      float64 `json:"policy_blocked_live"`
+	PolicyBlockedDelta     float64 `json:"policy_blocked_delta"`
+	Recommendation         string  `json:"recommendation"`
+}
+
+type PolicyShadowCompareThresholds struct {
+	UnknownRegressionThreshold    float64 `json:"unknown_regression_threshold"`
+	TempfailRecoveryDropThreshold float64 `json:"tempfail_recovery_drop_threshold"`
+	PolicyBlockSpikeThreshold     float64 `json:"policy_block_spike_threshold"`
+}
+
+type PolicyShadowCompareData struct {
+	CandidateVersion string                               `json:"candidate_version"`
+	ActiveVersion    string                               `json:"active_version"`
+	EvaluatedAt      string                               `json:"evaluated_at"`
+	Eligible         bool                                 `json:"eligible"`
+	GateMode         string                               `json:"gate_mode"`
+	Thresholds       PolicyShadowCompareThresholds        `json:"thresholds"`
+	Violations       []string                             `json:"violations"`
+	Providers        []PolicyShadowCompareProviderSummary `json:"providers"`
+}
+
+type PolicyShadowCompareResponse struct {
+	Data PolicyShadowCompareData `json:"data"`
+}
+
+type DecisionTraceResponse struct {
+	Data []LaravelDecisionTraceRecord `json:"data"`
+	Meta struct {
+		Limit        int   `json:"limit"`
+		NextBeforeID int64 `json:"next_before_id"`
+	} `json:"meta"`
 }
 
 type SMTPPolicyVersionRecord struct {

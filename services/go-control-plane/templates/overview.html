@@ -141,20 +141,22 @@
                     <th class="px-3 py-2">Provider</th>
                     <th class="px-3 py-2">Reason Tag</th>
                     <th class="px-3 py-2">Count</th>
+                    <th class="px-3 py-2">Share</th>
                     <th class="px-3 py-2">Workers</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-800">
-                {{ range .UnknownClusters }}
+                {{ range .UnknownReasons }}
                     <tr>
                         <td class="px-3 py-2 font-medium">{{ .Provider }}</td>
                         <td class="px-3 py-2">{{ .Tag }}</td>
                         <td class="px-3 py-2">{{ .Count }}</td>
+                        <td class="px-3 py-2">{{ printf "%.1f%%" .SharePercent }}</td>
                         <td class="px-3 py-2">{{ .SampleWorkers }}</td>
                     </tr>
                 {{ else }}
                     <tr>
-                        <td colspan="4" class="px-3 py-3 text-slate-400">No unknown cluster evidence yet.</td>
+                        <td colspan="5" class="px-3 py-3 text-slate-400">No unknown cluster evidence yet.</td>
                     </tr>
                 {{ end }}
             </tbody>

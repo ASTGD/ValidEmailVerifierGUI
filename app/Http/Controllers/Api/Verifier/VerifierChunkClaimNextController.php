@@ -226,7 +226,37 @@ class VerifierChunkClaimNextController
             return (int) $a->chunk_no <=> (int) $b->chunk_no;
         });
 
-        return $ranked->first();
+        $selected = $ranked->first();
+        if (! $selected) {
+            return null;
+        }
+
+        if (! (bool) config('engine.probe_rotation_retry_enabled', true)) {
+            return $selected;
+        }
+
+        if (! (bool) config('engine.retry_anti_affinity_hard_enabled', true)) {
+            return $selected;
+        }
+
+        $selectedRetryAttempt = max(0, (int) $selected->retry_attempt);
+        if ($selectedRetryAttempt <= 0) {
+            return $selected;
+        }
+
+        if (! $this->retryTouchesCurrentRoute($selected, $workerId, $workerPool)) {
+            return $selected;
+        }
+
+        $alternative = $ranked->first(function (VerificationJobChunk $candidate) use ($workerId, $workerPool): bool {
+            if (max(0, (int) $candidate->retry_attempt) <= 0) {
+                return false;
+            }
+
+            return ! $this->retryTouchesCurrentRoute($candidate, $workerId, $workerPool);
+        });
+
+        return $alternative ?: $selected;
     }
 
     private function shouldApplyProbeRouting(string $workerCapability): bool
@@ -343,5 +373,22 @@ class VerifierChunkClaimNextController
         $normalized = trim((string) $value);
 
         return $normalized === '' ? null : $normalized;
+    }
+
+    private function retryTouchesCurrentRoute(VerificationJobChunk $chunk, string $workerId, ?string $workerPool): bool
+    {
+        $lastWorkerIds = is_array($chunk->last_worker_ids) ? $chunk->last_worker_ids : [];
+        $normalizedLastWorkerIds = array_values(array_filter(array_map(
+            static fn ($value): string => trim((string) $value),
+            $lastWorkerIds
+        )));
+        $sameWorker = in_array($workerId, $normalizedLastWorkerIds, true);
+
+        $chunkPreferredPool = $this->normalizeString($chunk->preferred_pool);
+        $samePool = $workerPool !== null
+            && $chunkPreferredPool !== null
+            && $workerPool === $chunkPreferredPool;
+
+        return $sameWorker || $samePool;
     }
 }

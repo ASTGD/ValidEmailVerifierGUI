@@ -302,6 +302,43 @@ func TestWorkersTemplateRendersStoppedWorkerAsRedWithStartAction(t *testing.T) {
 	}
 }
 
+func TestWorkersTemplateRendersStartingStateWithoutStartAction(t *testing.T) {
+	renderer, err := NewViewRenderer()
+	if err != nil {
+		t.Fatalf("failed to create renderer: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	renderer.Render(recorder, WorkersPageData{
+		BasePageData: BasePageData{
+			Title:           "Verifier Engine Room · Workers",
+			Subtitle:        "Live worker status",
+			ActiveNav:       "workers",
+			ContentTemplate: "workers",
+			BasePath:        "/verifier-engine-room",
+		},
+		ActiveTab: "runtime",
+		Workers: []WorkerSummary{
+			{
+				WorkerID:      "worker-starting",
+				Host:          "host-1",
+				Pool:          "pool-a",
+				Status:        "stopped",
+				DesiredState:  "running",
+				LastHeartbeat: "2026-02-18T12:00:00Z",
+			},
+		},
+	})
+
+	body := recorder.Body.String()
+	if !strings.Contains(body, ">starting<") {
+		t.Fatalf("expected transition state label to render as starting")
+	}
+	if strings.Contains(body, "/verifier-engine-room/workers/worker-starting/resume") && strings.Contains(body, ">Start</button>") {
+		t.Fatalf("expected no Start action while desired state is running")
+	}
+}
+
 func TestApplyRegistryRuntimeMatchMarksMatchedAndOrphanWorkers(t *testing.T) {
 	servers := []LaravelEngineServerRecord{
 		{ID: 1, Name: "srv-1", IPAddress: "10.0.0.1", Status: "online"},

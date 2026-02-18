@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Feedback\FeedbackOutcomesController;
 use App\Http\Controllers\Api\Internal\EngineServerController;
 use App\Http\Controllers\Api\Internal\EngineServerProvisioningBundleController;
+use App\Http\Controllers\Api\Internal\SmtpDecisionTraceController;
 use App\Http\Controllers\Api\Monitor\MonitorChecksController;
 use App\Http\Controllers\Api\Monitor\MonitorConfigController;
 use App\Http\Controllers\Api\Monitor\MonitorServersController;
@@ -120,4 +121,6 @@ Route::middleware(['go.internal.token', 'throttle:go-internal-api'])
             'engine-servers/{engineServer}/provisioning-bundles/latest',
             [EngineServerProvisioningBundleController::class, 'showLatest']
         )->name('engine-servers.provisioning-bundles.latest');
+        Route::get('smtp-decision-traces', [SmtpDecisionTraceController::class, 'index'])
+            ->name('smtp-decision-traces.index');
     });

@@ -785,6 +785,7 @@ class VerifierChunkApiTest extends TestCase
             'routing_provider' => 'gmail',
             'preferred_pool' => 'pool-gmail',
             'last_worker_ids' => ['worker-rotate-1'],
+            'retry_attempt' => 1,
             'rotation_group_id' => (string) Str::uuid(),
             'claim_expires_at' => null,
             'claim_token' => null,
@@ -797,6 +798,7 @@ class VerifierChunkApiTest extends TestCase
             'routing_provider' => 'gmail',
             'preferred_pool' => 'pool-gmail',
             'last_worker_ids' => [],
+            'retry_attempt' => 1,
             'rotation_group_id' => $alreadySeenChunk->rotation_group_id,
             'claim_expires_at' => null,
             'claim_token' => null,
@@ -819,5 +821,62 @@ class VerifierChunkApiTest extends TestCase
         ])->assertOk()->assertJsonFragment([
             'chunk_id' => (string) $alternativeChunk->id,
         ]);
+    }
+
+    public function test_claim_next_enforces_retry_anti_affinity_even_when_alternative_has_lower_score(): void
+    {
+        $this->actingAsVerifier();
+        EngineSetting::query()->update(['engine_paused' => false]);
+
+        config([
+            'engine.probe_routing_enabled' => true,
+            'engine.probe_rotation_retry_enabled' => true,
+        ]);
+
+        $job = $this->makeJob();
+        $sameRouteChunk = $this->makeChunk($job, [
+            'chunk_no' => 1,
+            'status' => 'pending',
+            'processing_stage' => 'smtp_probe',
+            'routing_provider' => 'gmail',
+            'preferred_pool' => 'pool-gmail',
+            'last_worker_ids' => ['worker-rotate-hard'],
+            'retry_attempt' => 2,
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+        ]);
+        $alternativeChunk = $this->makeChunk($job, [
+            'chunk_no' => 2,
+            'status' => 'pending',
+            'processing_stage' => 'smtp_probe',
+            'routing_provider' => 'yahoo',
+            'preferred_pool' => 'pool-yahoo',
+            'last_worker_ids' => [],
+            'retry_attempt' => 2,
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+        ]);
+
+        $this->postJson(route('api.verifier.chunks.claim-next'), [
+            'engine_server' => [
+                'name' => 'engine-rotate-hard',
+                'ip_address' => '127.0.0.179',
+                'environment' => 'test',
+                'region' => 'local',
+                'meta' => [
+                    'pool' => 'pool-gmail',
+                    'provider_affinity' => 'gmail',
+                ],
+            ],
+            'worker_id' => 'worker-rotate-hard',
+            'worker_capability' => 'smtp_probe',
+        ])->assertOk()->assertJsonFragment([
+            'chunk_id' => (string) $alternativeChunk->id,
+        ]);
+
+        $sameRouteChunk->refresh();
+        $this->assertNull($sameRouteChunk->assigned_worker_id);
     }
 }

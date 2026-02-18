@@ -26,6 +26,7 @@ type ControlPlaneStats struct {
 	ProviderHealth          []ProviderHealthSummary
 	ProviderAccuracy        []ProviderAccuracyCalibrationSummary
 	UnknownClusters         []ProviderUnknownClusterSummary
+	UnknownReasons          []ProviderUnknownReasonSummary
 	PolicyShadowRuns        []PolicyShadowRunRecord
 	ProviderPolicies        ProviderPoliciesData
 	RoutingQuality          RoutingQualitySummary
@@ -163,6 +164,7 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 	providerHealth := aggregateProviderHealth(workers, providerModesMap, thresholdsFromRuntimeSettings(settings))
 	providerAccuracy := providerAccuracyCalibrationFromHealth(providerHealth)
 	unknownClusters := providerUnknownClustersFromWorkers(workers)
+	unknownReasons := providerUnknownReasonConcentrationFromWorkers(workers)
 	policyShadowRuns, shadowRunsErr := s.store.ListPolicyShadowRuns(ctx, 10)
 	if shadowRunsErr != nil {
 		policyShadowRuns = []PolicyShadowRunRecord{}
@@ -201,6 +203,7 @@ func (s *Server) collectControlPlaneStats(ctx context.Context) (ControlPlaneStat
 		ProviderHealth:          providerHealth,
 		ProviderAccuracy:        providerAccuracy,
 		UnknownClusters:         unknownClusters,
+		UnknownReasons:          unknownReasons,
 		PolicyShadowRuns:        policyShadowRuns,
 		ProviderPolicies: ProviderPoliciesData{
 			PolicyEngineEnabled:  settings.ProviderPolicyEngineEnabled,

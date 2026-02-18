@@ -147,6 +147,8 @@ func (p *PipelineVerifier) checkSMTP(ctx context.Context, domain, email string, 
 	}
 
 	var best Result
+	attemptCounter := 0
+	fullAttemptChain := make([]AttemptEvidence, 0, maxAttempts)
 
 	for i, mx := range mxRecords {
 		if i >= maxAttempts {
@@ -154,9 +156,14 @@ func (p *PipelineVerifier) checkSMTP(ctx context.Context, domain, email string, 
 		}
 
 		host := strings.TrimSuffix(mx.Host, ".")
-		attemptResult := p.checkSMTPHost(ctx, domain, host, email)
+		attemptResult := p.checkSMTPHost(ctx, domain, host, email, attemptCounter+1)
+		attemptCounter += len(attemptResult.AttemptChain)
+		if len(attemptResult.AttemptChain) > 0 {
+			fullAttemptChain = append(fullAttemptChain, cloneAttemptChain(attemptResult.AttemptChain)...)
+		}
 
 		if attemptResult.Category == CategoryValid {
+			attemptResult.AttemptChain = cloneAttemptChain(fullAttemptChain)
 			return attemptResult
 		}
 
@@ -165,18 +172,25 @@ func (p *PipelineVerifier) checkSMTP(ctx context.Context, domain, email string, 
 		}
 
 		if !shouldAttemptNextMX(attemptResult) {
+			attemptResult.AttemptChain = cloneAttemptChain(fullAttemptChain)
 			return attemptResult
 		}
 	}
 
 	if best.Category == "" {
-		return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
+		return Result{
+			Category:     CategoryRisky,
+			Reason:       "smtp_timeout",
+			AttemptChain: cloneAttemptChain(fullAttemptChain),
+		}
 	}
+
+	best.AttemptChain = cloneAttemptChain(fullAttemptChain)
 
 	return best
 }
 
-func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host, email string) Result {
+func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host, email string, firstAttemptNumber int) Result {
 	limiterRelease, err := p.limiter.Acquire(ctx, domain)
 	if err != nil {
 		return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
@@ -186,10 +200,17 @@ func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host, emai
 	retries := maxInt(0, p.config.RetryableNetworkRetries)
 
 	var last Result
+	attemptChain := make([]AttemptEvidence, 0, retries+1)
+	if firstAttemptNumber <= 0 {
+		firstAttemptNumber = 1
+	}
 
 	for attempt := 0; attempt <= retries; attempt++ {
 		result := p.smtpChecker.Check(ctx, host, email)
-		result = applyAttemptEvidence(result, host, attempt+1)
+		attemptNumber := firstAttemptNumber + attempt
+		result = applyAttemptEvidence(result, host, attemptNumber)
+		result.AttemptChain = append(cloneAttemptChain(attemptChain), attemptEvidenceFromResult(result))
+		attemptChain = result.AttemptChain
 
 		if result.Category == CategoryValid {
 			return result
@@ -205,7 +226,11 @@ func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host, emai
 	}
 
 	if last.Category == "" {
-		return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
+		return Result{
+			Category:     CategoryRisky,
+			Reason:       "smtp_timeout",
+			AttemptChain: cloneAttemptChain(attemptChain),
+		}
 	}
 
 	return last
@@ -255,8 +280,39 @@ func applyAttemptEvidence(result Result, mxHost string, attemptNumber int) Resul
 	if strings.TrimSpace(result.Evidence.EvidenceStrength) == "" {
 		result.Evidence.EvidenceStrength = result.EvidenceStrength
 	}
+	if len(result.Evidence.AttemptChain) == 0 && len(result.AttemptChain) > 0 {
+		result.Evidence.AttemptChain = cloneAttemptChain(result.AttemptChain)
+	}
 
 	return result
+}
+
+func attemptEvidenceFromResult(result Result) AttemptEvidence {
+	return AttemptEvidence{
+		AttemptNumber:    result.AttemptNumber,
+		MXHost:           strings.TrimSpace(result.MXHost),
+		AttemptRoute:     strings.TrimSpace(result.AttemptRoute),
+		DecisionClass:    strings.TrimSpace(result.DecisionClass),
+		ReasonCode:       strings.TrimSpace(result.ReasonCode),
+		ReasonTag:        strings.TrimSpace(result.ReasonTag),
+		RetryStrategy:    strings.TrimSpace(result.RetryStrategy),
+		SMTPCode:         result.SMTPCode,
+		EnhancedCode:     strings.TrimSpace(result.EnhancedCode),
+		ProviderProfile:  strings.TrimSpace(result.ProviderProfile),
+		ConfidenceHint:   strings.TrimSpace(result.DecisionConfidence),
+		EvidenceStrength: strings.TrimSpace(result.EvidenceStrength),
+	}
+}
+
+func cloneAttemptChain(chain []AttemptEvidence) []AttemptEvidence {
+	if len(chain) == 0 {
+		return nil
+	}
+
+	cloned := make([]AttemptEvidence, len(chain))
+	copy(cloned, chain)
+
+	return cloned
 }
 
 type parsedEmail struct {

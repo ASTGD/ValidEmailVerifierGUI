@@ -321,7 +321,19 @@
                             <td class="py-3 text-slate-300">{{ .Host }}</td>
                             <td class="py-3 text-slate-300">{{ if .Pool }}{{ .Pool }}{{ else }}-{{ end }}</td>
                             <td class="py-3">
-                                <span class="rounded-full px-3 py-1 text-xs {{ if or (eq .Status "stopped") (eq .DesiredState "stopped") }}bg-red-500/20 text-red-300{{ else if eq .Status "online" }}bg-emerald-500/20 text-emerald-300{{ else if eq .Status "offline" }}bg-amber-500/20 text-amber-200{{ else }}bg-slate-800 text-slate-200{{ end }}">{{ .Status }}</span>
+                                {{ if eq .DesiredState "stopped" }}
+                                    <span class="rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300">stopped</span>
+                                {{ else if and (eq .Status "stopped") (eq .DesiredState "running") }}
+                                    <span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-200">starting</span>
+                                {{ else if and (eq .Status "running") (eq .DesiredState "stopped") }}
+                                    <span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-200">stopping</span>
+                                {{ else if eq .Status "online" }}
+                                    <span class="rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300">online</span>
+                                {{ else if eq .Status "offline" }}
+                                    <span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-200">offline</span>
+                                {{ else }}
+                                    <span class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200">{{ .Status }}</span>
+                                {{ end }}
                             </td>
                             <td class="py-3">
                                 <span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300">{{ .DesiredState }}</span>
@@ -332,7 +344,7 @@
                             <td class="py-3 text-slate-400">{{ .LastHeartbeat }}</td>
                             <td class="py-3">
                                 <div class="flex flex-wrap gap-2">
-                                    {{ if or (eq .Status "stopped") (eq .DesiredState "stopped") }}
+                                    {{ if eq .DesiredState "stopped" }}
                                     <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/resume">
                                         <button class="rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-500/30" type="submit">Start</button>
                                     </form>
@@ -498,8 +510,8 @@
             </form>
         `;
 
-        const renderActions = (workerID, quarantined, status, desiredState) => {
-            const isStopped = status === 'stopped' || desiredState === 'stopped';
+        const renderActions = (workerID, quarantined, desiredState) => {
+            const isStopped = desiredState === 'stopped';
             const base = isStopped
                 ? [
                     actionButton({ workerID, name: 'resume' }, 'Start', 'rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-500/30'),
@@ -542,12 +554,22 @@
                 const quarantineClass = quarantined ? 'bg-red-500/20 text-red-300' : 'bg-emerald-500/20 text-emerald-300';
                 const quarantineText = quarantined ? 'on' : 'off';
                 let statusClass = 'bg-slate-800 text-slate-200';
-                if (statusLower === 'stopped' || desiredLower === 'stopped') {
+                if (desiredLower === 'stopped') {
                     statusClass = 'bg-red-500/20 text-red-300';
                 } else if (statusLower === 'online') {
                     statusClass = 'bg-emerald-500/20 text-emerald-300';
                 } else if (statusLower === 'offline') {
                     statusClass = 'bg-amber-500/20 text-amber-200';
+                }
+                let statusText = status;
+                if (desiredLower === 'stopped') {
+                    statusText = 'stopped';
+                } else if (statusLower === 'stopped' && desiredLower === 'running') {
+                    statusClass = 'bg-amber-500/20 text-amber-200';
+                    statusText = 'starting';
+                } else if (statusLower === 'running' && desiredLower === 'stopped') {
+                    statusClass = 'bg-amber-500/20 text-amber-200';
+                    statusText = 'stopping';
                 }
 
                 return `
@@ -555,11 +577,11 @@
                         <td class="py-3 font-medium">${workerID}</td>
                         <td class="py-3 text-slate-300">${host || '-'}</td>
                         <td class="py-3 text-slate-300">${pool}</td>
-                        <td class="py-3"><span class="rounded-full px-3 py-1 text-xs ${statusClass}">${status}</span></td>
+                        <td class="py-3"><span class="rounded-full px-3 py-1 text-xs ${statusClass}">${statusText}</span></td>
                         <td class="py-3"><span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300">${desired}</span></td>
                         <td class="py-3"><span class="rounded-full px-3 py-1 text-xs ${quarantineClass}">${quarantineText}</span></td>
                         <td class="py-3 text-slate-400">${heartbeat}</td>
-                        <td class="py-3">${renderActions(rawWorkerID, quarantined, statusLower, desiredLower)}</td>
+                        <td class="py-3">${renderActions(rawWorkerID, quarantined, desiredLower)}</td>
                     </tr>
                 `;
             });

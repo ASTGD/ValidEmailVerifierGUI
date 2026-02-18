@@ -193,6 +193,44 @@ func TestPipelineStopsAfterUndeliverableWithoutSecondMXFallback(t *testing.T) {
 	}
 }
 
+func TestPipelineAttemptChainTracksMultiMXFallback(t *testing.T) {
+	resolver := &fakeResolver{records: map[string][]*net.MX{
+		"fallback.local": {
+			{Host: "mx1.fallback.local", Pref: 10},
+			{Host: "mx2.fallback.local", Pref: 20},
+		},
+	}}
+	smtp := &fakeSMTP{results: map[string]Result{
+		"mx1.fallback.local": {
+			Category:      CategoryRisky,
+			Reason:        "smtp_tempfail",
+			DecisionClass: DecisionRetryable,
+			ReasonCode:    "smtp_tempfail",
+		},
+		"mx2.fallback.local": {
+			Category:      CategoryValid,
+			Reason:        "rcpt_ok",
+			DecisionClass: DecisionDeliverable,
+			ReasonCode:    "rcpt_ok",
+		},
+	}}
+
+	v := newVerifier(resolver, smtp, 2)
+	res := v.Verify(context.Background(), "user@fallback.local")
+	if res.Category != CategoryValid {
+		t.Fatalf("expected valid result from second MX, got %s/%s", res.Category, res.Reason)
+	}
+	if len(res.AttemptChain) != 2 {
+		t.Fatalf("expected two attempts in chain, got %d", len(res.AttemptChain))
+	}
+	if res.AttemptChain[0].AttemptNumber != 1 || res.AttemptChain[0].MXHost != "mx1.fallback.local" {
+		t.Fatalf("unexpected first attempt evidence: %+v", res.AttemptChain[0])
+	}
+	if res.AttemptChain[1].AttemptNumber != 2 || res.AttemptChain[1].MXHost != "mx2.fallback.local" {
+		t.Fatalf("unexpected second attempt evidence: %+v", res.AttemptChain[1])
+	}
+}
+
 func TestPipelineAddsAttemptEvidenceMetadata(t *testing.T) {
 	resolver := &fakeResolver{records: map[string][]*net.MX{
 		"evidence.local": {{Host: "mx.evidence.local", Pref: 10}},
@@ -228,6 +266,15 @@ func TestPipelineAddsAttemptEvidenceMetadata(t *testing.T) {
 	}
 	if res.Evidence.AttemptNumber != 1 {
 		t.Fatalf("expected evidence attempt number 1, got %d", res.Evidence.AttemptNumber)
+	}
+	if len(res.AttemptChain) != 1 {
+		t.Fatalf("expected one attempt in chain, got %d", len(res.AttemptChain))
+	}
+	if res.AttemptChain[0].AttemptNumber != 1 {
+		t.Fatalf("expected attempt chain attempt number 1, got %d", res.AttemptChain[0].AttemptNumber)
+	}
+	if res.AttemptChain[0].MXHost != "mx.evidence.local" {
+		t.Fatalf("expected attempt chain mx host metadata, got %q", res.AttemptChain[0].MXHost)
 	}
 }
 
