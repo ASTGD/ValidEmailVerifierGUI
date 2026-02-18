@@ -1,0 +1,77 @@
+{{ define "layout" }}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/assets/app.css?v=18_4_2_warning_cta_2" />
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+    <div class="min-h-screen">
+        <header class="border-b border-slate-800 bg-slate-900/60">
+            <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+                <div>
+                    <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Verifier Engine Room</p>
+                    <h1 class="text-xl font-semibold">Go Worker Control Center</h1>
+                </div>
+                <div class="flex items-center gap-3">
+                    {{ if .DocsURL }}
+                    <a href="{{ .DocsURL }}" target="_blank" class="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-200 hover:bg-slate-800">Docs</a>
+                    {{ end }}
+                    <div class="text-xs text-slate-400">{{ .Subtitle }}</div>
+                </div>
+            </div>
+            <nav class="mx-auto flex max-w-6xl gap-3 px-6 pb-4 text-sm">
+                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "overview" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/overview">Overview</a>
+                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "workers" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/workers">Workers</a>
+                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "pools" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/pools">Pools</a>
+                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "alerts" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/alerts">Alerts</a>
+                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "settings" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/settings">Settings</a>
+            </nav>
+        </header>
+
+        <main class="mx-auto max-w-6xl px-6 py-8">
+            {{ if eq .ActiveNav "overview" }}
+                {{ template "overview" . }}
+            {{ else if eq .ActiveNav "workers" }}
+                {{ template "workers" . }}
+            {{ else if eq .ActiveNav "pools" }}
+                {{ template "pools" . }}
+            {{ else if eq .ActiveNav "alerts" }}
+                {{ template "alerts" . }}
+            {{ else if eq .ActiveNav "settings" }}
+                {{ template "settings" . }}
+            {{ end }}
+        </main>
+    </div>
+
+    {{ if .LiveStreamPath }}
+    <script>
+        (() => {
+            const source = new EventSource('{{ .LiveStreamPath }}');
+            const close = () => {
+                try {
+                    source.close();
+                } catch (_) {}
+            };
+
+            source.addEventListener('stats', (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    window.dispatchEvent(new CustomEvent('cp:live', { detail: payload }));
+                } catch (_) {}
+            });
+
+            source.addEventListener('error', () => {
+                // Keep page stable on stream interruptions; browser reconnects automatically.
+            });
+
+            window.addEventListener('pagehide', close);
+            window.addEventListener('beforeunload', close);
+        })();
+    </script>
+    {{ end }}
+</body>
+</html>
+{{ end }}

@@ -13,6 +13,7 @@ use App\Models\VerificationJob;
 use App\Models\VerificationOrder;
 use App\Services\JobStorage;
 use App\Services\OrderStorage;
+use App\Services\QueueHealth\QueueBackpressureGate;
 use App\Support\AdminAuditLogger;
 use Filament\Actions\Action;
 use Filament\Actions\ViewAction;
@@ -175,8 +176,8 @@ class VerificationOrdersTable
                                         return \App\Models\User::query()
                                             ->role(\App\Support\Roles::CUSTOMER)
                                             ->where(function (Builder $query) use ($search): void {
-                                                $query->where('name', 'like', '%' . $search . '%')
-                                                    ->orWhere('email', 'like', '%' . $search . '%');
+                                                $query->where('name', 'like', '%'.$search.'%')
+                                                    ->orWhere('email', 'like', '%'.$search.'%');
                                             })
                                             ->limit(20)
                                             ->get()
@@ -229,7 +230,7 @@ class VerificationOrdersTable
 
                         $orderNumber = trim((string) ($data['order_number'] ?? ''));
                         if ($orderNumber !== '') {
-                            $query->where('order_number', 'like', '%' . $orderNumber . '%');
+                            $query->where('order_number', 'like', '%'.$orderNumber.'%');
                         }
 
                         $dateFrom = $data['date_from'] ?? null;
@@ -314,6 +315,17 @@ class VerificationOrdersTable
                         return null;
                     })
                     ->action(function (VerificationOrder $record): void {
+                        $backpressure = app(QueueBackpressureGate::class)->assessHeavySubmission();
+                        if ($backpressure['blocked']) {
+                            Notification::make()
+                                ->warning()
+                                ->title('Queue pressure active')
+                                ->body($backpressure['reason'])
+                                ->send();
+
+                            return;
+                        }
+
                         if ($record->verification_job_id) {
                             Notification::make()
                                 ->warning()
@@ -340,7 +352,7 @@ class VerificationOrdersTable
                         $job = new VerificationJob([
                             'user_id' => $record->user_id,
                             'status' => VerificationJobStatus::Pending,
-                            'verification_mode' => VerificationMode::Standard->value,
+                            'verification_mode' => VerificationMode::Enhanced->value,
                             'original_filename' => $record->original_filename,
                         ]);
                         $job->id = (string) Str::uuid();
@@ -355,11 +367,37 @@ class VerificationOrdersTable
                         ], auth()->id());
                         $job->addLog('verification_mode_set', 'Verification mode set at job creation.', [
                             'from' => null,
-                            'to' => VerificationMode::Standard->value,
+                            'to' => VerificationMode::Enhanced->value,
                             'actor_id' => auth()->id(),
                         ], auth()->id());
 
-                        PrepareVerificationJob::dispatch($job->id);
+                        try {
+                            if ((string) config('queue.default', 'sync') === 'sync') {
+                                PrepareVerificationJob::dispatchSync($job->id);
+                            } else {
+                                PrepareVerificationJob::dispatch($job->id);
+                            }
+                        } catch (\Throwable $exception) {
+                            $job->update([
+                                'status' => VerificationJobStatus::Failed,
+                                'error_message' => 'Failed to enqueue verification job.',
+                                'failure_source' => VerificationJob::FAILURE_SOURCE_ENGINE,
+                                'failure_code' => 'enqueue_failed',
+                                'finished_at' => now(),
+                            ]);
+
+                            $job->addLog('enqueue_failed', 'Failed to dispatch prepare job.', [
+                                'error' => $exception->getMessage(),
+                            ], auth()->id());
+
+                            Notification::make()
+                                ->danger()
+                                ->title('Queue dispatch failed')
+                                ->body('Failed to enqueue verification job.')
+                                ->send();
+
+                            return;
+                        }
 
                         $record->update([
                             'verification_job_id' => $job->id,

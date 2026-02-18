@@ -4,8 +4,6 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Support\Roles;
-use App\Models\CheckoutIntent;
-use App\Models\VerificationOrder;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -137,5 +135,20 @@ class User extends Authenticatable implements FilamentUser
     public function auditLogs(): HasMany
     {
         return $this->hasMany(AdminAuditLog::class);
+    }
+
+    public function seedSendConsents(): HasMany
+    {
+        return $this->hasMany(SeedSendConsent::class);
+    }
+
+    public function seedSendCampaigns(): HasMany
+    {
+        return $this->hasMany(SeedSendCampaign::class);
+    }
+
+    public function seedSendCreditLedgerEntries(): HasMany
+    {
+        return $this->hasMany(SeedSendCreditLedger::class);
     }
 }

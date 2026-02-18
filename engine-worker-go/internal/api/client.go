@@ -26,19 +26,27 @@ type EngineServerPayload struct {
 }
 
 type ClaimNextRequest struct {
-	EngineServer EngineServerPayload `json:"engine_server"`
-	WorkerID     string              `json:"worker_id"`
-	LeaseSeconds *int                `json:"lease_seconds,omitempty"`
+	EngineServer     EngineServerPayload `json:"engine_server"`
+	WorkerID         string              `json:"worker_id"`
+	WorkerCapability string              `json:"worker_capability,omitempty"`
+	LeaseSeconds     *int                `json:"lease_seconds,omitempty"`
 }
 
 type ClaimNextResponse struct {
 	Data struct {
-		ChunkID          string `json:"chunk_id"`
-		JobID            string `json:"job_id"`
-		ChunkNo          int    `json:"chunk_no"`
-		VerificationMode string `json:"verification_mode"`
-		LeaseExpiresAt   string `json:"lease_expires_at"`
-		Input            struct {
+		ChunkID                  string   `json:"chunk_id"`
+		JobID                    string   `json:"job_id"`
+		ChunkNo                  int      `json:"chunk_no"`
+		VerificationMode         string   `json:"verification_mode"`
+		ProcessingStage          string   `json:"processing_stage"`
+		WorkerCapabilityRequired string   `json:"worker_capability_required"`
+		RoutingProvider          string   `json:"routing_provider"`
+		PreferredPool            string   `json:"preferred_pool"`
+		MaxProbeAttempts         int      `json:"max_probe_attempts"`
+		RetryAttempt             int      `json:"retry_attempt"`
+		LastWorkerIDs            []string `json:"last_worker_ids"`
+		LeaseExpiresAt           string   `json:"lease_expires_at"`
+		Input                    struct {
 			Disk string `json:"disk"`
 			Key  string `json:"key"`
 		} `json:"input"`
@@ -47,12 +55,14 @@ type ClaimNextResponse struct {
 
 type ChunkDetailsResponse struct {
 	Data struct {
-		ChunkID          string `json:"chunk_id"`
-		JobID            string `json:"job_id"`
-		ChunkNo          int    `json:"chunk_no"`
-		Status           string `json:"status"`
-		VerificationMode string `json:"verification_mode"`
-		Input            struct {
+		ChunkID                  string `json:"chunk_id"`
+		JobID                    string `json:"job_id"`
+		ChunkNo                  int    `json:"chunk_no"`
+		Status                   string `json:"status"`
+		VerificationMode         string `json:"verification_mode"`
+		ProcessingStage          string `json:"processing_stage"`
+		WorkerCapabilityRequired string `json:"worker_capability_required"`
+		Input                    struct {
 			Disk string `json:"disk"`
 			Key  string `json:"key"`
 		} `json:"input"`
@@ -246,6 +256,18 @@ func (c *Client) LogChunk(ctx context.Context, chunkID string, payload map[strin
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body interface{}) (int, []byte, error) {
+	return doJSON(ctx, c.httpClient, c.baseURL, c.token, method, path, body)
+}
+
+func doJSON(
+	ctx context.Context,
+	httpClient *http.Client,
+	baseURL string,
+	token string,
+	method string,
+	path string,
+	body interface{},
+) (int, []byte, error) {
 	var reader io.Reader
 	if body != nil {
 		payload, err := json.Marshal(body)
@@ -255,7 +277,7 @@ func (c *Client) do(ctx context.Context, method, path string, body interface{}) 
 		reader = bytes.NewReader(payload)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reader)
+	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(baseURL, "/")+path, reader)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -264,11 +286,11 @@ func (c *Client) do(ctx context.Context, method, path string, body interface{}) 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return 0, nil, err
 	}

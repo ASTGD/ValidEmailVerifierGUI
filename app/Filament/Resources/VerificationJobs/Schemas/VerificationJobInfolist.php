@@ -5,6 +5,7 @@ namespace App\Filament\Resources\VerificationJobs\Schemas;
 use App\Enums\VerificationJobStatus;
 use App\Enums\VerificationMode;
 use App\Filament\Resources\VerificationJobChunks\VerificationJobChunkResource;
+use App\Models\SmtpDecisionTrace;
 use App\Models\VerificationJob;
 use App\Models\VerificationJobChunk;
 use App\Support\JobProgressCalculator;
@@ -184,16 +185,119 @@ class VerificationJobInfolist
                             ->label('Cache misses')
                             ->numeric()
                             ->placeholder('-'),
+                        TextEntry::make('metrics.screening_total_count')
+                            ->label('Screening total')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.probe_candidate_count')
+                            ->label('Probe candidates')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.probe_completed_count')
+                            ->label('Probe completed')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.probe_unknown_count')
+                            ->label('Probe unknown')
+                            ->numeric()
+                            ->placeholder('-'),
                         TextEntry::make('metrics.writeback_written_count')
                             ->label('Write-back written')
                             ->numeric()
                             ->placeholder('-'),
+                        TextEntry::make('metrics.writeback_attempted_count')
+                            ->label('Write-back attempted')
+                            ->numeric()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.writeback_status')
+                            ->label('Write-back status')
+                            ->badge()
+                            ->formatStateUsing(fn ($state): string => $state ? ucfirst((string) $state) : '-')
+                            ->color(function ($state): string {
+                                return match ((string) $state) {
+                                    'completed' => 'success',
+                                    'running' => 'warning',
+                                    'queued' => 'info',
+                                    'failed' => 'danger',
+                                    'skipped', 'disabled' => 'gray',
+                                    default => 'gray',
+                                };
+                            })
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.writeback_finished_at')
+                            ->label('Write-back finished')
+                            ->since()
+                            ->placeholder('-'),
+                        TextEntry::make('metrics.writeback_last_error')
+                            ->label('Write-back error')
+                            ->placeholder('-')
+                            ->columnSpanFull(),
                         TextEntry::make('metrics.peak_cpu_percent')
                             ->label('Peak CPU %')
                             ->placeholder('-'),
                         TextEntry::make('metrics.peak_memory_mb')
                             ->label('Peak memory (MB)')
                             ->placeholder('-'),
+                    ])
+                    ->columns(3),
+                Section::make('SMTP Decision Trace (Internal)')
+                    ->schema([
+                        TextEntry::make('trace_total')
+                            ->label('Trace rows')
+                            ->state(fn (VerificationJob $record): int => SmtpDecisionTrace::query()
+                                ->where('verification_job_id', (string) $record->id)
+                                ->count())
+                            ->numeric(),
+                        TextEntry::make('trace_unknown')
+                            ->label('Unknown traces')
+                            ->state(fn (VerificationJob $record): int => SmtpDecisionTrace::query()
+                                ->where('verification_job_id', (string) $record->id)
+                                ->where('decision_class', 'unknown')
+                                ->count())
+                            ->numeric(),
+                        TextEntry::make('trace_undeliverable')
+                            ->label('Undeliverable traces')
+                            ->state(fn (VerificationJob $record): int => SmtpDecisionTrace::query()
+                                ->where('verification_job_id', (string) $record->id)
+                                ->where('decision_class', 'undeliverable')
+                                ->count())
+                            ->numeric(),
+                        TextEntry::make('trace_latest_policy')
+                            ->label('Latest policy version')
+                            ->state(fn (VerificationJob $record): string => (string) (SmtpDecisionTrace::query()
+                                ->where('verification_job_id', (string) $record->id)
+                                ->whereNotNull('policy_version')
+                                ->latest('observed_at')
+                                ->value('policy_version') ?? '-')),
+                        TextEntry::make('trace_latest_strategy')
+                            ->label('Latest session strategy')
+                            ->state(fn (VerificationJob $record): string => (string) (SmtpDecisionTrace::query()
+                                ->where('verification_job_id', (string) $record->id)
+                                ->whereNotNull('session_strategy_id')
+                                ->latest('observed_at')
+                                ->value('session_strategy_id') ?? '-')),
+                        TextEntry::make('trace_top_reason_tags')
+                            ->label('Top reason tags')
+                            ->state(function (VerificationJob $record): string {
+                                $tags = SmtpDecisionTrace::query()
+                                    ->where('verification_job_id', (string) $record->id)
+                                    ->whereNotNull('reason_tag')
+                                    ->selectRaw('reason_tag, COUNT(*) as aggregate_count')
+                                    ->groupBy('reason_tag')
+                                    ->orderByDesc('aggregate_count')
+                                    ->limit(3)
+                                    ->get()
+                                    ->map(fn ($row): string => sprintf('%s (%d)', (string) $row->reason_tag, (int) $row->aggregate_count))
+                                    ->values()
+                                    ->all();
+
+                                if ($tags === []) {
+                                    return '-';
+                                }
+
+                                return implode(', ', $tags);
+                            })
+                            ->columnSpanFull(),
                     ])
                     ->columns(3),
                 Section::make('Pipeline Breakdown (Internal)')
@@ -292,6 +396,112 @@ class VerificationJobInfolist
                             ->openUrlInNewTab(),
                     ])
                     ->columns(3),
+                Section::make('SG6 Seed Send')
+                    ->schema([
+                        TextEntry::make('seed_send_consent_status')
+                            ->label('Consent status')
+                            ->state(function (VerificationJob $record): string {
+                                $consent = $record->seedSendConsents()
+                                    ->latest('id')
+                                    ->first();
+
+                                if (! $consent) {
+                                    return 'Not requested';
+                                }
+
+                                if ($consent->status === 'approved' && $consent->expires_at && $consent->expires_at->lte(now())) {
+                                    return 'Expired';
+                                }
+
+                                return ucfirst($consent->status);
+                            })
+                            ->badge()
+                            ->color(function (VerificationJob $record): string {
+                                $consent = $record->seedSendConsents()->latest('id')->first();
+                                $status = $consent?->status;
+
+                                if ($status === 'approved' && $consent?->expires_at && $consent->expires_at->lte(now())) {
+                                    return 'danger';
+                                }
+
+                                return match ($status) {
+                                    'approved' => 'success',
+                                    'requested' => 'warning',
+                                    'revoked', 'rejected' => 'danger',
+                                    default => 'gray',
+                                };
+                            }),
+                        TextEntry::make('seed_send_campaign_status')
+                            ->label('Campaign status')
+                            ->state(function (VerificationJob $record): string {
+                                $campaign = $record->seedSendCampaigns()
+                                    ->latest('created_at')
+                                    ->first();
+
+                                return $campaign ? ucfirst($campaign->status) : 'Not started';
+                            })
+                            ->badge()
+                            ->color(function (VerificationJob $record): string {
+                                $status = $record->seedSendCampaigns()->latest('created_at')->value('status');
+
+                                return match ($status) {
+                                    'running', 'queued', 'pending' => 'warning',
+                                    'completed' => 'success',
+                                    'paused' => 'gray',
+                                    'failed', 'cancelled' => 'danger',
+                                    default => 'gray',
+                                };
+                            }),
+                        TextEntry::make('seed_send_campaign_counts')
+                            ->label('Delivered / Bounced / Deferred')
+                            ->state(function (VerificationJob $record): string {
+                                $campaign = $record->seedSendCampaigns()->latest('created_at')->first();
+                                if (! $campaign) {
+                                    return '-';
+                                }
+
+                                return sprintf(
+                                    '%d / %d / %d',
+                                    (int) $campaign->delivered_count,
+                                    (int) $campaign->bounced_count,
+                                    (int) $campaign->deferred_count
+                                );
+                            }),
+                        TextEntry::make('seed_send_campaign_credits')
+                            ->label('Credits reserved / used')
+                            ->state(function (VerificationJob $record): string {
+                                $campaign = $record->seedSendCampaigns()->latest('created_at')->first();
+                                if (! $campaign) {
+                                    return '-';
+                                }
+
+                                return sprintf(
+                                    '%d / %d',
+                                    (int) $campaign->credits_reserved,
+                                    (int) $campaign->credits_used
+                                );
+                            }),
+                        TextEntry::make('seed_send_report')
+                            ->label('Evidence report')
+                            ->state(function (VerificationJob $record): string {
+                                $campaign = $record->seedSendCampaigns()->latest('created_at')->first();
+
+                                return $campaign && $campaign->report_key ? 'Download SG6 report' : 'Not generated';
+                            })
+                            ->url(function (VerificationJob $record): ?string {
+                                $campaign = $record->seedSendCampaigns()->latest('created_at')->first();
+                                if (! $campaign || ! $campaign->report_key) {
+                                    return null;
+                                }
+
+                                return route('portal.jobs.seed-send-report', [
+                                    'job' => $record,
+                                    'campaign_id' => $campaign->id,
+                                ]);
+                            })
+                            ->openUrlInNewTab(),
+                    ])
+                    ->columns(2),
                 Section::make('Recent Logs')
                     ->schema([
                         RepeatableEntry::make('activity')

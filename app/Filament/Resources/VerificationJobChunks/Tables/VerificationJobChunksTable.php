@@ -48,6 +48,12 @@ class VerificationJobChunksTable
                         };
                     })
                     ->sortable(),
+                TextColumn::make('processing_stage')
+                    ->label('Stage')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => $state ? str_replace('_', ' ', strtoupper($state)) : 'SCREENING')
+                    ->color(fn (?string $state): string => $state === 'smtp_probe' ? 'info' : 'gray')
+                    ->sortable(),
                 TextColumn::make('email_count')
                     ->label('Email Count')
                     ->numeric()

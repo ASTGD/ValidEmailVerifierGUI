@@ -130,7 +130,7 @@ func (p *PipelineVerifier) lookupMX(ctx context.Context, domain string) ([]*net.
 			return nil, classifyDNSError(err)
 		}
 
-		backoffSleep(ctx, p.config.BackoffBaseMs, attempt)
+		backoffSleep(ctx, p.config.BackoffBaseMs, attempt, 0, p.config.RetryJitterPercent)
 	}
 
 	if lastErr != nil {
@@ -147,6 +147,8 @@ func (p *PipelineVerifier) checkSMTP(ctx context.Context, domain, email string, 
 	}
 
 	var best Result
+	attemptCounter := 0
+	fullAttemptChain := make([]AttemptEvidence, 0, maxAttempts)
 
 	for i, mx := range mxRecords {
 		if i >= maxAttempts {
@@ -154,25 +156,41 @@ func (p *PipelineVerifier) checkSMTP(ctx context.Context, domain, email string, 
 		}
 
 		host := strings.TrimSuffix(mx.Host, ".")
-		attemptResult := p.checkSMTPHost(ctx, domain, host, email)
+		attemptResult := p.checkSMTPHost(ctx, domain, host, email, attemptCounter+1)
+		attemptCounter += len(attemptResult.AttemptChain)
+		if len(attemptResult.AttemptChain) > 0 {
+			fullAttemptChain = append(fullAttemptChain, cloneAttemptChain(attemptResult.AttemptChain)...)
+		}
 
 		if attemptResult.Category == CategoryValid {
+			attemptResult.AttemptChain = cloneAttemptChain(fullAttemptChain)
 			return attemptResult
 		}
 
 		if best.Category == "" || rankCategory(attemptResult.Category) > rankCategory(best.Category) {
 			best = attemptResult
 		}
+
+		if !shouldAttemptNextMX(attemptResult) {
+			attemptResult.AttemptChain = cloneAttemptChain(fullAttemptChain)
+			return attemptResult
+		}
 	}
 
 	if best.Category == "" {
-		return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
+		return Result{
+			Category:     CategoryRisky,
+			Reason:       "smtp_timeout",
+			AttemptChain: cloneAttemptChain(fullAttemptChain),
+		}
 	}
+
+	best.AttemptChain = cloneAttemptChain(fullAttemptChain)
 
 	return best
 }
 
-func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host, email string) Result {
+func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host, email string, firstAttemptNumber int) Result {
 	limiterRelease, err := p.limiter.Acquire(ctx, domain)
 	if err != nil {
 		return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
@@ -182,9 +200,17 @@ func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host, emai
 	retries := maxInt(0, p.config.RetryableNetworkRetries)
 
 	var last Result
+	attemptChain := make([]AttemptEvidence, 0, retries+1)
+	if firstAttemptNumber <= 0 {
+		firstAttemptNumber = 1
+	}
 
 	for attempt := 0; attempt <= retries; attempt++ {
 		result := p.smtpChecker.Check(ctx, host, email)
+		attemptNumber := firstAttemptNumber + attempt
+		result = applyAttemptEvidence(result, host, attemptNumber)
+		result.AttemptChain = append(cloneAttemptChain(attemptChain), attemptEvidenceFromResult(result))
+		attemptChain = result.AttemptChain
 
 		if result.Category == CategoryValid {
 			return result
@@ -196,14 +222,97 @@ func (p *PipelineVerifier) checkSMTPHost(ctx context.Context, domain, host, emai
 			return result
 		}
 
-		backoffSleep(ctx, p.config.BackoffBaseMs, attempt)
+		backoffSleep(ctx, p.config.BackoffBaseMs, attempt, result.RetryAfterSecond, p.config.RetryJitterPercent)
 	}
 
 	if last.Category == "" {
-		return Result{Category: CategoryRisky, Reason: "smtp_timeout"}
+		return Result{
+			Category:     CategoryRisky,
+			Reason:       "smtp_timeout",
+			AttemptChain: cloneAttemptChain(attemptChain),
+		}
 	}
 
 	return last
+}
+
+func shouldAttemptNextMX(result Result) bool {
+	switch result.DecisionClass {
+	case DecisionRetryable, DecisionUnknown:
+		return true
+	}
+
+	switch strings.TrimSpace(result.Reason) {
+	case "smtp_timeout", "smtp_connect_timeout", "smtp_tempfail":
+		return true
+	default:
+		return false
+	}
+}
+
+func applyAttemptEvidence(result Result, mxHost string, attemptNumber int) Result {
+	mxHost = strings.TrimSpace(mxHost)
+	if mxHost != "" && strings.TrimSpace(result.MXHost) == "" {
+		result.MXHost = mxHost
+	}
+	if attemptNumber > 0 && result.AttemptNumber <= 0 {
+		result.AttemptNumber = attemptNumber
+	}
+	if strings.TrimSpace(result.AttemptRoute) == "" && mxHost != "" {
+		result.AttemptRoute = "mx:" + mxHost
+	}
+	if strings.TrimSpace(result.EvidenceStrength) == "" {
+		result.EvidenceStrength = normalizedEvidenceStrength(result.DecisionConfidence)
+	}
+
+	if result.Evidence == nil {
+		result.Evidence = &ReplyEvidence{}
+	}
+	if strings.TrimSpace(result.Evidence.MXHost) == "" {
+		result.Evidence.MXHost = result.MXHost
+	}
+	if result.Evidence.AttemptNumber <= 0 {
+		result.Evidence.AttemptNumber = result.AttemptNumber
+	}
+	if strings.TrimSpace(result.Evidence.AttemptRoute) == "" {
+		result.Evidence.AttemptRoute = result.AttemptRoute
+	}
+	if strings.TrimSpace(result.Evidence.EvidenceStrength) == "" {
+		result.Evidence.EvidenceStrength = result.EvidenceStrength
+	}
+	if len(result.Evidence.AttemptChain) == 0 && len(result.AttemptChain) > 0 {
+		result.Evidence.AttemptChain = cloneAttemptChain(result.AttemptChain)
+	}
+
+	return result
+}
+
+func attemptEvidenceFromResult(result Result) AttemptEvidence {
+	return AttemptEvidence{
+		AttemptNumber:    result.AttemptNumber,
+		MXHost:           strings.TrimSpace(result.MXHost),
+		AttemptRoute:     strings.TrimSpace(result.AttemptRoute),
+		DecisionClass:    strings.TrimSpace(result.DecisionClass),
+		ReasonCode:       strings.TrimSpace(result.ReasonCode),
+		ReasonTag:        strings.TrimSpace(result.ReasonTag),
+		RetryStrategy:    strings.TrimSpace(result.RetryStrategy),
+		SMTPCode:         result.SMTPCode,
+		EnhancedCode:     strings.TrimSpace(result.EnhancedCode),
+		ProviderProfile:  strings.TrimSpace(result.ProviderProfile),
+		ConfidenceHint:   strings.TrimSpace(result.DecisionConfidence),
+		EvidenceStrength: strings.TrimSpace(result.EvidenceStrength),
+	}
+}
+
+func cloneAttemptChain(chain []AttemptEvidence) []AttemptEvidence {
+	if len(chain) == 0 {
+		return nil
+	}
+
+	cloned := make([]AttemptEvidence, len(chain))
+	copy(cloned, chain)
+
+	return cloned
 }
 
 type parsedEmail struct {
@@ -279,6 +388,13 @@ func isRetryableDNSError(err error) bool {
 }
 
 func isRetryableSMTPResult(result Result) bool {
+	switch result.DecisionClass {
+	case DecisionPolicyBlocked, DecisionUndeliverable:
+		return false
+	case DecisionRetryable:
+		return true
+	}
+
 	switch result.Reason {
 	case "smtp_timeout", "smtp_connect_timeout", "smtp_tempfail":
 		return true
@@ -287,12 +403,31 @@ func isRetryableSMTPResult(result Result) bool {
 	}
 }
 
-func backoffSleep(ctx context.Context, baseMs int, attempt int) {
+func backoffSleep(ctx context.Context, baseMs int, attempt int, retryAfterSeconds int, jitterPercent int) {
 	if baseMs <= 0 {
 		baseMs = 200
 	}
 
 	delay := time.Duration(baseMs*(attempt+1)) * time.Millisecond
+	if retryAfterSeconds > 0 {
+		retryDelay := time.Duration(retryAfterSeconds) * time.Second
+		if retryDelay > delay {
+			delay = retryDelay
+		}
+	}
+	if jitterPercent > 0 {
+		if jitterPercent > 50 {
+			jitterPercent = 50
+		}
+		jitterWindow := int64(delay) * int64(jitterPercent) / 100
+		if jitterWindow > 0 {
+			shift := time.Duration((time.Now().UnixNano()%(jitterWindow*2+1))-jitterWindow) * time.Nanosecond
+			delay += shift
+			if delay < 0 {
+				delay = 0
+			}
+		}
+	}
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
 

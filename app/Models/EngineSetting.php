@@ -54,6 +54,15 @@ class EngineSetting extends Model
         'monitor_dns_server_ip',
         'monitor_dns_server_port',
         'metrics_source',
+        'queue_connection',
+        'cache_store',
+        'horizon_enabled',
+        'queue_worker_name',
+        'queue_worker_processes',
+        'queue_worker_memory',
+        'queue_worker_timeout',
+        'queue_worker_tries',
+        'queue_worker_sleep',
     ];
 
     protected $casts = [
@@ -90,5 +99,11 @@ class EngineSetting extends Model
         'monitor_enabled' => 'boolean',
         'monitor_interval_minutes' => 'integer',
         'monitor_dns_server_port' => 'integer',
+        'horizon_enabled' => 'boolean',
+        'queue_worker_processes' => 'integer',
+        'queue_worker_memory' => 'integer',
+        'queue_worker_timeout' => 'integer',
+        'queue_worker_tries' => 'integer',
+        'queue_worker_sleep' => 'integer',
     ];
 }

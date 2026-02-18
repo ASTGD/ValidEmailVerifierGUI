@@ -5,19 +5,20 @@ namespace App\Models;
 use App\Enums\VerificationJobOrigin;
 use App\Enums\VerificationJobStatus;
 use App\Enums\VerificationMode;
-use App\Models\VerificationJobMetric;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Model;
 
 class VerificationJob extends Model
 {
     use HasUuids;
 
     public const FAILURE_SOURCE_ENGINE = 'engine';
+
     public const FAILURE_SOURCE_ADMIN = 'admin';
+
     public const FAILURE_SOURCE_SYSTEM = 'system';
 
     public $incrementing = false;
@@ -87,7 +88,7 @@ class VerificationJob extends Model
     ];
 
     protected $attributes = [
-        'verification_mode' => VerificationMode::Standard->value,
+        'verification_mode' => VerificationMode::Enhanced->value,
         'origin' => VerificationJobOrigin::ListUpload->value,
     ];
 
@@ -132,6 +133,26 @@ class VerificationJob extends Model
     public function order(): HasOne
     {
         return $this->hasOne(VerificationOrder::class, 'verification_job_id');
+    }
+
+    public function seedSendConsents(): HasMany
+    {
+        return $this->hasMany(SeedSendConsent::class, 'verification_job_id');
+    }
+
+    public function seedSendCampaigns(): HasMany
+    {
+        return $this->hasMany(SeedSendCampaign::class, 'verification_job_id');
+    }
+
+    public function seedSendCreditLedgerEntries(): HasMany
+    {
+        return $this->hasMany(SeedSendCreditLedger::class, 'verification_job_id');
+    }
+
+    public function smtpDecisionTraces(): HasMany
+    {
+        return $this->hasMany(SmtpDecisionTrace::class, 'verification_job_id');
     }
 
     public function addLog(string $event, ?string $message = null, ?array $context = null, ?int $userId = null): VerificationJobLog

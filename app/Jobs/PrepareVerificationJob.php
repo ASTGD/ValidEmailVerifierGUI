@@ -18,8 +18,35 @@ class PrepareVerificationJob implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
+    public int $timeout = 120;
+
+    public int $tries = 3;
+
+    public bool $failOnTimeout = true;
+
     public function __construct(public string $jobId)
     {
+        $this->connection = 'redis_prepare';
+        $this->queue = (string) config('queue.connections.redis_prepare.queue', 'prepare');
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [10, 30, 60];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function tags(): array
+    {
+        return [
+            'lane:prepare',
+            'verification_job:'.$this->jobId,
+        ];
     }
 
     public function handle(): void

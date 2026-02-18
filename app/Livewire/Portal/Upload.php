@@ -7,7 +7,7 @@ use App\Enums\VerificationMode;
 use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
-use App\Support\EnhancedModeGate;
+use App\Services\QueueHealth\QueueBackpressureGate;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
@@ -16,7 +16,7 @@ use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithFileUploads;
-use Illuminate\Validation\Rule;
+use Throwable;
 
 #[Layout('layouts.portal')]
 class Upload extends Component
@@ -25,7 +25,6 @@ class Upload extends Component
     use WithFileUploads;
 
     public $file;
-    public string $verification_mode = VerificationMode::Standard->value;
 
     protected function maxUploadKilobytes(): int
     {
@@ -36,25 +35,15 @@ class Upload extends Component
 
     protected function rules(): array
     {
-        $modes = array_map(static fn (VerificationMode $mode) => $mode->value, VerificationMode::cases());
-
         return [
             'file' => ['required', 'file', 'mimes:csv,txt', 'max:'.$this->maxUploadKilobytes()],
-            'verification_mode' => ['required', 'string', Rule::in($modes)],
         ];
     }
 
-    public function save(JobStorage $storage)
+    public function save(JobStorage $storage, QueueBackpressureGate $backpressureGate)
     {
         $this->validate();
         $user = Auth::user();
-        $enhancedGate = EnhancedModeGate::evaluate($user);
-
-        if (! $enhancedGate['allowed'] && $this->verification_mode === VerificationMode::Enhanced->value) {
-            $this->addError('verification_mode', EnhancedModeGate::message($user));
-
-            return;
-        }
 
         $rateKey = 'portal-upload|'.$user->id;
         $maxAttempts = (int) config('verifier.portal_upload_max_attempts', 10);
@@ -81,6 +70,15 @@ class Upload extends Component
             return;
         }
 
+        $backpressure = $backpressureGate->assessHeavySubmission();
+        if ($backpressure['blocked']) {
+            $this->addError('file', __('Queue is under pressure. Please try again soon. :reason', [
+                'reason' => $backpressure['reason'],
+            ]));
+
+            return;
+        }
+
         try {
             $this->authorize('create', VerificationJob::class);
         } catch (AuthorizationException) {
@@ -92,7 +90,7 @@ class Upload extends Component
         $job = new VerificationJob([
             'user_id' => $user->id,
             'status' => VerificationJobStatus::Pending,
-            'verification_mode' => $this->verification_mode,
+            'verification_mode' => VerificationMode::Enhanced,
             'original_filename' => $this->file->getClientOriginalName(),
         ]);
 
@@ -108,11 +106,33 @@ class Upload extends Component
         ], $user->id);
         $job->addLog('verification_mode_set', 'Verification mode set at job creation.', [
             'from' => null,
-            'to' => $this->verification_mode,
+            'to' => VerificationMode::Enhanced->value,
             'actor_id' => $user->id,
         ], $user->id);
 
-        PrepareVerificationJob::dispatch($job->id);
+        try {
+            if ((string) config('queue.default', 'sync') === 'sync') {
+                PrepareVerificationJob::dispatchSync($job->id);
+            } else {
+                PrepareVerificationJob::dispatch($job->id);
+            }
+        } catch (Throwable $exception) {
+            $job->update([
+                'status' => VerificationJobStatus::Failed,
+                'error_message' => 'Failed to enqueue verification job.',
+                'failure_source' => VerificationJob::FAILURE_SOURCE_ENGINE,
+                'failure_code' => 'enqueue_failed',
+                'finished_at' => now(),
+            ]);
+
+            $job->addLog('enqueue_failed', 'Failed to dispatch prepare job.', [
+                'error' => $exception->getMessage(),
+            ], $user->id);
+
+            $this->addError('file', __('Failed to queue verification. Please try again shortly.'));
+
+            return;
+        }
 
         $this->reset('file');
 
@@ -122,10 +142,5 @@ class Upload extends Component
     public function render()
     {
         return view('livewire.portal.upload');
-    }
-
-    public function getEnhancedGateProperty(): array
-    {
-        return EnhancedModeGate::evaluate(Auth::user());
     }
 }

@@ -149,7 +149,10 @@ func TestSMTPProberCatchAll(t *testing.T) {
 
 	res := prober.Check(context.Background(), "mx.test", "user@test.com")
 
-	if res.Category != CategoryRisky || res.Reason != "catch_all" {
-		t.Fatalf("expected catch_all risky, got %s/%s", res.Category, res.Reason)
+	if res.Category != CategoryRisky || res.Reason != "catch_all_high_confidence" {
+		t.Fatalf("expected catch_all_high_confidence risky, got %s/%s", res.Category, res.Reason)
+	}
+	if res.DecisionConfidence != "high" {
+		t.Fatalf("expected high confidence, got %q", res.DecisionConfidence)
 	}
 }

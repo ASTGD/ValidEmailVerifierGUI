@@ -68,8 +68,89 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 180),
             'block_for' => null,
+            'after_commit' => false,
+        ],
+
+        'redis_prepare' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_PREPARE_NAME', 'prepare'),
+            'retry_after' => (int) env('REDIS_PREPARE_RETRY_AFTER', 300),
+            'block_for' => (int) env('REDIS_PREPARE_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
+        'redis_parse' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_PARSE_NAME', 'parse'),
+            'retry_after' => (int) env('REDIS_PARSE_RETRY_AFTER', 3600),
+            'block_for' => (int) env('REDIS_PARSE_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
+        'redis_smtp_probe' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_SMTP_PROBE_NAME', 'smtp_probe'),
+            'retry_after' => (int) env('REDIS_SMTP_PROBE_RETRY_AFTER', 3600),
+            'block_for' => (int) env('REDIS_SMTP_PROBE_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
+        'redis_finalize' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_FINALIZE_NAME', 'finalize'),
+            'retry_after' => (int) env('REDIS_FINALIZE_RETRY_AFTER', 1200),
+            'block_for' => (int) env('REDIS_FINALIZE_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
+        'redis_import' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_IMPORT_NAME', 'imports'),
+            'retry_after' => (int) env('REDIS_IMPORT_RETRY_AFTER', 1800),
+            'block_for' => (int) env('REDIS_IMPORT_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
+        'redis_cache_writeback' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_CACHE_WRITEBACK_NAME', 'cache_writeback'),
+            'retry_after' => (int) env('REDIS_CACHE_WRITEBACK_RETRY_AFTER', 3600),
+            'block_for' => (int) env('REDIS_CACHE_WRITEBACK_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
+        'redis_seed_send_dispatch' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_SEED_SEND_DISPATCH_NAME', 'seed_send_dispatch'),
+            'retry_after' => (int) env('REDIS_SEED_SEND_DISPATCH_RETRY_AFTER', 3600),
+            'block_for' => (int) env('REDIS_SEED_SEND_DISPATCH_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
+        'redis_seed_send_events' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_SEED_SEND_EVENTS_NAME', 'seed_send_events'),
+            'retry_after' => (int) env('REDIS_SEED_SEND_EVENTS_RETRY_AFTER', 900),
+            'block_for' => (int) env('REDIS_SEED_SEND_EVENTS_BLOCK_FOR', 5),
+            'after_commit' => false,
+        ],
+
+        'redis_seed_send_reconcile' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('QUEUE_SEED_SEND_RECONCILE_NAME', 'seed_send_reconcile'),
+            'retry_after' => (int) env('REDIS_SEED_SEND_RECONCILE_RETRY_AFTER', 3600),
+            'block_for' => (int) env('REDIS_SEED_SEND_RECONCILE_BLOCK_FOR', 5),
             'after_commit' => false,
         ],
 

@@ -411,6 +411,95 @@ class EngineSettings
         return in_array($source, ['container', 'host'], true) ? $source : 'container';
     }
 
+    public static function queueConnection(): string
+    {
+        $default = (string) config('queue.default', 'database');
+        $value = self::stringValue('queue_connection', '');
+        $value = $value === '' ? $default : strtolower(trim($value));
+
+        return in_array($value, ['redis', 'database', 'sync'], true) ? $value : $default;
+    }
+
+    public static function cacheStore(): string
+    {
+        $default = (string) config('cache.default', 'database');
+        $value = self::stringValue('cache_store', '');
+        $value = $value === '' ? $default : strtolower(trim($value));
+
+        return in_array($value, ['redis', 'database', 'file', 'array'], true) ? $value : $default;
+    }
+
+    public static function horizonEnabled(): bool
+    {
+        return self::boolValue('horizon_enabled', false);
+    }
+
+    public static function queueWorkerName(): string
+    {
+        $value = self::stringValue('queue_worker_name', '');
+        $value = trim($value);
+
+        return $value !== '' ? $value : self::queueReferenceSupervisor();
+    }
+
+    public static function queueWorkerProcesses(): int
+    {
+        $value = self::intValue('queue_worker_processes', 0);
+        if ($value > 0) {
+            return $value;
+        }
+
+        $default = (int) (self::horizonDefault('maxProcesses', 1) ?? 1);
+
+        return max(1, $default);
+    }
+
+    public static function queueWorkerMemory(): int
+    {
+        $value = self::intValue('queue_worker_memory', 0);
+        if ($value > 0) {
+            return $value;
+        }
+
+        $default = (int) (self::horizonDefault('memory', 128) ?? 128);
+
+        return max(64, $default);
+    }
+
+    public static function queueWorkerTimeout(): int
+    {
+        $value = self::intValue('queue_worker_timeout', 0);
+        if ($value > 0) {
+            return $value;
+        }
+
+        $default = (int) (self::horizonDefault('timeout', 60) ?? 60);
+
+        return max(0, $default);
+    }
+
+    public static function queueWorkerTries(): int
+    {
+        $value = self::intValue('queue_worker_tries', 0);
+        if ($value > 0) {
+            return $value;
+        }
+
+        $default = (int) (self::horizonDefault('tries', 1) ?? 1);
+
+        return max(0, $default);
+    }
+
+    public static function queueWorkerSleep(): int
+    {
+        $value = self::intValue('queue_worker_sleep', 0);
+        if ($value > 0) {
+            return $value;
+        }
+
+        return 3;
+    }
+
     /**
      * @return array<int, array<string, mixed>>
      */
@@ -518,6 +607,21 @@ class EngineSettings
         }
 
         return $normalized;
+    }
+
+    private static function horizonDefault(string $key, mixed $fallback = null): mixed
+    {
+        $env = (string) config('app.env');
+        $reference = self::queueReferenceSupervisor();
+
+        return config("horizon.environments.{$env}.{$reference}.{$key}")
+            ?? config("horizon.defaults.{$reference}.{$key}")
+            ?? $fallback;
+    }
+
+    private static function queueReferenceSupervisor(): string
+    {
+        return 'supervisor-finalize';
     }
 
     private static function optionalInt(mixed $value): ?int

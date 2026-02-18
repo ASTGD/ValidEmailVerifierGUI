@@ -1,0 +1,89 @@
+# Hosting Plan (EC2 + CyberPanel, Single Host)
+
+## Goals
+- Run Laravel app, Horizon, Redis, MySQL, and Go workers on a single EC2 instance.
+- Use CyberPanel for web hosting, SSL, and domain management.
+- Keep worker processes managed by systemd (or Supervisor) to avoid web panel coupling.
+
+## Target Stack (Single Host)
+- Web server: OpenLiteSpeed (managed by CyberPanel)
+- PHP: PHP-FPM (managed by CyberPanel)
+- App: Laravel (this repo)
+- Queue: Redis (local service)
+- Queue UI: Horizon (Laravel, `/horizon`)
+- Scheduler: `php artisan schedule:work`
+- Go workers: binary + systemd service
+- Optional: Go dashboard service (separate port, reverse-proxied)
+- Database: MySQL (local service)
+
+## Process Management
+Run long-lived processes as systemd services:
+- `php artisan horizon`
+- `php artisan schedule:work`
+- Go worker binary
+- Optional Go dashboard binary
+
+Required queue observability jobs:
+- Scheduler must run continuously so `horizon:snapshot` executes every 5 minutes.
+- Scheduler must run continuously so `ops:queue-health` executes every minute.
+- SG6 lanes (`seed_send_dispatch`, `seed_send_events`, `seed_send_reconcile`) must stay isolated from finalize/smtp_probe supervisors.
+
+## Networking & URLs
+- Laravel app: main domain (CyberPanel vhost)
+- Horizon: `/horizon` (Laravel route)
+- Optional Go dashboard: separate subdomain (reverse proxy to `localhost:9090`)
+
+## Redis & Queue Settings
+- Use local Redis (`REDIS_HOST=127.0.0.1`)
+- Set `QUEUE_CONNECTION=redis`
+- Set `CACHE_STORE=redis`
+- Configure queue health alerts if needed (`QUEUE_HEALTH_ENABLED=true`, `QUEUE_HEALTH_ALERTS_ENABLED=true`).
+- Optional alert channels: `QUEUE_HEALTH_ALERT_EMAIL`, `QUEUE_HEALTH_SLACK_WEBHOOK_URL`.
+
+## Queue Incident Checklist (first checks)
+1. `php artisan horizon:status`
+2. `php artisan horizon:supervisors`
+3. `php artisan ops:queue-health --json`
+4. `php artisan ops:queue-slo-report --json`
+5. Confirm Redis is reachable and queue metrics are updating.
+
+## Queue Recovery Sequence
+1. `php artisan horizon:terminate`
+2. Let systemd/Supervisor restart `php artisan horizon`
+3. Verify all segmented supervisors are back (`supervisor-default`, `supervisor-prepare`, `supervisor-parse`, `supervisor-finalize`, `supervisor-imports`, `supervisor-cache-writeback`).
+4. Re-run `php artisan ops:queue-health --json` and confirm status is `healthy` or only expected warnings.
+5. If required, run safe replay preview: `php artisan ops:queue-recover --lane=parse --strategy=requeue_failed --dry-run`.
+
+## SG6 Pilot Safety Checklist
+1. Confirm SG6 provider is enabled and webhook evidence path is healthy.
+2. Confirm SG6 campaigns can be paused/cancelled independently from core verification lanes.
+3. Verify `GET /internal/admin/seed-send/health` returns healthy/warning as expected.
+4. If SG6 guardrails auto-pause a campaign, investigate bounce/defer spikes before resuming.
+5. Keep SG6 campaign retries scoped to SG6 recipients only (never requeue finalize/smtp lanes).
+
+## Go Control-Plane Policy Safety Checklist
+1. Configure policy payload coupling:
+   - `LARAVEL_API_BASE_URL`
+   - `LARAVEL_VERIFIER_TOKEN`
+   - `POLICY_PAYLOAD_STRICT_VALIDATION_ENABLED=true`
+2. Validate policy payload from Laravel admin (`Operations -> SMTP Policy Versions`).
+3. In Go settings, run `Validate Policy`, then `Promote Policy`.
+4. Verify rollout metadata includes validation state/checksum.
+5. If quality regresses, execute rollback immediately from Go settings.
+
+## Go Reliability Recovery Sequence
+1. Check control-plane readiness: `GET /api/health/ready`.
+2. Verify worker control path is alive: `GET /api/workers`.
+3. If control-plane process is unhealthy, restart service and re-check readiness.
+4. Confirm incident lifecycle updates to recovered.
+5. Run one drill scenario from `services/go-control-plane/scripts/run_reliability_drill.sh` and document results.
+
+## Security
+- Restrict Go dashboard with IP allowlist or basic auth.
+- Ensure admin-only access to Horizon and internal ops pages.
+- Keep server firewall minimal (HTTP/HTTPS + SSH only).
+
+## Future Scaling
+- Move Redis or workers to separate hosts if needed.
+- Promote MySQL to managed service if storage/IO grows.
+- Migrate to containerized deployment when ready.

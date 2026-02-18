@@ -2,13 +2,18 @@
 
 namespace Tests\Feature;
 
+use App\Enums\VerificationJobOrigin;
 use App\Enums\VerificationJobStatus;
 use App\Jobs\FinalizeVerificationJob;
+use App\Jobs\WriteBackVerificationCacheJob;
+use App\Models\EngineSetting;
 use App\Models\User;
 use App\Models\VerificationJob;
 use App\Models\VerificationJobChunk;
 use App\Services\JobStorage;
+use App\Services\VerificationResultsMerger;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -36,6 +41,7 @@ class VerificationJobFinalizationTest extends TestCase
             'verification_job_id' => $job->id,
             'chunk_no' => $chunkNo,
             'status' => 'completed',
+            'processing_stage' => 'screening',
             'input_disk' => $job->input_disk,
             'input_key' => 'chunks/'.$job->id.'/'.$chunkNo.'/input.txt',
         ], $overrides));
@@ -47,6 +53,28 @@ class VerificationJobFinalizationTest extends TestCase
 
         $job = $this->makeJob();
         $this->makeChunk($job, 1, ['status' => 'pending']);
+
+        FinalizeVerificationJob::dispatchSync($job->id);
+
+        $job->refresh();
+
+        $this->assertSame(VerificationJobStatus::Processing, $job->status);
+        $this->assertNull($job->valid_key);
+    }
+
+    public function test_finalization_waits_for_smtp_probe_chunks_after_screening(): void
+    {
+        Storage::fake('s3');
+
+        $job = $this->makeJob();
+        $this->makeChunk($job, 1, [
+            'status' => 'completed',
+            'processing_stage' => 'screening',
+        ]);
+        $this->makeChunk($job, 2, [
+            'status' => 'pending',
+            'processing_stage' => 'smtp_probe',
+        ]);
 
         FinalizeVerificationJob::dispatchSync($job->id);
 
@@ -112,6 +140,121 @@ class VerificationJobFinalizationTest extends TestCase
         $this->assertNotNull($job->valid_key);
         $this->assertTrue(Storage::disk('s3')->exists($job->valid_key));
         $this->assertStringContainsString('email,status,sub_status,score,reason', Storage::disk('s3')->get($job->valid_key));
+    }
+
+    public function test_finalization_queues_async_writeback_when_enabled_and_cache_misses_exist(): void
+    {
+        Storage::fake('s3');
+        Bus::fake();
+
+        EngineSetting::query()->update([
+            'cache_writeback_enabled' => true,
+        ]);
+
+        $storage = app(JobStorage::class);
+        $job = $this->makeJob();
+        $job->update([
+            'cache_miss_key' => $storage->cacheMissKey($job),
+        ]);
+
+        $chunk = $this->makeChunk($job, 1, [
+            'output_disk' => 's3',
+            'valid_key' => $storage->chunkOutputKey($job, 1, 'valid'),
+            'invalid_key' => $storage->chunkOutputKey($job, 1, 'invalid'),
+            'risky_key' => $storage->chunkOutputKey($job, 1, 'risky'),
+        ]);
+
+        Storage::disk('s3')->put($chunk->valid_key, "email,reason\nvalid@example.com,smtp_connect_ok\n");
+        Storage::disk('s3')->put($chunk->invalid_key, "email,reason\ninvalid@example.com,syntax\n");
+        Storage::disk('s3')->put($chunk->risky_key, "email,reason\nrisky@example.com,smtp_timeout\n");
+
+        app()->call([new FinalizeVerificationJob($job->id), 'handle']);
+
+        $job->refresh();
+        $metrics = $job->metrics()->first();
+
+        $this->assertSame(VerificationJobStatus::Completed, $job->status);
+        Bus::assertDispatched(WriteBackVerificationCacheJob::class, function (WriteBackVerificationCacheJob $queuedJob) use ($job): bool {
+            return $queuedJob->jobId === $job->id;
+        });
+        $this->assertNotNull($metrics);
+        $this->assertSame('queued', $metrics?->writeback_status);
+        $this->assertNotNull($metrics?->writeback_queued_at);
+        $this->assertNull($metrics?->writeback_started_at);
+        $this->assertNull($metrics?->writeback_finished_at);
+    }
+
+    public function test_finalization_marks_writeback_disabled_when_feature_is_off(): void
+    {
+        Storage::fake('s3');
+        Bus::fake();
+
+        EngineSetting::query()->update([
+            'cache_writeback_enabled' => false,
+        ]);
+
+        $storage = app(JobStorage::class);
+        $job = $this->makeJob();
+        $job->update([
+            'cache_miss_key' => $storage->cacheMissKey($job),
+        ]);
+
+        $chunk = $this->makeChunk($job, 1, [
+            'output_disk' => 's3',
+            'valid_key' => $storage->chunkOutputKey($job, 1, 'valid'),
+            'invalid_key' => $storage->chunkOutputKey($job, 1, 'invalid'),
+            'risky_key' => $storage->chunkOutputKey($job, 1, 'risky'),
+        ]);
+
+        Storage::disk('s3')->put($chunk->valid_key, "email,reason\nvalid@example.com,smtp_connect_ok\n");
+        Storage::disk('s3')->put($chunk->invalid_key, "email,reason\ninvalid@example.com,syntax\n");
+        Storage::disk('s3')->put($chunk->risky_key, "email,reason\nrisky@example.com,smtp_timeout\n");
+
+        app()->call([new FinalizeVerificationJob($job->id), 'handle']);
+
+        $job->refresh();
+        $metrics = $job->metrics()->first();
+
+        $this->assertSame(VerificationJobStatus::Completed, $job->status);
+        Bus::assertNotDispatched(WriteBackVerificationCacheJob::class);
+        $this->assertNotNull($metrics);
+        $this->assertSame('disabled', $metrics?->writeback_status);
+        $this->assertNotNull($metrics?->writeback_finished_at);
+    }
+
+    public function test_finalization_marks_writeback_skipped_when_no_cache_miss_file_exists(): void
+    {
+        Storage::fake('s3');
+        Bus::fake();
+
+        EngineSetting::query()->update([
+            'cache_writeback_enabled' => true,
+        ]);
+
+        $storage = app(JobStorage::class);
+        $job = $this->makeJob();
+
+        $chunk = $this->makeChunk($job, 1, [
+            'output_disk' => 's3',
+            'valid_key' => $storage->chunkOutputKey($job, 1, 'valid'),
+            'invalid_key' => $storage->chunkOutputKey($job, 1, 'invalid'),
+            'risky_key' => $storage->chunkOutputKey($job, 1, 'risky'),
+        ]);
+
+        Storage::disk('s3')->put($chunk->valid_key, "email,reason\nvalid@example.com,smtp_connect_ok\n");
+        Storage::disk('s3')->put($chunk->invalid_key, "email,reason\ninvalid@example.com,syntax\n");
+        Storage::disk('s3')->put($chunk->risky_key, "email,reason\nrisky@example.com,smtp_timeout\n");
+
+        app()->call([new FinalizeVerificationJob($job->id), 'handle']);
+
+        $job->refresh();
+        $metrics = $job->metrics()->first();
+
+        $this->assertSame(VerificationJobStatus::Completed, $job->status);
+        Bus::assertNotDispatched(WriteBackVerificationCacheJob::class);
+        $this->assertNotNull($metrics);
+        $this->assertSame('skipped', $metrics?->writeback_status);
+        $this->assertNotNull($metrics?->writeback_finished_at);
     }
 
     public function test_finalization_is_idempotent(): void
@@ -205,5 +348,54 @@ class VerificationJobFinalizationTest extends TestCase
         $this->assertSame(1, $job->invalid_count);
         $this->assertSame(1, $job->risky_count);
         $this->assertNotNull($job->valid_key);
+    }
+
+    public function test_single_check_finalization_maps_legacy_short_row_using_fallback_mapper(): void
+    {
+        Storage::fake('s3');
+
+        $job = $this->makeJob();
+        $job->update([
+            'origin' => VerificationJobOrigin::SingleCheck,
+        ]);
+
+        $this->makeChunk($job, 1, [
+            'status' => 'completed',
+        ]);
+
+        $legacyValidKey = 'results/jobs/'.$job->id.'/legacy-valid.csv';
+        Storage::disk('s3')->put($legacyValidKey, implode("\n", [
+            'email,reason',
+            'single-check@example.com,smtp_connect_ok',
+        ]));
+
+        $merger = $this->createMock(VerificationResultsMerger::class);
+        $merger->expects($this->once())
+            ->method('merge')
+            ->willReturn([
+                'disk' => 's3',
+                'keys' => [
+                    'valid' => $legacyValidKey,
+                    'invalid' => null,
+                    'risky' => null,
+                ],
+                'counts' => [
+                    'valid' => 1,
+                    'invalid' => 0,
+                    'risky' => 0,
+                ],
+                'missing' => [],
+            ]);
+
+        $this->app->instance(VerificationResultsMerger::class, $merger);
+
+        app()->call([new FinalizeVerificationJob($job->id), 'handle']);
+
+        $job->refresh();
+
+        $this->assertSame(VerificationJobStatus::Completed, $job->status);
+        $this->assertSame('valid', $job->single_result_status);
+        $this->assertSame('smtp_connect_ok', $job->single_result_sub_status);
+        $this->assertSame('smtp_connect_ok', $job->single_result_reason);
     }
 }

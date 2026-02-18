@@ -19,12 +19,18 @@ import (
 func main() {
 	baseURL := mustEnv("ENGINE_API_BASE_URL")
 	token := mustEnv("ENGINE_API_TOKEN")
+	controlPlaneBaseURL := strings.TrimSpace(os.Getenv("CONTROL_PLANE_BASE_URL"))
+	controlPlaneToken := strings.TrimSpace(os.Getenv("CONTROL_PLANE_TOKEN"))
 
 	workerID := envOr("WORKER_ID", hostname())
+	workerCapability := parseWorkerCapability(os.Getenv("WORKER_CAPABILITY"))
 	serverName := envOr("ENGINE_SERVER_NAME", workerID)
 	serverIP := mustEnv("ENGINE_SERVER_IP")
 	serverEnv := os.Getenv("ENGINE_SERVER_ENV")
 	serverRegion := os.Getenv("ENGINE_SERVER_REGION")
+	workerPool := strings.TrimSpace(os.Getenv("WORKER_POOL"))
+	providerAffinity := parseProviderAffinity(os.Getenv("WORKER_PROVIDER_AFFINITY"))
+	trustTier := parseTrustTier(os.Getenv("WORKER_TRUST_TIER"))
 
 	pollInterval := time.Duration(envInt("POLL_INTERVAL_SECONDS", 5)) * time.Second
 	heartbeatInterval := time.Duration(envInt("HEARTBEAT_INTERVAL_SECONDS", 30)) * time.Second
@@ -40,11 +46,40 @@ func main() {
 	backoffMs := envInt("BACKOFF_MS_BASE", 200)
 	perDomainConcurrency := envInt("PER_DOMAIN_CONCURRENCY", 2)
 	smtpRateLimit := envInt("SMTP_RATE_LIMIT_PER_MINUTE", 0)
+	providerPolicyEngineEnabled := envBool("PROVIDER_POLICY_ENGINE_ENABLED", false)
+	adaptiveRetryEnabled := envBool("ADAPTIVE_RETRY_ENABLED", false)
+	probeAttemptChainEnabled := envBool("PROBE_ATTEMPT_CHAIN_ENABLED", true)
+	unknownReasonTaxonomyEnabled := envBool("UNKNOWN_REASON_TAXONOMY_ENABLED", true)
+	controlPlaneHeartbeatEnabled := envBool(
+		"CONTROL_PLANE_HEARTBEAT_ENABLED",
+		controlPlaneBaseURL != "" && controlPlaneToken != "",
+	)
+	laravelHeartbeatEnabled := envBool("LARAVEL_HEARTBEAT_ENABLED", true)
+	laravelHeartbeatEveryN := envInt("LARAVEL_HEARTBEAT_EVERY_N", 10)
+	controlPlanePolicySyncEnabled := envBool(
+		"CONTROL_PLANE_POLICY_SYNC_ENABLED",
+		controlPlaneBaseURL != "" && controlPlaneToken != "",
+	)
 	roleAccounts := parseRoleAccounts(os.Getenv("ROLE_ACCOUNTS"))
 	roleAccountsBehavior := parseRoleAccountsBehavior(os.Getenv("ROLE_ACCOUNTS_BEHAVIOR"))
 	domainTypos := parseDomainTypos(os.Getenv("DOMAIN_TYPOS"))
 	disposableDomains := parseDisposableDomains(workerdata.DisposableDomains)
 	mailFromAddress := strings.TrimSpace(os.Getenv("MAIL_FROM_ADDRESS"))
+	policyJSON := strings.TrimSpace(os.Getenv("PROVIDER_REPLY_POLICY_JSON"))
+
+	var replyPolicyEngine *verifier.ProviderReplyPolicyEngine
+	if providerPolicyEngineEnabled {
+		replyPolicyEngine = verifier.DefaultProviderReplyPolicyEngine()
+		if policyJSON != "" {
+			parsed, parseErr := verifier.ParseProviderReplyPolicyEngineJSON(policyJSON)
+			if parseErr != nil {
+				fmt.Printf("invalid PROVIDER_REPLY_POLICY_JSON: %v\n", parseErr)
+				os.Exit(1)
+			}
+			replyPolicyEngine = parsed
+		}
+		replyPolicyEngine.Enabled = true
+	}
 
 	var leaseSeconds *int
 	if val := os.Getenv("LEASE_SECONDS"); val != "" {
@@ -58,22 +93,51 @@ func main() {
 
 	client := api.NewClient(baseURL, token)
 
+	var controlPlaneClient *api.ControlPlaneClient
+	if controlPlaneBaseURL != "" && controlPlaneToken != "" {
+		controlPlaneClient = api.NewControlPlaneClient(controlPlaneBaseURL, controlPlaneToken)
+	}
+
+	if controlPlaneHeartbeatEnabled && controlPlaneClient == nil {
+		fmt.Println("CONTROL_PLANE_BASE_URL and CONTROL_PLANE_TOKEN are required when CONTROL_PLANE_HEARTBEAT_ENABLED=true")
+		os.Exit(1)
+	}
+
+	if controlPlanePolicySyncEnabled && controlPlaneClient == nil {
+		fmt.Println("CONTROL_PLANE_BASE_URL and CONTROL_PLANE_TOKEN are required when CONTROL_PLANE_POLICY_SYNC_ENABLED=true")
+		os.Exit(1)
+	}
+
 	verifierConfig := verifier.Config{
-		DNSTimeout:              dnsTimeout,
-		SMTPConnectTimeout:      smtpConnectTimeout,
-		SMTPReadTimeout:         smtpReadTimeout,
-		SMTPEhloTimeout:         smtpEhloTimeout,
-		MaxMXAttempts:           maxMxAttempts,
-		RetryableNetworkRetries: retryableNetworkRetries,
-		BackoffBaseMs:           backoffMs,
-		HeloName:                heloName,
-		MailFromAddress:         mailFromAddress,
-		PerDomainConcurrency:    perDomainConcurrency,
-		SMTPRateLimitPerMinute:  smtpRateLimit,
-		DisposableDomains:       disposableDomains,
-		RoleAccounts:            roleAccounts,
-		RoleAccountsBehavior:    roleAccountsBehavior,
-		DomainTypos:             domainTypos,
+		DNSTimeout:                  dnsTimeout,
+		SMTPConnectTimeout:          smtpConnectTimeout,
+		SMTPReadTimeout:             smtpReadTimeout,
+		SMTPEhloTimeout:             smtpEhloTimeout,
+		MaxMXAttempts:               maxMxAttempts,
+		RetryableNetworkRetries:     retryableNetworkRetries,
+		BackoffBaseMs:               backoffMs,
+		HeloName:                    heloName,
+		MailFromAddress:             mailFromAddress,
+		PerDomainConcurrency:        perDomainConcurrency,
+		SMTPRateLimitPerMinute:      smtpRateLimit,
+		DisposableDomains:           disposableDomains,
+		RoleAccounts:                roleAccounts,
+		RoleAccountsBehavior:        roleAccountsBehavior,
+		DomainTypos:                 domainTypos,
+		ProviderPolicyEngineEnabled: providerPolicyEngineEnabled,
+		AdaptiveRetryEnabled:        adaptiveRetryEnabled,
+		ProviderReplyPolicyEngine:   replyPolicyEngine,
+	}
+
+	serverMeta := map[string]interface{}{}
+	if workerPool != "" {
+		serverMeta["pool"] = workerPool
+	}
+	if providerAffinity != "" {
+		serverMeta["provider_affinity"] = providerAffinity
+	}
+	if trustTier != "" {
+		serverMeta["trust_tier"] = trustTier
 	}
 
 	cfg := worker.Config{
@@ -83,13 +147,22 @@ func main() {
 		MaxConcurrency:     maxConcurrency,
 		PolicyRefresh:      policyRefresh,
 		WorkerID:           workerID,
+		WorkerCapability:   workerCapability,
 		BaseVerifierConfig: verifierConfig,
 		Server: api.EngineServerPayload{
 			Name:        serverName,
 			IPAddress:   serverIP,
 			Environment: serverEnv,
 			Region:      serverRegion,
+			Meta:        serverMeta,
 		},
+		ControlPlaneClient:            controlPlaneClient,
+		ControlPlaneHeartbeatEnabled:  controlPlaneHeartbeatEnabled,
+		LaravelHeartbeatEnabled:       laravelHeartbeatEnabled,
+		LaravelHeartbeatEveryN:        laravelHeartbeatEveryN,
+		ControlPlanePolicySyncEnabled: controlPlanePolicySyncEnabled,
+		ProbeAttemptChainEnabled:      probeAttemptChainEnabled,
+		UnknownReasonTaxonomyEnabled:  unknownReasonTaxonomyEnabled,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -137,6 +210,20 @@ func envInt(key string, fallback int) int {
 	}
 
 	return fallback
+}
+
+func envBool(key string, fallback bool) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	switch value {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	case "":
+		return fallback
+	default:
+		return fallback
+	}
 }
 
 func hostname() string {
@@ -196,6 +283,35 @@ func parseDomainTypos(value string) map[string]string {
 	}
 
 	return output
+}
+
+func parseWorkerCapability(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "screening" || value == "smtp_probe" || value == "all" {
+		return value
+	}
+
+	return "all"
+}
+
+func parseProviderAffinity(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "gmail", "microsoft", "yahoo", "generic":
+		return value
+	default:
+		return ""
+	}
+}
+
+func parseTrustTier(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "bronze", "silver", "gold", "platinum":
+		return value
+	default:
+		return ""
+	}
 }
 
 func parseDisposableDomains(data string) map[string]struct{} {

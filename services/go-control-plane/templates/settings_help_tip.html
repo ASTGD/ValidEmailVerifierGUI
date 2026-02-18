@@ -1,0 +1,46 @@
+{{ define "settings_help_tip" }}
+{{ if .Key }}
+<details class="help-tip">
+    <summary class="help-tip__trigger" data-help-key="{{ .Key }}" title="{{ .Title }}">i</summary>
+    <div class="help-tip__panel">
+        <div class="help-tip__head">
+            <p class="help-tip__title">{{ .Title }}</p>
+            {{ if and (eq .ChangeKind "numeric") .HasRecommendedRange .HasCautionRange }}
+                <span
+                    class="help-tip__risk help-tip__risk--low"
+                    data-help-risk-key="{{ .Key }}"
+                    data-safe-min="{{ printf "%.6f" .RecommendedRangeMin }}"
+                    data-safe-max="{{ printf "%.6f" .RecommendedRangeMax }}"
+                    data-caution-min="{{ printf "%.6f" .CautionRangeMin }}"
+                    data-caution-max="{{ printf "%.6f" .CautionRangeMax }}"
+                >Low</span>
+            {{ end }}
+        </div>
+        <p><strong>What:</strong> {{ .What }}</p>
+        <p><strong>Why:</strong> {{ .Why }}</p>
+        <div class="help-tip__pills">
+            <span class="help-tip__pill help-tip__pill--label">{{ .RecommendedLabel }}</span>
+            <span class="help-tip__pill help-tip__pill--{{ .RecommendedTone }}">{{ .RecommendedValue }}</span>
+            {{ if .HasRecommendedRange }}
+                <span class="help-tip__pill help-tip__pill--range">Safe: {{ .RecommendedRangeLabel }}</span>
+            {{ end }}
+        </div>
+        <details class="help-tip__details">
+            <summary>More details</summary>
+            {{ if eq .ChangeKind "toggle" }}
+                <p><strong>If enabled:</strong> {{ .ChangeUp }}</p>
+                <p><strong>If disabled:</strong> {{ .ChangeDown }}</p>
+            {{ else if eq .ChangeKind "action" }}
+                <p><strong>When to use:</strong> {{ .ChangeUp }}</p>
+                <p><strong>When to avoid:</strong> {{ .ChangeDown }}</p>
+            {{ else }}
+                <p><strong>If increased:</strong> {{ .ChangeUp }}</p>
+                <p><strong>If decreased:</strong> {{ .ChangeDown }}</p>
+            {{ end }}
+            <p><strong>Monitor:</strong> {{ .Monitor }}</p>
+            <a class="help-tip__link" href="{{ .DocsURL }}" target="_blank" rel="noopener noreferrer">Read full guide</a>
+        </details>
+    </div>
+</details>
+{{ end }}
+{{ end }}

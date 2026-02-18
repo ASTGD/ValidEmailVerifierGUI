@@ -6,9 +6,7 @@ use App\Support\EngineSettings;
 
 class VerificationOutputMapper
 {
-    public function __construct(private DeliverabilityScoreCalculator $calculator)
-    {
-    }
+    public function __construct(private DeliverabilityScoreCalculator $calculator) {}
 
     /**
      * @param  array<string, mixed>|null  $cacheOutcome
@@ -21,7 +19,7 @@ class VerificationOutputMapper
         $subStatus = $this->mapSubStatus($normalizedReason);
         $score = $this->calculator->calculate($status, $subStatus, $normalizedReason, $cacheOutcome);
 
-        if ($normalizedReason === 'catch_all') {
+        if (str_starts_with($normalizedReason, 'catch_all')) {
             $status = $this->applyCatchAllPolicy($score);
         }
 
@@ -59,7 +57,7 @@ class VerificationOutputMapper
     private function mapSubStatus(string $reason): string
     {
         return match ($reason) {
-            'catch_all' => 'catch_all',
+            'catch_all', 'catch_all_high_confidence', 'catch_all_medium_confidence', 'catch_all_low_confidence' => 'catch_all',
             'smtp_connect_ok', 'rcpt_ok' => 'smtp_connect_ok',
             'mx_missing' => 'mx_missing',
             'syntax' => 'syntax',

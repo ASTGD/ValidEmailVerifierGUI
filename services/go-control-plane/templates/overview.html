@@ -1,0 +1,488 @@
+{{ define "overview" }}
+<section class="grid gap-6 lg:grid-cols-7">
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Active Workers</p>
+        <p id="worker-count" class="mt-3 text-3xl font-semibold">{{ .WorkerCount }}</p>
+        <p class="mt-2 text-sm text-slate-400">Workers with fresh heartbeat.</p>
+    </div>
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Pools Known</p>
+        <p id="pool-count" class="mt-3 text-3xl font-semibold">{{ .PoolCount }}</p>
+        <p class="mt-2 text-sm text-slate-400">Pools registered by workers.</p>
+    </div>
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Desired Capacity</p>
+        <p id="desired-total" class="mt-3 text-3xl font-semibold">{{ .DesiredTotal }}</p>
+        <p class="mt-2 text-sm text-slate-400">Sum of pool desired workers.</p>
+    </div>
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Error Rate (Total/min)</p>
+        <p id="error-rate-total" class="mt-3 text-3xl font-semibold">{{ .ErrorRateTotal }}</p>
+        <p class="mt-2 text-sm text-slate-400">Current summed worker error rate.</p>
+    </div>
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Active Incidents</p>
+        <p id="incident-count" class="mt-3 text-3xl font-semibold">{{ .IncidentCount }}</p>
+        <p class="mt-2 text-sm text-slate-400">Open operational incidents.</p>
+    </div>
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Policy Version</p>
+        <p id="policy-version" class="mt-3 text-3xl font-semibold">{{ if .ProviderPolicies.ActiveVersion }}{{ .ProviderPolicies.ActiveVersion }}{{ else }}baseline{{ end }}</p>
+        <p class="mt-2 text-sm text-slate-400">Active SMTP policy rollout.</p>
+    </div>
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Laravel Fallback HB</p>
+        <p id="laravel-fallback-workers" class="mt-3 text-3xl font-semibold">{{ .LaravelFallbackWorkers }}</p>
+        <p class="mt-2 text-sm text-slate-400">Workers reporting fallback heartbeat enabled.</p>
+    </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Provider Health</h2>
+            <p class="text-sm text-slate-400">Per-provider SMTP stability, mode, and retry posture.</p>
+        </div>
+    </div>
+    <div class="mt-5 overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="text-left text-xs uppercase tracking-wider text-slate-400">
+                <tr>
+                    <th class="px-3 py-2">Provider</th>
+                    <th class="px-3 py-2">Mode</th>
+                    <th class="px-3 py-2">Status</th>
+                    <th class="px-3 py-2">Tempfail</th>
+                    <th class="px-3 py-2">Reject</th>
+                    <th class="px-3 py-2">Unknown</th>
+                    <th class="px-3 py-2">Avg Retry-After</th>
+                    <th class="px-3 py-2">Workers</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+                {{ range .ProviderHealth }}
+                    <tr>
+                        <td class="px-3 py-2 font-medium">{{ .Provider }}</td>
+                        <td class="px-3 py-2">{{ .Mode }}</td>
+                        <td class="px-3 py-2">
+                            <span class="rounded-full px-2 py-1 text-xs {{ if eq .Status "critical" }}bg-red-500/20 text-red-300{{ else if eq .Status "warning" }}bg-amber-500/20 text-amber-300{{ else }}bg-emerald-500/20 text-emerald-300{{ end }}">
+                                {{ .Status }}
+                            </span>
+                        </td>
+                        <td class="px-3 py-2">{{ printf "%.2f" .TempfailRate }}</td>
+                        <td class="px-3 py-2">{{ printf "%.2f" .RejectRate }}</td>
+                        <td class="px-3 py-2">{{ printf "%.2f" .UnknownRate }}</td>
+                        <td class="px-3 py-2">{{ printf "%.1f" .AvgRetryAfter }}s</td>
+                        <td class="px-3 py-2">{{ .Workers }}</td>
+                    </tr>
+                {{ else }}
+                    <tr>
+                        <td colspan="8" class="px-3 py-3 text-slate-400">No provider telemetry yet.</td>
+                    </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Provider Accuracy Calibration</h2>
+            <p class="text-sm text-slate-400">Provider-level confidence calibration derived from live telemetry windows.</p>
+        </div>
+    </div>
+    <div class="mt-5 overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="text-left text-xs uppercase tracking-wider text-slate-400">
+                <tr>
+                    <th class="px-3 py-2">Provider</th>
+                    <th class="px-3 py-2">Workers</th>
+                    <th class="px-3 py-2">Unknown</th>
+                    <th class="px-3 py-2">Tempfail Recovery</th>
+                    <th class="px-3 py-2">Policy Blocked</th>
+                    <th class="px-3 py-2">Confidence</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+                {{ range .ProviderAccuracy }}
+                    <tr>
+                        <td class="px-3 py-2 font-medium">{{ .Provider }}</td>
+                        <td class="px-3 py-2">{{ .Workers }}</td>
+                        <td class="px-3 py-2">{{ printf "%.2f" .UnknownRate }}</td>
+                        <td class="px-3 py-2">{{ printf "%.2f%%" .TempfailRecoveryPct }}</td>
+                        <td class="px-3 py-2">{{ printf "%.2f" .PolicyBlockedRate }}</td>
+                        <td class="px-3 py-2">
+                            <span class="rounded-full px-2 py-1 text-xs {{ if eq .CalibrationConfidence "high" }}bg-emerald-500/20 text-emerald-300{{ else if eq .CalibrationConfidence "medium" }}bg-amber-500/20 text-amber-300{{ else }}bg-red-500/20 text-red-300{{ end }}">
+                                {{ .CalibrationConfidence }}
+                            </span>
+                        </td>
+                    </tr>
+                {{ else }}
+                    <tr>
+                        <td colspan="6" class="px-3 py-3 text-slate-400">No calibration telemetry yet.</td>
+                    </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Unknown Reason Concentration</h2>
+            <p class="text-sm text-slate-400">Top unknown reason tags aggregated from worker heartbeats.</p>
+        </div>
+    </div>
+    <div class="mt-5 overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="text-left text-xs uppercase tracking-wider text-slate-400">
+                <tr>
+                    <th class="px-3 py-2">Provider</th>
+                    <th class="px-3 py-2">Reason Tag</th>
+                    <th class="px-3 py-2">Count</th>
+                    <th class="px-3 py-2">Share</th>
+                    <th class="px-3 py-2">Workers</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+                {{ range .UnknownReasons }}
+                    <tr>
+                        <td class="px-3 py-2 font-medium">{{ .Provider }}</td>
+                        <td class="px-3 py-2">{{ .Tag }}</td>
+                        <td class="px-3 py-2">{{ .Count }}</td>
+                        <td class="px-3 py-2">{{ printf "%.1f%%" .SharePercent }}</td>
+                        <td class="px-3 py-2">{{ .SampleWorkers }}</td>
+                    </tr>
+                {{ else }}
+                    <tr>
+                        <td colspan="5" class="px-3 py-3 text-slate-400">No unknown cluster evidence yet.</td>
+                    </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Shadow Policy Evaluations</h2>
+            <p class="text-sm text-slate-400">Read-only candidate policy comparisons before promotion.</p>
+        </div>
+    </div>
+    <div class="mt-5 overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="text-left text-xs uppercase tracking-wider text-slate-400">
+                <tr>
+                    <th class="px-3 py-2">Evaluated</th>
+                    <th class="px-3 py-2">Candidate</th>
+                    <th class="px-3 py-2">Active</th>
+                    <th class="px-3 py-2">Providers</th>
+                    <th class="px-3 py-2">Unknown Avg</th>
+                    <th class="px-3 py-2">Top Recommendation</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+                {{ range .PolicyShadowRuns }}
+                    <tr>
+                        <td class="px-3 py-2">{{ .EvaluatedAt }}</td>
+                        <td class="px-3 py-2 font-medium">{{ .CandidateVersion }}</td>
+                        <td class="px-3 py-2">{{ if .ActiveVersion }}{{ .ActiveVersion }}{{ else }}-{{ end }}</td>
+                        <td class="px-3 py-2">{{ .Summary.ProviderCount }}</td>
+                        <td class="px-3 py-2">{{ printf "%.3f" .Summary.UnknownRateAvg }}</td>
+                        <td class="px-3 py-2">{{ .Summary.HighestRiskRecommendation }}</td>
+                    </tr>
+                {{ else }}
+                    <tr>
+                        <td colspan="6" class="px-3 py-3 text-slate-400">No shadow policy runs recorded yet.</td>
+                    </tr>
+                {{ end }}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Shard Routing Quality</h2>
+            <p class="text-sm text-slate-400">Anti-affinity and provider routing effectiveness from worker telemetry.</p>
+        </div>
+    </div>
+    <div class="mt-5 grid gap-4 md:grid-cols-5">
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Retry Claims</p>
+            <p id="routing-retry-claims" class="mt-2 text-2xl font-semibold">{{ .RoutingQuality.RetryClaimsTotal }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Anti-Affinity Success</p>
+            <p id="routing-anti-affinity-rate" class="mt-2 text-2xl font-semibold">{{ printf "%.2f" .RoutingQuality.AntiAffinitySuccessRate }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Provider Affinity Hit</p>
+            <p id="routing-provider-affinity-rate" class="mt-2 text-2xl font-semibold">{{ printf "%.2f" .RoutingQuality.ProviderAffinityHitRate }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Retry Fallback</p>
+            <p id="routing-fallback-rate" class="mt-2 text-2xl font-semibold">{{ printf "%.2f" .RoutingQuality.RetryFallbackRate }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Top Pool Share</p>
+            <p id="routing-top-pool-share" class="mt-2 text-2xl font-semibold">{{ printf "%.2f" .RoutingQuality.TopPoolShare }}</p>
+        </div>
+    </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Probe SLO Snapshot</h2>
+            <p class="text-sm text-slate-400">Average SMTP probe quality signals from active workers.</p>
+        </div>
+    </div>
+    <div class="mt-5 grid gap-4 md:grid-cols-3">
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Unknown Rate</p>
+            <p id="probe-unknown-rate" class="mt-2 text-2xl font-semibold">{{ printf "%.2f" .ProbeUnknownRate }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Tempfail Rate</p>
+            <p id="probe-tempfail-rate" class="mt-2 text-2xl font-semibold">{{ printf "%.2f" .ProbeTempfailRate }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-wider text-slate-400">Reject Rate</p>
+            <p id="probe-reject-rate" class="mt-2 text-2xl font-semibold">{{ printf "%.2f" .ProbeRejectRate }}</p>
+        </div>
+    </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Pool Capacity Snapshot</h2>
+            <p class="text-sm text-slate-400">Online workers vs desired capacity.</p>
+        </div>
+        <span id="live-updated" class="text-xs text-slate-400">Live stream connected</span>
+    </div>
+    <div class="mt-6">
+        <canvas id="poolChart" height="120"></canvas>
+    </div>
+</section>
+
+{{ if .HasHistory }}
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-lg font-semibold">Worker History</h2>
+            <p class="text-sm text-slate-400">Snapshots from the last capture window.</p>
+        </div>
+        <span class="text-xs text-slate-400">Stored snapshots</span>
+    </div>
+    <div class="mt-6">
+        <canvas id="historyChart" height="120"></canvas>
+    </div>
+</section>
+{{ end }}
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <h2 class="text-lg font-semibold">Pool Summary</h2>
+    <div class="mt-4 grid gap-4 md:grid-cols-2" id="pool-summary-grid">
+        {{ range .Pools }}
+            <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4" data-pool-card="{{ .Pool }}">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-semibold">{{ .Pool }}</p>
+                        <p class="text-xs text-slate-400">Online <span data-online>{{ .Online }}</span> / Desired <span data-desired>{{ .Desired }}</span></p>
+                    </div>
+                    <span class="rounded-full bg-slate-800 px-3 py-1 text-xs" data-badge>{{ if gt .Desired 0 }}{{ .Online }} / {{ .Desired }}{{ else }}{{ .Online }} active{{ end }}</span>
+                </div>
+            </div>
+        {{ else }}
+            <p class="text-sm text-slate-400" data-no-pools>No pools yet. Workers will register pools automatically.</p>
+        {{ end }}
+    </div>
+</section>
+
+<script src="/assets/chart.min.js" defer></script>
+<script defer>
+    window.addEventListener('DOMContentLoaded', () => {
+        const poolCanvas = document.getElementById('poolChart');
+        if (!poolCanvas) {
+            return;
+        }
+
+        let labels = {{ toJSON .ChartLabels }};
+        let online = {{ toJSON .ChartOnline }};
+        let desired = {{ toJSON .ChartDesired }};
+
+        const poolChart = new Chart(poolCanvas, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Online',
+                        data: online,
+                        backgroundColor: '#f59e0b',
+                        borderRadius: 6,
+                    },
+                    {
+                        label: 'Desired',
+                        data: desired,
+                        backgroundColor: '#1f2937',
+                        borderRadius: 6,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { labels: { color: '#e2e8f0' } },
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } },
+                },
+            },
+        });
+
+        const updatePoolSummary = (pools) => {
+            const grid = document.getElementById('pool-summary-grid');
+            if (!grid) return;
+
+            const noPools = grid.querySelector('[data-no-pools]');
+            if (noPools) {
+                noPools.remove();
+            }
+
+            pools.forEach((pool) => {
+                let card = grid.querySelector(`[data-pool-card="${pool.pool}"]`);
+                if (!card) {
+                    card = document.createElement('div');
+                    card.className = 'rounded-xl border border-slate-800 bg-slate-950/60 p-4';
+                    card.setAttribute('data-pool-card', pool.pool);
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-semibold"></p>
+                                <p class="text-xs text-slate-400">Online <span data-online></span> / Desired <span data-desired></span></p>
+                            </div>
+                            <span class="rounded-full bg-slate-800 px-3 py-1 text-xs" data-badge></span>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                }
+
+                const title = card.querySelector('p.text-sm.font-semibold');
+                const onlineText = card.querySelector('[data-online]');
+                const desiredText = card.querySelector('[data-desired]');
+                const badge = card.querySelector('[data-badge]');
+
+                title.textContent = pool.pool;
+                onlineText.textContent = pool.online;
+                desiredText.textContent = pool.desired;
+                badge.textContent = pool.desired > 0 ? `${pool.online} / ${pool.desired}` : `${pool.online} active`;
+            });
+        };
+
+        window.addEventListener('cp:live', (event) => {
+            const payload = event.detail;
+            if (!payload) {
+                return;
+            }
+
+            const workerCount = document.getElementById('worker-count');
+            const poolCount = document.getElementById('pool-count');
+            const desiredTotal = document.getElementById('desired-total');
+            const errorRateTotal = document.getElementById('error-rate-total');
+            const incidentCount = document.getElementById('incident-count');
+            const probeUnknownRate = document.getElementById('probe-unknown-rate');
+            const probeTempfailRate = document.getElementById('probe-tempfail-rate');
+            const probeRejectRate = document.getElementById('probe-reject-rate');
+            const routingRetryClaims = document.getElementById('routing-retry-claims');
+            const routingAntiAffinityRate = document.getElementById('routing-anti-affinity-rate');
+            const routingProviderAffinityRate = document.getElementById('routing-provider-affinity-rate');
+            const routingFallbackRate = document.getElementById('routing-fallback-rate');
+            const routingTopPoolShare = document.getElementById('routing-top-pool-share');
+            const fallbackWorkers = document.getElementById('laravel-fallback-workers');
+            const policyVersion = document.getElementById('policy-version');
+            const liveUpdated = document.getElementById('live-updated');
+
+            if (workerCount) workerCount.textContent = payload.worker_count;
+            if (poolCount) poolCount.textContent = payload.pool_count;
+            if (desiredTotal) desiredTotal.textContent = payload.desired_total;
+            if (errorRateTotal) errorRateTotal.textContent = Number(payload.error_rate_total || 0).toFixed(2);
+            if (incidentCount) incidentCount.textContent = payload.incident_count || 0;
+            if (probeUnknownRate) probeUnknownRate.textContent = Number(payload.probe_unknown_rate || 0).toFixed(2);
+            if (probeTempfailRate) probeTempfailRate.textContent = Number(payload.probe_tempfail_rate || 0).toFixed(2);
+            if (probeRejectRate) probeRejectRate.textContent = Number(payload.probe_reject_rate || 0).toFixed(2);
+            if (routingRetryClaims) routingRetryClaims.textContent = Number(payload.routing_quality?.retry_claims_total || 0);
+            if (routingAntiAffinityRate) routingAntiAffinityRate.textContent = Number(payload.routing_quality?.anti_affinity_success_rate || 0).toFixed(2);
+            if (routingProviderAffinityRate) routingProviderAffinityRate.textContent = Number(payload.routing_quality?.provider_affinity_hit_rate || 0).toFixed(2);
+            if (routingFallbackRate) routingFallbackRate.textContent = Number(payload.routing_quality?.retry_fallback_rate || 0).toFixed(2);
+            if (routingTopPoolShare) routingTopPoolShare.textContent = Number(payload.routing_quality?.top_pool_share || 0).toFixed(2);
+            if (fallbackWorkers) fallbackWorkers.textContent = Number(payload.laravel_fallback_workers || 0);
+            if (policyVersion) policyVersion.textContent = payload.active_policy_version || 'baseline';
+            if (liveUpdated) liveUpdated.textContent = `Updated ${new Date(payload.timestamp).toLocaleTimeString()}`;
+
+            if (Array.isArray(payload.pools)) {
+                const nextLabels = payload.pools.map((pool) => pool.pool);
+                const nextOnline = payload.pools.map((pool) => pool.online);
+                const nextDesired = payload.pools.map((pool) => pool.desired);
+
+                poolChart.data.labels = nextLabels;
+                poolChart.data.datasets[0].data = nextOnline;
+                poolChart.data.datasets[1].data = nextDesired;
+                poolChart.update('none');
+
+                updatePoolSummary(payload.pools);
+            }
+        });
+    });
+
+    {{ if .HasHistory }}
+    window.addEventListener('DOMContentLoaded', () => {
+        const historyCanvas = document.getElementById('historyChart');
+        if (!historyCanvas) return;
+
+        const historyLabels = {{ toJSON .HistoryLabels }};
+        const historyWorkers = {{ toJSON .HistoryWorkers }};
+        const historyDesired = {{ toJSON .HistoryDesired }};
+
+        new Chart(historyCanvas, {
+            type: 'line',
+            data: {
+                labels: historyLabels,
+                datasets: [
+                    {
+                        label: 'Workers',
+                        data: historyWorkers,
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                        tension: 0.3,
+                    },
+                    {
+                        label: 'Desired',
+                        data: historyDesired,
+                        borderColor: '#94a3b8',
+                        backgroundColor: 'rgba(148, 163, 184, 0.2)',
+                        tension: 0.3,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { labels: { color: '#e2e8f0' } },
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } },
+                },
+            },
+        });
+    });
+    {{ end }}
+</script>
+{{ end }}

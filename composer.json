@@ -13,6 +13,7 @@
         "filament/filament": "^4.4",
         "laravel/cashier": "^16.1",
         "laravel/framework": "^12.0",
+        "laravel/horizon": "^5.43",
         "laravel/sanctum": "^4.2",
         "laravel/tinker": "^2.10.1",
         "league/flysystem-aws-s3-v3": "^3.0",
@@ -24,6 +25,7 @@
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
+        "laravel/boost": "^1.8",
         "laravel/breeze": "^2.3",
         "laravel/pail": "^1.2.2",
         "laravel/pint": "^1.24",

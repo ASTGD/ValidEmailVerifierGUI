@@ -9,18 +9,22 @@ use App\Http\Requests\Portal\UploadVerificationJobRequest;
 use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
-use App\Support\EnhancedModeGate;
+use App\Services\QueueHealth\QueueBackpressureGate;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Throwable;
 
 class UploadController extends Controller
 {
     use AuthorizesRequests;
 
-    public function __invoke(UploadVerificationJobRequest $request, JobStorage $storage)
-    {
+    public function __invoke(
+        UploadVerificationJobRequest $request,
+        JobStorage $storage,
+        QueueBackpressureGate $backpressureGate
+    ) {
         $user = $request->user();
 
         $rateKey = 'portal-upload|'.$user->id;
@@ -49,6 +53,15 @@ class UploadController extends Controller
             ]);
         }
 
+        $backpressure = $backpressureGate->assessHeavySubmission();
+        if ($backpressure['blocked']) {
+            return back()->withErrors([
+                'file' => __('Queue is under pressure. Please try again soon. :reason', [
+                    'reason' => $backpressure['reason'],
+                ]),
+            ]);
+        }
+
         try {
             $this->authorize('create', VerificationJob::class);
         } catch (AuthorizationException) {
@@ -58,18 +71,11 @@ class UploadController extends Controller
         }
 
         $file = $request->file('file');
-        $mode = data_get($request->validated(), 'verification_mode', VerificationMode::Standard->value);
-
-        if ($mode === VerificationMode::Enhanced->value && ! EnhancedModeGate::canUse($user)) {
-            return back()->withErrors([
-                'verification_mode' => EnhancedModeGate::message($user),
-            ]);
-        }
 
         $job = new VerificationJob([
             'user_id' => $user->id,
             'status' => VerificationJobStatus::Pending,
-            'verification_mode' => $mode,
+            'verification_mode' => VerificationMode::Enhanced,
             'original_filename' => $file->getClientOriginalName(),
         ]);
 
@@ -85,11 +91,33 @@ class UploadController extends Controller
         ], $user->id);
         $job->addLog('verification_mode_set', 'Verification mode set at job creation.', [
             'from' => null,
-            'to' => $mode,
+            'to' => VerificationMode::Enhanced->value,
             'actor_id' => $user->id,
         ], $user->id);
 
-        PrepareVerificationJob::dispatch($job->id);
+        try {
+            if ((string) config('queue.default', 'sync') === 'sync') {
+                PrepareVerificationJob::dispatchSync($job->id);
+            } else {
+                PrepareVerificationJob::dispatch($job->id);
+            }
+        } catch (Throwable $exception) {
+            $job->update([
+                'status' => VerificationJobStatus::Failed,
+                'error_message' => 'Failed to enqueue verification job.',
+                'failure_source' => VerificationJob::FAILURE_SOURCE_ENGINE,
+                'failure_code' => 'enqueue_failed',
+                'finished_at' => now(),
+            ]);
+
+            $job->addLog('enqueue_failed', 'Failed to dispatch prepare job.', [
+                'error' => $exception->getMessage(),
+            ], $user->id);
+
+            return back()->withErrors([
+                'file' => __('Failed to queue verification. Please try again shortly.'),
+            ]);
+        }
 
         return redirect()
             ->route('portal.jobs.show', ['job' => $job->id])

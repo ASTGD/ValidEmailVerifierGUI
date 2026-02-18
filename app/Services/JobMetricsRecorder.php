@@ -22,7 +22,12 @@ class JobMetricsRecorder
             $metric->processed_emails = 0;
             $metric->cache_hit_count = 0;
             $metric->cache_miss_count = 0;
+            $metric->screening_total_count = 0;
+            $metric->probe_candidate_count = 0;
+            $metric->probe_completed_count = 0;
+            $metric->probe_unknown_count = 0;
             $metric->writeback_written_count = 0;
+            $metric->writeback_attempted_count = 0;
         }
 
         if ($metric->phase !== $phase) {
@@ -67,8 +72,51 @@ class JobMetricsRecorder
             $metric->cache_miss_count = max(0, (int) $attributes['cache_miss_count']);
         }
 
+        if (array_key_exists('screening_total_count', $attributes)) {
+            $metric->screening_total_count = max(0, (int) $attributes['screening_total_count']);
+        }
+
+        if (array_key_exists('probe_candidate_count', $attributes)) {
+            $metric->probe_candidate_count = max(0, (int) $attributes['probe_candidate_count']);
+        }
+
+        if (array_key_exists('probe_completed_count', $attributes)) {
+            $metric->probe_completed_count = max(0, (int) $attributes['probe_completed_count']);
+        }
+
+        if (array_key_exists('probe_unknown_count', $attributes)) {
+            $metric->probe_unknown_count = max(0, (int) $attributes['probe_unknown_count']);
+        }
+
         if (array_key_exists('writeback_written_count', $attributes)) {
             $metric->writeback_written_count = max(0, (int) $attributes['writeback_written_count']);
+        }
+
+        if (array_key_exists('writeback_status', $attributes)) {
+            $status = strtolower(trim((string) $attributes['writeback_status']));
+            $allowed = ['queued', 'running', 'completed', 'failed', 'skipped', 'disabled'];
+            $metric->writeback_status = in_array($status, $allowed, true) ? $status : null;
+        }
+
+        if (array_key_exists('writeback_attempted_count', $attributes)) {
+            $metric->writeback_attempted_count = max(0, (int) $attributes['writeback_attempted_count']);
+        }
+
+        if (array_key_exists('writeback_last_error', $attributes)) {
+            $error = $attributes['writeback_last_error'];
+            $metric->writeback_last_error = $error === null ? null : trim((string) $error);
+        }
+
+        if (array_key_exists('writeback_queued_at', $attributes)) {
+            $metric->writeback_queued_at = $attributes['writeback_queued_at'];
+        }
+
+        if (array_key_exists('writeback_started_at', $attributes)) {
+            $metric->writeback_started_at = $attributes['writeback_started_at'];
+        }
+
+        if (array_key_exists('writeback_finished_at', $attributes)) {
+            $metric->writeback_finished_at = $attributes['writeback_finished_at'];
         }
     }
 

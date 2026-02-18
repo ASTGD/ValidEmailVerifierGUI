@@ -9,16 +9,15 @@ use App\Jobs\PrepareVerificationJob;
 use App\Models\VerificationJob;
 use App\Services\JobStorage;
 use App\Services\VerificationOutputMapper;
-use App\Support\EnhancedModeGate;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use Throwable;
 
 #[Layout('layouts.portal')]
 class SingleCheck extends Component
@@ -26,16 +25,13 @@ class SingleCheck extends Component
     use AuthorizesRequests;
 
     public string $email = '';
-    public string $verification_mode = VerificationMode::Standard->value;
+
     public ?string $jobId = null;
 
     protected function rules(): array
     {
-        $modes = array_map(static fn (VerificationMode $mode) => $mode->value, VerificationMode::cases());
-
         return [
             'email' => ['required', 'email'],
-            'verification_mode' => ['required', 'string', Rule::in($modes)],
         ];
     }
 
@@ -44,19 +40,9 @@ class SingleCheck extends Component
         $this->validate();
 
         $user = Auth::user();
-        $enhancedGate = EnhancedModeGate::evaluate($user);
-
-        if (! $enhancedGate['allowed'] && $this->verification_mode === VerificationMode::Enhanced->value) {
-            $this->addError('verification_mode', EnhancedModeGate::message($user));
-
-            return;
-        }
-
-        $rateKey = 'portal-single-check|'.$user->id.'|'.$this->verification_mode;
-        $standardLimit = (int) config('engine.single_check_rate_limit_standard', 30);
-        $enhancedLimit = (int) config('engine.single_check_rate_limit_enhanced', 10);
+        $rateKey = 'portal-single-check|'.$user->id;
+        $maxAttempts = (int) config('engine.single_check_rate_limit', (int) config('engine.single_check_rate_limit_standard', 30));
         $decaySeconds = (int) config('engine.single_check_rate_limit_decay_seconds', 60);
-        $maxAttempts = $this->verification_mode === VerificationMode::Enhanced->value ? $enhancedLimit : $standardLimit;
 
         if (RateLimiter::tooManyAttempts($rateKey, $maxAttempts)) {
             $seconds = RateLimiter::availableIn($rateKey);
@@ -92,7 +78,7 @@ class SingleCheck extends Component
         $job = new VerificationJob([
             'user_id' => $user->id,
             'status' => VerificationJobStatus::Pending,
-            'verification_mode' => $this->verification_mode,
+            'verification_mode' => VerificationMode::Enhanced,
             'origin' => VerificationJobOrigin::SingleCheck,
             'subject_email' => $subjectEmail,
             'original_filename' => 'single-check.txt',
@@ -110,18 +96,35 @@ class SingleCheck extends Component
         ], $user->id);
         $job->addLog('verification_mode_set', 'Verification mode set at job creation.', [
             'from' => null,
-            'to' => $this->verification_mode,
+            'to' => VerificationMode::Enhanced->value,
             'actor_id' => $user->id,
         ], $user->id);
 
-        PrepareVerificationJob::dispatch($job->id);
+        try {
+            if ((string) config('queue.default', 'sync') === 'sync') {
+                PrepareVerificationJob::dispatchSync($job->id);
+            } else {
+                PrepareVerificationJob::dispatch($job->id);
+            }
+        } catch (Throwable $exception) {
+            $job->update([
+                'status' => VerificationJobStatus::Failed,
+                'error_message' => 'Failed to enqueue single check.',
+                'failure_source' => VerificationJob::FAILURE_SOURCE_ENGINE,
+                'failure_code' => 'enqueue_failed',
+                'finished_at' => now(),
+            ]);
+
+            $job->addLog('enqueue_failed', 'Failed to dispatch single-check prepare job.', [
+                'error' => $exception->getMessage(),
+            ], $user->id);
+
+            $this->addError('email', __('Failed to queue single check. Please try again shortly.'));
+
+            return;
+        }
 
         $this->jobId = $job->id;
-    }
-
-    public function getEnhancedGateProperty(): array
-    {
-        return EnhancedModeGate::evaluate(Auth::user());
     }
 
     public function getSingleCheckJobProperty(): ?VerificationJob

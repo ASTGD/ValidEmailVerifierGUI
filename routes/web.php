@@ -1,12 +1,22 @@
 <?php
 
+use App\Http\Controllers\Admin\SeedSendCampaignCancelController;
+use App\Http\Controllers\Admin\SeedSendCampaignHealthController;
+use App\Http\Controllers\Admin\SeedSendCampaignPauseController;
+use App\Http\Controllers\Admin\SeedSendCampaignRetryFailedController;
+use App\Http\Controllers\Admin\SeedSendCampaignStartController;
+use App\Http\Controllers\Admin\SeedSendConsentApproveController;
+use App\Http\Controllers\Admin\SeedSendConsentRevokeController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\InternalDocsController;
 use App\Http\Controllers\MarketingController;
+use App\Http\Controllers\Portal\SeedSendConsentRequestController;
+use App\Http\Controllers\Portal\SeedSendReportDownloadController;
 use App\Http\Controllers\Portal\UploadController;
+use App\Http\Controllers\Portal\VerificationJobDownloadController;
 use App\Http\Controllers\ProvisioningBundleDownloadController;
 use App\Http\Controllers\StripeWebhookController;
-use App\Http\Controllers\Portal\VerificationJobDownloadController;
 use App\Livewire\Portal\Dashboard;
 use App\Livewire\Portal\InvoicesIndex;
 use App\Livewire\Portal\JobShow;
@@ -17,11 +27,10 @@ use App\Livewire\Portal\SingleCheck;
 use App\Livewire\Portal\Support;
 use App\Livewire\Portal\Upload;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Http\Request;
 
 Route::get('/', [MarketingController::class, 'index'])->name('marketing.home');
 
-Route::post(config('cashier.path') . '/webhook', [StripeWebhookController::class, 'handleWebhook'])
+Route::post(config('cashier.path').'/webhook', [StripeWebhookController::class, 'handleWebhook'])
     ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class])
     ->name('stripe.webhook');
 
@@ -64,14 +73,52 @@ Route::middleware(['auth', 'verified'])
         Route::get('jobs/{job}/download', VerificationJobDownloadController::class)
             ->whereUuid('job')
             ->name('jobs.download');
+        Route::post('jobs/{job}/seed-send-consent', SeedSendConsentRequestController::class)
+            ->whereUuid('job')
+            ->name('jobs.seed-send-consent');
+        Route::get('jobs/{job}/seed-send-report', SeedSendReportDownloadController::class)
+            ->whereUuid('job')
+            ->name('jobs.seed-send-report');
         Route::get('orders', OrdersIndex::class)->name('orders.index');
         Route::get('invoices', InvoicesIndex::class)->name('invoices.index');
         Route::get('invoices/{invoice}', \App\Livewire\Portal\InvoiceShow::class)->name('invoices.show');
         Route::get('settings', Settings::class)->name('settings');
         Route::get('support', Support::class)->name('support');
         // Add this line inside the portal route group
-        //Route::get('support/{ticket}', \App\Livewire\Portal\SupportDetail::class)->name('support.show');
+        // Route::get('support/{ticket}', \App\Livewire\Portal\SupportDetail::class)->name('support.show');
         Route::get('support/{ticket}', \App\Livewire\Portal\SupportDetail::class)->name('support.show');
+    });
+
+Route::middleware(['auth', 'verified', 'admin.role'])
+    ->prefix('internal/admin/seed-send')
+    ->name('internal.admin.seed-send.')
+    ->group(function () {
+        Route::post('consents/{consent}/approve', SeedSendConsentApproveController::class)
+            ->name('consents.approve');
+        Route::post('consents/{consent}/revoke', SeedSendConsentRevokeController::class)
+            ->name('consents.revoke');
+        Route::post('jobs/{job}/campaigns/start', SeedSendCampaignStartController::class)
+            ->whereUuid('job')
+            ->name('campaigns.start');
+        Route::post('campaigns/{campaign}/state', SeedSendCampaignPauseController::class)
+            ->whereUuid('campaign')
+            ->name('campaigns.state');
+        Route::post('campaigns/{campaign}/cancel', SeedSendCampaignCancelController::class)
+            ->whereUuid('campaign')
+            ->name('campaigns.cancel');
+        Route::post('campaigns/{campaign}/retry-failed', SeedSendCampaignRetryFailedController::class)
+            ->whereUuid('campaign')
+            ->name('campaigns.retry-failed');
+        Route::get('health', SeedSendCampaignHealthController::class)
+            ->name('health');
+    });
+
+Route::middleware(['auth', 'verified', 'admin.role'])
+    ->prefix('internal/docs')
+    ->name('internal.docs.')
+    ->group(function () {
+        Route::get('/', [InternalDocsController::class, 'index'])->name('index');
+        Route::get('{section}/{page}', [InternalDocsController::class, 'show'])->name('page');
     });
 
 Route::middleware(['auth', 'verified'])
@@ -88,4 +135,4 @@ Route::get('provisioning/bundles/{bundle}/{file}', ProvisioningBundleDownloadCon
     ->middleware('signed')
     ->name('provisioning-bundles.download');
 
-require __DIR__ . '/auth.php';
+require __DIR__.'/auth.php';

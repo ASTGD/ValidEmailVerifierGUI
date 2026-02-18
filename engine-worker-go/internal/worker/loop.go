@@ -4,10 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/csv"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,14 +22,22 @@ import (
 )
 
 type Config struct {
-	PollInterval       time.Duration
-	HeartbeatInterval  time.Duration
-	LeaseSeconds       *int
-	MaxConcurrency     int
-	PolicyRefresh      time.Duration
-	Server             api.EngineServerPayload
-	WorkerID           string
-	BaseVerifierConfig verifier.Config
+	PollInterval                  time.Duration
+	HeartbeatInterval             time.Duration
+	LeaseSeconds                  *int
+	MaxConcurrency                int
+	PolicyRefresh                 time.Duration
+	Server                        api.EngineServerPayload
+	WorkerID                      string
+	WorkerCapability              string
+	BaseVerifierConfig            verifier.Config
+	ControlPlaneClient            *api.ControlPlaneClient
+	ControlPlaneHeartbeatEnabled  bool
+	LaravelHeartbeatEnabled       bool
+	LaravelHeartbeatEveryN        int
+	ControlPlanePolicySyncEnabled bool
+	ProbeAttemptChainEnabled      bool
+	UnknownReasonTaxonomyEnabled  bool
 }
 
 type Worker struct {
@@ -34,9 +46,12 @@ type Worker struct {
 	wg              sync.WaitGroup
 	active          int64
 	maxConcurrency  int64
+	heartbeatCount  int64
 	policyMu        sync.RWMutex
 	policy          policyState
 	lastPolicyFetch time.Time
+	desiredState    atomic.Value
+	telemetry       *workerTelemetry
 }
 
 type policyState struct {
@@ -48,6 +63,11 @@ type policyState struct {
 	heloName             string
 	mailFromAddress      string
 	identityDomain       string
+	activePolicyVersion  string
+	policyEngineEnabled  bool
+	adaptiveRetryEnabled bool
+	replyPolicyEngine    *verifier.ProviderReplyPolicyEngine
+	providerModes        map[string]string
 	providerPolicies     []verifier.ProviderPolicy
 	standard             policyConfig
 	enhanced             policyConfig
@@ -75,6 +95,31 @@ type chunkOutputs struct {
 	ValidCount   int
 	InvalidCount int
 	RiskyCount   int
+	ReasonCounts map[string]int
+	ReasonTags   map[string]int
+}
+
+func (c *chunkOutputs) baseReasonCount(reason string) int {
+	if c == nil || c.ReasonCounts == nil {
+		return 0
+	}
+
+	return c.ReasonCounts[reason]
+}
+
+func (c *chunkOutputs) baseReasonPrefixCount(prefix string) int {
+	if c == nil || c.ReasonCounts == nil {
+		return 0
+	}
+
+	total := 0
+	for key, value := range c.ReasonCounts {
+		if strings.HasPrefix(key, prefix) {
+			total += value
+		}
+	}
+
+	return total
 }
 
 func New(client *api.Client, cfg Config) *Worker {
@@ -83,11 +128,20 @@ func New(client *api.Client, cfg Config) *Worker {
 		max = 1
 	}
 
-	return &Worker{
+	laravelHeartbeatEveryN := cfg.LaravelHeartbeatEveryN
+	if laravelHeartbeatEveryN < 1 {
+		laravelHeartbeatEveryN = 1
+	}
+
+	w := &Worker{
 		client:         client,
 		cfg:            cfg,
 		maxConcurrency: int64(max),
+		telemetry:      newWorkerTelemetry(),
 	}
+	w.cfg.LaravelHeartbeatEveryN = laravelHeartbeatEveryN
+	w.desiredState.Store("running")
+	return w
 }
 
 func (w *Worker) Run(ctx context.Context) error {
@@ -104,12 +158,8 @@ func (w *Worker) Run(ctx context.Context) error {
 		}
 
 		if now.Sub(lastHeartbeat) >= w.cfg.HeartbeatInterval {
-			resp, err := w.client.Heartbeat(ctx, w.cfg.Server)
-			if err != nil {
-				fmt.Printf("heartbeat error: %v\n", err)
-			} else {
-				w.applyHeartbeatIdentity(resp)
-			}
+			w.heartbeatCount++
+			w.sendHeartbeats(ctx)
 			lastHeartbeat = now
 		}
 
@@ -120,15 +170,25 @@ func (w *Worker) Run(ctx context.Context) error {
 			continue
 		}
 
+		switch w.currentDesiredState() {
+		case "paused", "stopped":
+			time.Sleep(w.cfg.PollInterval)
+			continue
+		case "draining":
+			time.Sleep(w.cfg.PollInterval)
+			continue
+		}
+
 		if w.activeCount() >= w.currentMaxConcurrency() {
 			time.Sleep(w.cfg.PollInterval)
 			continue
 		}
 
 		claimReq := api.ClaimNextRequest{
-			EngineServer: w.cfg.Server,
-			WorkerID:     w.cfg.WorkerID,
-			LeaseSeconds: w.cfg.LeaseSeconds,
+			EngineServer:     w.cfg.Server,
+			WorkerID:         w.cfg.WorkerID,
+			WorkerCapability: w.workerCapability(),
+			LeaseSeconds:     w.cfg.LeaseSeconds,
 		}
 
 		claim, ok, err := w.client.ClaimNext(ctx, claimReq)
@@ -141,6 +201,17 @@ func (w *Worker) Run(ctx context.Context) error {
 			time.Sleep(w.cfg.PollInterval)
 			continue
 		}
+
+		w.telemetry.recordClaimRouting(claimRoutingSnapshot{
+			ProcessingStage:  claim.Data.ProcessingStage,
+			RetryAttempt:     claim.Data.RetryAttempt,
+			LastWorkerIDs:    claim.Data.LastWorkerIDs,
+			WorkerID:         w.cfg.WorkerID,
+			PreferredPool:    claim.Data.PreferredPool,
+			WorkerPool:       stringFromMeta(w.cfg.Server.Meta, "pool"),
+			RoutingProvider:  strings.ToLower(strings.TrimSpace(claim.Data.RoutingProvider)),
+			ProviderAffinity: strings.ToLower(strings.TrimSpace(stringFromMeta(w.cfg.Server.Meta, "provider_affinity"))),
+		})
 
 		w.wg.Add(1)
 		w.incrementActive()
@@ -157,81 +228,131 @@ func (w *Worker) Run(ctx context.Context) error {
 
 func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse) error {
 	chunkID := claim.Data.ChunkID
+	correlationID := fmt.Sprintf("%s:%s", claim.Data.JobID, chunkID)
 
 	_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
 		"level":   "info",
 		"event":   "chunk_claimed",
 		"message": "Chunk claimed by worker.",
 		"context": map[string]interface{}{
-			"worker_id": w.cfg.WorkerID,
-			"chunk_no":  claim.Data.ChunkNo,
+			"worker_id":          w.cfg.WorkerID,
+			"chunk_no":           claim.Data.ChunkNo,
+			"processing_stage":   claim.Data.ProcessingStage,
+			"routing_provider":   claim.Data.RoutingProvider,
+			"preferred_pool":     claim.Data.PreferredPool,
+			"max_probe_attempts": claim.Data.MaxProbeAttempts,
+			"correlation_id":     correlationID,
 		},
 	})
 
-	mode := normalizeVerificationMode(claim.Data.VerificationMode)
-	policy, hasPolicy := w.policyForMode(mode)
-	enhancedAllowed := hasPolicy && w.policyEnhancedAllowed() && policy.Enabled
-	if mode == "enhanced" && !enhancedAllowed {
-		_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
-			"level":   "warning",
-			"event":   "enhanced_mode_requested_but_not_enabled",
-			"message": "Enhanced mode requested but not enabled; running standard pipeline.",
-			"context": map[string]interface{}{
-				"verification_mode": mode,
-			},
-		})
-		mode = "standard"
-		policy, hasPolicy = w.policyForMode(mode)
+	processingStage := normalizeProcessingStage(claim.Data.ProcessingStage)
+	if !w.canProcessStage(processingStage) {
+		return w.failChunk(ctx, chunkID, processingStage, "worker capability does not match chunk stage", fmt.Errorf("stage=%s capability=%s", processingStage, w.workerCapability()), true)
 	}
 
-	if mode == "enhanced" && !w.hasMailFromIdentity() {
-		_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
-			"level":   "warning",
-			"event":   "enhanced_identity_missing",
-			"message": "Enhanced mode requested but mail-from identity is missing; running standard pipeline.",
-			"context": map[string]interface{}{
-				"verification_mode": mode,
-			},
-		})
-		mode = "standard"
-		policy, hasPolicy = w.policyForMode(mode)
-	}
+	mode := modeForStage(processingStage, claim.Data.VerificationMode)
+	policy, hasPolicy := w.policyForMode(mode)
+	enhancedAllowed := hasPolicy && w.policyEnhancedAllowed() && policy.Enabled
+	routingProvider := normalizeProviderForRuntime(claim.Data.RoutingProvider)
+	providerMode := w.providerModeForRuntime(routingProvider)
 
 	details, err := w.client.ChunkDetails(ctx, chunkID)
 	if err != nil {
-		return w.failChunk(ctx, chunkID, "failed to load chunk details", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to load chunk details", err, true)
 	}
 
 	inputURL, err := w.client.InputURL(ctx, chunkID)
 	if err != nil {
-		return w.failChunk(ctx, chunkID, "failed to fetch input url", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to fetch input url", err, true)
 	}
 
 	reader, err := downloadStream(ctx, inputURL.Data.URL)
 	if err != nil {
-		return w.failChunk(ctx, chunkID, "failed to download input", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to download input", err, true)
 	}
 	defer reader.Close()
 
-	engineVerifier := w.verifierForMode(mode, policy, hasPolicy)
-	outputs, err := buildOutputs(ctx, reader, engineVerifier)
+	var engineVerifier verifier.Verifier
+
+	if processingStage == "smtp_probe" {
+		if providerMode == "quarantine" || providerMode == "drain" {
+			_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
+				"level":   "warning",
+				"event":   "smtp_probe_quarantined",
+				"message": "SMTP probe stage skipped due to provider mode.",
+				"context": map[string]interface{}{
+					"processing_stage":  processingStage,
+					"verification_mode": mode,
+					"provider_mode":     providerMode,
+					"routing_provider":  routingProvider,
+				},
+			})
+			engineVerifier = staticRiskyVerifier{reason: "smtp_probe_quarantine_mode"}
+		} else if providerMode == "degraded_probe" && !w.isTrustedProbeWorker() {
+			_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
+				"level":   "warning",
+				"event":   "smtp_probe_degraded_skip",
+				"message": "SMTP probe stage skipped by degraded-probe mode for non-trusted worker.",
+				"context": map[string]interface{}{
+					"processing_stage":  processingStage,
+					"verification_mode": mode,
+					"provider_mode":     providerMode,
+					"routing_provider":  routingProvider,
+				},
+			})
+			engineVerifier = staticRiskyVerifier{reason: "smtp_probe_degraded_mode"}
+		} else if !enhancedAllowed {
+			_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
+				"level":   "warning",
+				"event":   "smtp_probe_disabled",
+				"message": "SMTP probe stage requested while enhanced probe policy is disabled; writing conservative risky outcomes.",
+				"context": map[string]interface{}{
+					"processing_stage":  processingStage,
+					"verification_mode": mode,
+				},
+			})
+			engineVerifier = staticRiskyVerifier{reason: "smtp_probe_disabled"}
+		} else if !w.hasMailFromIdentity() {
+			_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
+				"level":   "warning",
+				"event":   "smtp_probe_identity_missing",
+				"message": "SMTP probe stage requested without mail-from identity; writing conservative risky outcomes.",
+				"context": map[string]interface{}{
+					"processing_stage":  processingStage,
+					"verification_mode": mode,
+				},
+			})
+			engineVerifier = staticRiskyVerifier{reason: "smtp_probe_identity_missing"}
+		} else {
+			engineVerifier = w.verifierForMode(mode, policy, hasPolicy)
+		}
+	} else {
+		engineVerifier = w.verifierForMode(mode, policy, hasPolicy)
+	}
+	outputs, err := buildOutputs(
+		ctx,
+		reader,
+		engineVerifier,
+		w.cfg.ProbeAttemptChainEnabled,
+		w.cfg.UnknownReasonTaxonomyEnabled,
+	)
 	if err != nil {
-		return w.failChunk(ctx, chunkID, "failed to parse input", err, false)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to parse input", err, false)
 	}
 
 	outputURLs, err := w.client.OutputURLs(ctx, chunkID)
 	if err != nil {
-		return w.failChunk(ctx, chunkID, "failed to fetch output urls", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to fetch output urls", err, true)
 	}
 
 	if err := uploadSigned(ctx, outputURLs.Data.Targets.Valid.URL, outputs.ValidData); err != nil {
-		return w.failChunk(ctx, chunkID, "failed to upload valid output", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to upload valid output", err, true)
 	}
 	if err := uploadSigned(ctx, outputURLs.Data.Targets.Invalid.URL, outputs.InvalidData); err != nil {
-		return w.failChunk(ctx, chunkID, "failed to upload invalid output", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to upload invalid output", err, true)
 	}
 	if err := uploadSigned(ctx, outputURLs.Data.Targets.Risky.URL, outputs.RiskyData); err != nil {
-		return w.failChunk(ctx, chunkID, "failed to upload risky output", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to upload risky output", err, true)
 	}
 
 	completePayload := map[string]interface{}{
@@ -246,26 +367,34 @@ func (w *Worker) processChunk(ctx context.Context, claim *api.ClaimNextResponse)
 	}
 
 	if err := w.client.CompleteChunk(ctx, chunkID, completePayload); err != nil {
-		return w.failChunk(ctx, chunkID, "failed to complete chunk", err, true)
+		return w.failChunk(ctx, chunkID, processingStage, "failed to complete chunk", err, true)
 	}
+
+	w.telemetry.recordChunkSuccess(processingStage, claim.Data.RoutingProvider, outputs)
 
 	_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
 		"level":   "info",
 		"event":   "chunk_completed",
 		"message": "Chunk completed by worker.",
 		"context": map[string]interface{}{
-			"chunk_no":      details.Data.ChunkNo,
-			"email_count":   outputs.EmailCount,
-			"valid_count":   outputs.ValidCount,
-			"invalid_count": outputs.InvalidCount,
-			"risky_count":   outputs.RiskyCount,
+			"chunk_no":         details.Data.ChunkNo,
+			"email_count":      outputs.EmailCount,
+			"valid_count":      outputs.ValidCount,
+			"invalid_count":    outputs.InvalidCount,
+			"risky_count":      outputs.RiskyCount,
+			"processing_stage": processingStage,
+			"routing_provider": claim.Data.RoutingProvider,
+			"preferred_pool":   claim.Data.PreferredPool,
+			"correlation_id":   correlationID,
 		},
 	})
 
 	return nil
 }
 
-func (w *Worker) failChunk(ctx context.Context, chunkID, message string, err error, retryable bool) error {
+func (w *Worker) failChunk(ctx context.Context, chunkID, stage, message string, err error, retryable bool) error {
+	w.telemetry.recordChunkFailure(stage)
+
 	_ = w.client.LogChunk(ctx, chunkID, map[string]interface{}{
 		"level":   "error",
 		"event":   "chunk_error",
@@ -323,7 +452,13 @@ func uploadSigned(ctx context.Context, url string, data []byte) error {
 	return nil
 }
 
-func buildOutputs(ctx context.Context, reader io.Reader, engineVerifier verifier.Verifier) (*chunkOutputs, error) {
+func buildOutputs(
+	ctx context.Context,
+	reader io.Reader,
+	engineVerifier verifier.Verifier,
+	probeAttemptChainEnabled bool,
+	unknownReasonTaxonomyEnabled bool,
+) (*chunkOutputs, error) {
 	if engineVerifier == nil {
 		return nil, fmt.Errorf("verifier not configured")
 	}
@@ -345,6 +480,8 @@ func buildOutputs(ctx context.Context, reader io.Reader, engineVerifier verifier
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	output := &chunkOutputs{}
+	output.ReasonCounts = map[string]int{}
+	output.ReasonTags = map[string]int{}
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -358,23 +495,25 @@ func buildOutputs(ctx context.Context, reader io.Reader, engineVerifier verifier
 
 		output.EmailCount++
 		result := engineVerifier.Verify(ctx, line)
+		reason := reasonWithEvidence(result, probeAttemptChainEnabled, unknownReasonTaxonomyEnabled)
+		baseReason := baseReasonOnly(reason)
+		output.ReasonCounts[baseReason]++
+		if reasonTag := reasonTagFrom(reason); reasonTag != "" {
+			output.ReasonTags[reasonTag]++
+		}
 
 		switch result.Category {
 		case verifier.CategoryInvalid:
 			output.InvalidCount++
-			_ = invalidWriter.Write([]string{line, result.Reason})
+			_ = invalidWriter.Write([]string{line, reason})
 		case verifier.CategoryRisky:
 			output.RiskyCount++
-			_ = riskyWriter.Write([]string{line, result.Reason})
+			_ = riskyWriter.Write([]string{line, reason})
 		case verifier.CategoryValid:
 			output.ValidCount++
-			_ = validWriter.Write([]string{line, result.Reason})
+			_ = validWriter.Write([]string{line, reason})
 		default:
 			output.RiskyCount++
-			reason := result.Reason
-			if reason == "" {
-				reason = "unknown"
-			}
 			_ = riskyWriter.Write([]string{line, reason})
 		}
 	}
@@ -398,6 +537,51 @@ func buildOutputs(ctx context.Context, reader io.Reader, engineVerifier verifier
 	return output, nil
 }
 
+func baseReasonOnly(reason string) string {
+	normalized := strings.TrimSpace(reason)
+	if normalized == "" {
+		return "unknown"
+	}
+
+	if separator := strings.Index(normalized, ":"); separator >= 0 {
+		normalized = normalized[:separator]
+	}
+
+	normalized = strings.TrimSpace(normalized)
+	if normalized == "" {
+		return "unknown"
+	}
+
+	return normalized
+}
+
+func reasonTagFrom(reason string) string {
+	normalized := strings.TrimSpace(reason)
+	if normalized == "" {
+		return ""
+	}
+
+	separator := strings.Index(normalized, ":")
+	if separator < 0 || separator+1 >= len(normalized) {
+		return ""
+	}
+
+	metadata := strings.Split(normalized[separator+1:], ";")
+	for _, token := range metadata {
+		token = strings.TrimSpace(token)
+		if !strings.HasPrefix(token, "tag=") {
+			continue
+		}
+
+		value := strings.TrimSpace(strings.TrimPrefix(token, "tag="))
+		if value != "" {
+			return value
+		}
+	}
+
+	return ""
+}
+
 func isHeaderLine(line string) bool {
 	lower := strings.ToLower(strings.TrimSpace(line))
 	if lower == "email" {
@@ -411,6 +595,141 @@ func isHeaderLine(line string) bool {
 	}
 
 	return !strings.Contains(line, "@")
+}
+
+func reasonWithEvidence(
+	result verifier.Result,
+	probeAttemptChainEnabled bool,
+	unknownReasonTaxonomyEnabled bool,
+) string {
+	reason := strings.TrimSpace(result.Reason)
+	if reason == "" {
+		reason = "unknown"
+	}
+
+	segments := make([]string, 0, 12)
+	if decisionClass := strings.TrimSpace(result.DecisionClass); decisionClass != "" {
+		segments = append(segments, "decision="+decisionClass)
+	}
+	if decisionConfidence := strings.TrimSpace(result.DecisionConfidence); decisionConfidence != "" {
+		segments = append(segments, "confidence="+decisionConfidence)
+	}
+	if retryStrategy := strings.TrimSpace(result.RetryStrategy); retryStrategy != "" {
+		segments = append(segments, "retry="+retryStrategy)
+	}
+	if policyVersion := strings.TrimSpace(result.PolicyVersion); policyVersion != "" {
+		segments = append(segments, "policy="+policyVersion)
+	}
+	if rule := strings.TrimSpace(result.MatchedRuleID); rule != "" {
+		segments = append(segments, "rule="+rule)
+	}
+	reasonTag := strings.TrimSpace(result.ReasonTag)
+	if unknownReasonTaxonomyEnabled {
+		reasonTag = normalizedReasonTag(result, reason)
+	}
+	if reasonTag != "" {
+		segments = append(segments, "tag="+reasonTag)
+	}
+	if mode := strings.TrimSpace(result.ProviderMode); mode != "" {
+		segments = append(segments, "mode="+mode)
+	}
+	if strategyID := strings.TrimSpace(result.SessionStrategyID); strategyID != "" {
+		segments = append(segments, "session="+strategyID)
+	}
+	if provider := strings.TrimSpace(result.ProviderProfile); provider != "" {
+		segments = append(segments, "provider="+provider)
+	}
+	if mxHost := strings.TrimSpace(result.MXHost); mxHost != "" {
+		segments = append(segments, "mx="+mxHost)
+	}
+	if result.AttemptNumber > 0 {
+		segments = append(segments, "attempt="+strconv.Itoa(result.AttemptNumber))
+	}
+	if route := strings.TrimSpace(result.AttemptRoute); route != "" {
+		segments = append(segments, "route="+route)
+	}
+	if evidenceStrength := strings.TrimSpace(result.EvidenceStrength); evidenceStrength != "" {
+		segments = append(segments, "evidence="+evidenceStrength)
+	}
+	if probeAttemptChainEnabled {
+		if attemptChain := encodeAttemptChain(result.AttemptChain); attemptChain != "" {
+			segments = append(segments, "attempt_chain="+attemptChain)
+		}
+	}
+
+	if len(segments) == 0 {
+		return reason
+	}
+
+	return reason + ":" + strings.Join(segments, ";")
+}
+
+func encodeAttemptChain(chain []verifier.AttemptEvidence) string {
+	if len(chain) == 0 {
+		return ""
+	}
+
+	encoded, err := json.Marshal(chain)
+	if err != nil {
+		return ""
+	}
+
+	return base64.RawURLEncoding.EncodeToString(encoded)
+}
+
+func normalizedReasonTag(result verifier.Result, baseReason string) string {
+	currentTag := strings.ToLower(strings.TrimSpace(result.ReasonTag))
+	baseReason = strings.ToLower(strings.TrimSpace(baseReason))
+	decisionClass := strings.ToLower(strings.TrimSpace(result.DecisionClass))
+
+	if result.Category != verifier.CategoryRisky {
+		return currentTag
+	}
+
+	switch {
+	case baseReason == "smtp_probe_identity_missing",
+		strings.Contains(baseReason, "mailfrom"),
+		currentTag == "auth_required":
+		return "identity_rejected"
+	case strings.Contains(baseReason, "connect_timeout"),
+		strings.Contains(baseReason, "read_error"),
+		baseReason == "smtp_timeout":
+		return "connection_unstable"
+	case decisionClass == verifier.DecisionPolicyBlocked,
+		currentTag == "policy_blocked",
+		strings.Contains(baseReason, "policy_blocked"):
+		return "policy_blocked_ambiguous"
+	case decisionClass == verifier.DecisionRetryable,
+		baseReason == "smtp_tempfail",
+		currentTag == "greylist",
+		currentTag == "rate_limit":
+		return "provider_tempfail_unresolved"
+	case decisionClass == verifier.DecisionUnknown:
+		if currentTag == "unknown_transient" || currentTag == "" {
+			return "unknown_transient"
+		}
+		return "other_unknown"
+	}
+
+	if currentTag == "" {
+		return "other_unknown"
+	}
+
+	switch currentTag {
+	case "unknown_transient",
+		"policy_blocked_ambiguous",
+		"provider_tempfail_unresolved",
+		"connection_unstable",
+		"identity_rejected",
+		"other_unknown":
+		return currentTag
+	case "policy_blocked":
+		return "policy_blocked_ambiguous"
+	case "greylist", "rate_limit":
+		return "provider_tempfail_unresolved"
+	}
+
+	return "other_unknown"
 }
 
 func firstError(errors ...error) error {
@@ -442,15 +761,87 @@ func (w *Worker) refreshPolicyIfNeeded(ctx context.Context, now time.Time) {
 
 	existing := w.policySnapshot()
 	state := policyStateFrom(resp)
+	runtime := w.resolvePolicyRuntime(ctx, existing)
 	state.heloName = existing.heloName
 	state.mailFromAddress = existing.mailFromAddress
 	state.identityDomain = existing.identityDomain
+	state.activePolicyVersion = runtime.activeVersion
+	state.policyEngineEnabled = runtime.policyEngineEnabled
+	state.adaptiveRetryEnabled = runtime.adaptiveRetryEnabled
+	state.replyPolicyEngine = runtime.replyPolicyEngine
+	state.providerModes = runtime.providerModes
 
 	w.policyMu.Lock()
 	w.policy = state
 	w.policyMu.Unlock()
 
 	w.updateMaxConcurrency(state)
+}
+
+type policyRuntimeState struct {
+	activeVersion        string
+	policyEngineEnabled  bool
+	adaptiveRetryEnabled bool
+	replyPolicyEngine    *verifier.ProviderReplyPolicyEngine
+	providerModes        map[string]string
+}
+
+func (w *Worker) resolvePolicyRuntime(ctx context.Context, previous policyState) policyRuntimeState {
+	result := policyRuntimeState{
+		activeVersion:        previous.activePolicyVersion,
+		policyEngineEnabled:  w.cfg.BaseVerifierConfig.ProviderPolicyEngineEnabled,
+		adaptiveRetryEnabled: w.cfg.BaseVerifierConfig.AdaptiveRetryEnabled,
+		replyPolicyEngine:    cloneProviderReplyPolicyEngine(w.cfg.BaseVerifierConfig.ProviderReplyPolicyEngine),
+		providerModes:        cloneProviderModes(previous.providerModes),
+	}
+
+	if previous.replyPolicyEngine != nil {
+		result.replyPolicyEngine = cloneProviderReplyPolicyEngine(previous.replyPolicyEngine)
+	}
+
+	if w.cfg.ControlPlanePolicySyncEnabled && w.cfg.ControlPlaneClient != nil {
+		policies, err := w.cfg.ControlPlaneClient.ProviderPolicies(ctx)
+		if err != nil {
+			fmt.Printf("control-plane policies fetch error: %v\n", err)
+		} else {
+			result.policyEngineEnabled = policies.Data.PolicyEngineEnabled
+			result.adaptiveRetryEnabled = policies.Data.AdaptiveRetryEnabled
+			result.activeVersion = strings.TrimSpace(policies.Data.ActiveVersion)
+			if parsedModes := providerModesFromControlPlane(policies.Data.Modes); len(parsedModes) > 0 {
+				result.providerModes = parsedModes
+			}
+		}
+	}
+
+	if result.activeVersion != "" {
+		payloadResp, err := w.client.PolicyVersionPayload(ctx, result.activeVersion)
+		if err != nil {
+			var apiErr api.APIError
+			if !errors.As(err, &apiErr) || apiErr.Status != http.StatusNotFound {
+				fmt.Printf("policy version payload fetch error (%s): %v\n", result.activeVersion, err)
+			}
+		} else if len(payloadResp.Data.PolicyPayload) > 0 {
+			parsed, parseErr := verifier.ParseProviderReplyPolicyEngineJSON(string(payloadResp.Data.PolicyPayload))
+			if parseErr != nil {
+				fmt.Printf("policy version payload parse error (%s): %v\n", result.activeVersion, parseErr)
+			} else {
+				result.replyPolicyEngine = parsed
+			}
+		}
+	}
+
+	if result.replyPolicyEngine == nil && result.policyEngineEnabled {
+		result.replyPolicyEngine = verifier.DefaultProviderReplyPolicyEngine()
+	}
+
+	if result.replyPolicyEngine != nil {
+		result.replyPolicyEngine.Enabled = result.policyEngineEnabled
+		if strings.TrimSpace(result.activeVersion) != "" {
+			result.replyPolicyEngine.Version = strings.TrimSpace(result.activeVersion)
+		}
+	}
+
+	return result
 }
 
 func policyStateFrom(resp *api.PolicyResponse) policyState {
@@ -521,6 +912,47 @@ func providerPoliciesFrom(policies []api.ProviderPolicy) []verifier.ProviderPoli
 	return output
 }
 
+func providerModesFromControlPlane(modes []api.ControlPlaneProviderModeState) map[string]string {
+	output := map[string]string{}
+
+	for _, mode := range modes {
+		provider := strings.ToLower(strings.TrimSpace(mode.Provider))
+		if provider == "" {
+			continue
+		}
+
+		switch provider {
+		case "gmail", "microsoft", "yahoo", "generic":
+		default:
+			continue
+		}
+
+		normalizedMode := strings.ToLower(strings.TrimSpace(mode.Mode))
+		switch normalizedMode {
+		case "normal", "cautious", "drain", "quarantine", "degraded_probe":
+		default:
+			normalizedMode = "normal"
+		}
+
+		output[provider] = normalizedMode
+	}
+
+	return output
+}
+
+func cloneProviderModes(source map[string]string) map[string]string {
+	if len(source) == 0 {
+		return map[string]string{}
+	}
+
+	cloned := make(map[string]string, len(source))
+	for key, value := range source {
+		cloned[key] = value
+	}
+
+	return cloned
+}
+
 func normalizeProviderDomains(domains []string) []string {
 	output := make([]string, 0, len(domains))
 	seen := map[string]struct{}{}
@@ -589,6 +1021,15 @@ func (w *Worker) hasMailFromIdentity() bool {
 	return state.mailFromAddress != ""
 }
 
+func (w *Worker) isHeartbeatIdentityMissing() bool {
+	if strings.TrimSpace(w.cfg.BaseVerifierConfig.MailFromAddress) != "" {
+		return false
+	}
+
+	state := w.policySnapshot()
+	return strings.TrimSpace(state.mailFromAddress) == ""
+}
+
 func (w *Worker) verifierForMode(mode string, policy policyConfig, hasPolicy bool) verifier.Verifier {
 	config := w.cfg.BaseVerifierConfig
 	state := w.policySnapshot()
@@ -596,6 +1037,19 @@ func (w *Worker) verifierForMode(mode string, policy policyConfig, hasPolicy boo
 
 	if hasPolicy {
 		config = applyPolicy(config, policy)
+	}
+
+	config.ProviderPolicyEngineEnabled = state.policyEngineEnabled
+	config.AdaptiveRetryEnabled = state.adaptiveRetryEnabled
+	config.ProviderModes = cloneProviderModes(state.providerModes)
+	if state.replyPolicyEngine != nil {
+		config.ProviderReplyPolicyEngine = cloneProviderReplyPolicyEngine(state.replyPolicyEngine)
+	} else {
+		config.ProviderReplyPolicyEngine = cloneProviderReplyPolicyEngine(config.ProviderReplyPolicyEngine)
+	}
+
+	if config.ProviderReplyPolicyEngine != nil {
+		config.ProviderReplyPolicyEngine.Enabled = config.ProviderPolicyEngineEnabled
 	}
 
 	var smtpFactory verifier.SMTPCheckerFactory
@@ -608,8 +1062,27 @@ func (w *Worker) verifierForMode(mode string, policy policyConfig, hasPolicy boo
 				EhloTimeout:              time.Duration(cfg.SMTPEhloTimeout) * time.Millisecond,
 				HeloName:                 cfg.HeloName,
 				MailFromAddress:          cfg.MailFromAddress,
+				ProviderMode:             "normal",
+				SessionStrategyID:        "generic:normal",
 				RateLimiter:              verifier.NewRateLimiter(cfg.SMTPRateLimitPerMinute),
 				CatchAllDetectionEnabled: cfg.CatchAllDetectionEnabled,
+				ReplyPolicyEngine:        cfg.ProviderReplyPolicyEngine,
+				AdaptiveRetryEnable:      cfg.AdaptiveRetryEnabled,
+			}
+		}
+	} else {
+		smtpFactory = func(cfg verifier.Config) verifier.SMTPChecker {
+			return verifier.NetSMTPChecker{
+				Dialer:              nil,
+				ConnectTimeout:      time.Duration(cfg.SMTPConnectTimeout) * time.Millisecond,
+				ReadTimeout:         time.Duration(cfg.SMTPReadTimeout) * time.Millisecond,
+				EhloTimeout:         time.Duration(cfg.SMTPEhloTimeout) * time.Millisecond,
+				HeloName:            cfg.HeloName,
+				ProviderMode:        "normal",
+				SessionStrategyID:   "generic:normal",
+				RateLimiter:         verifier.NewRateLimiter(cfg.SMTPRateLimitPerMinute),
+				ReplyPolicyEngine:   cfg.ProviderReplyPolicyEngine,
+				AdaptiveRetryEnable: cfg.AdaptiveRetryEnabled,
 			}
 		}
 	}
@@ -742,6 +1215,70 @@ func minInt(a, b int) int {
 	return b
 }
 
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+
+	return b
+}
+
+func (w *Worker) workerCapability() string {
+	return normalizeWorkerCapability(w.cfg.WorkerCapability)
+}
+
+func (w *Worker) canProcessStage(stage string) bool {
+	capability := w.workerCapability()
+
+	switch capability {
+	case "all":
+		return true
+	case "screening":
+		return stage == "screening"
+	case "smtp_probe":
+		return stage == "smtp_probe"
+	default:
+		return true
+	}
+}
+
+func normalizeWorkerCapability(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "screening" || value == "smtp_probe" || value == "all" {
+		return value
+	}
+
+	return "all"
+}
+
+func normalizeProcessingStage(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "smtp_probe" {
+		return "smtp_probe"
+	}
+
+	return "screening"
+}
+
+func normalizeProviderForRuntime(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch normalized {
+	case "gmail", "microsoft", "yahoo", "generic":
+		return normalized
+	default:
+		return "generic"
+	}
+}
+
+func modeForStage(stage, requestedMode string) string {
+	_ = requestedMode
+	if stage == "smtp_probe" {
+		return "enhanced"
+	}
+
+	return "standard"
+}
+
 func normalizeVerificationMode(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	if value == "enhanced" {
@@ -749,6 +1286,163 @@ func normalizeVerificationMode(value string) string {
 	}
 
 	return "standard"
+}
+
+func (w *Worker) sendHeartbeats(ctx context.Context) {
+	if w.cfg.ControlPlaneHeartbeatEnabled && w.cfg.ControlPlaneClient != nil {
+		snapshot := w.telemetry.snapshot()
+		payload := api.ControlPlaneHeartbeatRequest{
+			WorkerID:  w.cfg.WorkerID,
+			Host:      w.cfg.Server.Name,
+			IPAddress: w.cfg.Server.IPAddress,
+			Pool:      stringFromMeta(w.cfg.Server.Meta, "pool"),
+			Tags: []string{
+				fmt.Sprintf("laravel_heartbeat:%t", w.cfg.LaravelHeartbeatEnabled),
+				fmt.Sprintf("laravel_heartbeat_every_n:%d", maxInt(1, w.cfg.LaravelHeartbeatEveryN)),
+				fmt.Sprintf("policy_sync:%t", w.cfg.ControlPlanePolicySyncEnabled),
+			},
+			Status:                w.currentDesiredState(),
+			StageMetrics:          snapshot.stageMetrics,
+			SMTPMetrics:           snapshot.smtpMetrics,
+			ProviderMetrics:       snapshot.providerMetrics,
+			RoutingMetrics:        snapshot.routingMetrics,
+			SessionMetrics:        snapshot.sessionMetrics,
+			AttemptRouteMetrics:   snapshot.attemptRouteMetrics,
+			RetryAntiAffinityHits: snapshot.retryAntiAffinityHits,
+			UnknownReasonTags:     snapshot.unknownReasonTags,
+			SessionStrategyID:     w.currentSessionStrategyID(),
+			ReasonTagCounts:       snapshot.reasonTagCounts,
+		}
+
+		response, err := w.cfg.ControlPlaneClient.Heartbeat(ctx, payload)
+		if err != nil {
+			fmt.Printf("control-plane heartbeat error: %v\n", err)
+		} else {
+			w.applyControlPlaneHeartbeat(response)
+		}
+	}
+
+	if !w.cfg.LaravelHeartbeatEnabled {
+		return
+	}
+
+	heartbeatEvery := maxInt(1, w.cfg.LaravelHeartbeatEveryN)
+	if !w.isHeartbeatIdentityMissing() && int(w.heartbeatCount)%heartbeatEvery != 0 {
+		return
+	}
+
+	resp, err := w.client.Heartbeat(ctx, w.cfg.Server)
+	if err != nil {
+		fmt.Printf("laravel heartbeat warning: %v\n", err)
+		return
+	}
+
+	w.applyHeartbeatIdentity(resp)
+}
+
+func (w *Worker) applyControlPlaneHeartbeat(resp *api.ControlPlaneHeartbeatResponse) {
+	if resp == nil {
+		return
+	}
+
+	desiredState := normalizeDesiredState(resp.DesiredState)
+	if desiredState != "" {
+		w.desiredState.Store(desiredState)
+	}
+
+	for _, command := range resp.Commands {
+		command = strings.ToLower(strings.TrimSpace(command))
+		switch command {
+		case "pause":
+			w.desiredState.Store("paused")
+		case "resume", "run":
+			w.desiredState.Store("running")
+		case "drain":
+			w.desiredState.Store("draining")
+		case "stop":
+			w.desiredState.Store("stopped")
+		}
+	}
+}
+
+func (w *Worker) currentDesiredState() string {
+	state, ok := w.desiredState.Load().(string)
+	if !ok {
+		return "running"
+	}
+
+	state = normalizeDesiredState(state)
+	if state == "" {
+		return "running"
+	}
+
+	return state
+}
+
+func (w *Worker) currentSessionStrategyID() string {
+	state := w.policySnapshot()
+	version := strings.TrimSpace(state.activePolicyVersion)
+	if version == "" {
+		version = "unversioned"
+	}
+
+	mode := "standard"
+	if state.policyEngineEnabled || state.adaptiveRetryEnabled {
+		mode = "provider_policy"
+	}
+
+	return fmt.Sprintf("%s:%s", mode, version)
+}
+
+func (w *Worker) providerModeForRuntime(provider string) string {
+	provider = normalizeProviderForRuntime(provider)
+
+	state := w.policySnapshot()
+	if state.providerModes == nil {
+		return "normal"
+	}
+
+	mode := strings.ToLower(strings.TrimSpace(state.providerModes[provider]))
+	switch mode {
+	case "normal", "cautious", "drain", "quarantine", "degraded_probe":
+		return mode
+	default:
+		return "normal"
+	}
+}
+
+func (w *Worker) isTrustedProbeWorker() bool {
+	trustTier := strings.ToLower(strings.TrimSpace(stringFromMeta(w.cfg.Server.Meta, "trust_tier")))
+	switch trustTier {
+	case "trusted", "premium", "high":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeDesiredState(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch normalized {
+	case "running", "paused", "draining", "stopped":
+		return normalized
+	default:
+		return ""
+	}
+}
+
+func stringFromMeta(meta map[string]interface{}, key string) string {
+	if meta == nil {
+		return ""
+	}
+
+	value, ok := meta[key]
+	if !ok {
+		return ""
+	}
+
+	normalized := strings.TrimSpace(fmt.Sprintf("%v", value))
+	return normalized
 }
 
 func (w *Worker) applyHeartbeatIdentity(resp *api.HeartbeatResponse) {
@@ -763,4 +1457,49 @@ func (w *Worker) applyHeartbeatIdentity(resp *api.HeartbeatResponse) {
 	w.policy.mailFromAddress = strings.TrimSpace(identity.MailFromAddress)
 	w.policy.identityDomain = strings.TrimSpace(identity.IdentityDomain)
 	w.policyMu.Unlock()
+}
+
+func cloneProviderReplyPolicyEngine(
+	engine *verifier.ProviderReplyPolicyEngine,
+) *verifier.ProviderReplyPolicyEngine {
+	if engine == nil {
+		return nil
+	}
+
+	payload, err := json.Marshal(engine)
+	if err != nil {
+		clone := *engine
+		return &clone
+	}
+
+	parsed, parseErr := verifier.ParseProviderReplyPolicyEngineJSON(string(payload))
+	if parseErr != nil {
+		clone := *engine
+		return &clone
+	}
+
+	parsed.Enabled = engine.Enabled
+	if strings.TrimSpace(engine.Version) != "" {
+		parsed.Version = strings.TrimSpace(engine.Version)
+	}
+
+	return parsed
+}
+
+type staticRiskyVerifier struct {
+	reason string
+}
+
+func (v staticRiskyVerifier) Verify(context.Context, string) verifier.Result {
+	reason := strings.TrimSpace(v.reason)
+	if reason == "" {
+		reason = "smtp_tempfail"
+	}
+
+	return verifier.Result{
+		Category:      verifier.CategoryRisky,
+		Reason:        reason,
+		ReasonCode:    reason,
+		DecisionClass: verifier.DecisionUnknown,
+	}
 }

@@ -68,12 +68,73 @@ func (p *ProviderAwareVerifier) verifierFor(key string, policy *ProviderPolicy) 
 	var smtpChecker SMTPChecker
 	if p.smtpFactory != nil {
 		smtpChecker = p.smtpFactory(config)
+		if policy != nil && policy.Name != "" {
+			smtpChecker = withProviderProfile(smtpChecker, policy.Name)
+			mode := providerModeFor(config.ProviderModes, policy.Name)
+			strategyID := sessionStrategyID(policy.Name, mode)
+			smtpChecker = withSessionStrategyContext(smtpChecker, mode, strategyID)
+		}
 	}
 
 	verifier := NewPipelineVerifier(config, p.resolver, smtpChecker)
 	p.cache[key] = verifier
 
 	return verifier
+}
+
+func withProviderProfile(checker SMTPChecker, profile string) SMTPChecker {
+	switch typed := checker.(type) {
+	case NetSMTPProber:
+		typed.ProviderProfile = profile
+		return typed
+	case *NetSMTPProber:
+		typed.ProviderProfile = profile
+		return typed
+	case NetSMTPChecker:
+		typed.ProviderProfile = profile
+		return typed
+	case *NetSMTPChecker:
+		typed.ProviderProfile = profile
+		return typed
+	default:
+		return checker
+	}
+}
+
+func withSessionStrategyContext(checker SMTPChecker, mode string, strategyID string) SMTPChecker {
+	switch typed := checker.(type) {
+	case NetSMTPProber:
+		typed.ProviderMode = mode
+		typed.SessionStrategyID = strategyID
+		return typed
+	case *NetSMTPProber:
+		typed.ProviderMode = mode
+		typed.SessionStrategyID = strategyID
+		return typed
+	case NetSMTPChecker:
+		typed.ProviderMode = mode
+		typed.SessionStrategyID = strategyID
+		return typed
+	case *NetSMTPChecker:
+		typed.ProviderMode = mode
+		typed.SessionStrategyID = strategyID
+		return typed
+	default:
+		return checker
+	}
+}
+
+func sessionStrategyID(provider, mode string) string {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	if provider == "" {
+		provider = "generic"
+	}
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	if mode == "" {
+		mode = "normal"
+	}
+
+	return provider + ":" + mode
 }
 
 func (p *ProviderAwareVerifier) matchPolicy(domain string) (string, *ProviderPolicy) {
@@ -110,7 +171,56 @@ func applyProviderOverrides(config Config, policy ProviderPolicy) Config {
 		config.RetryableNetworkRetries = *policy.RetryableNetworkRetries
 	}
 
+	providerName := strings.ToLower(strings.TrimSpace(policy.Name))
+	if providerName != "" && config.ProviderReplyPolicyEngine != nil {
+		profile := lookupProviderReplyProfile(config.ProviderReplyPolicyEngine, providerName)
+		mode := providerModeFor(config.ProviderModes, providerName)
+		modeRule := lookupProviderModeRule(config.ProviderReplyPolicyEngine, mode)
+		session := profile.Session
+		if session.MaxConcurrency > 0 {
+			config.PerDomainConcurrency = applyMultiplier(session.MaxConcurrency, modeRule.MaxConcurrencyMultiplier)
+		}
+		if session.ConnectsPerMinute > 0 {
+			config.SMTPRateLimitPerMinute = applyMultiplier(session.ConnectsPerMinute, modeRule.ConnectsPerMinuteMultiplier)
+		}
+		config.RetryJitterPercent = session.RetryJitterPercent
+		config.ReuseConnectionForRetries = session.ReuseConnectionForRetries
+		config.EHLOProfile = strings.TrimSpace(session.EHLOProfile)
+		if config.EHLOProfile == "" {
+			config.EHLOProfile = "default"
+		}
+	}
+
 	return config
+}
+
+func providerModeFor(modes map[string]string, provider string) string {
+	if modes == nil {
+		return "normal"
+	}
+
+	mode := strings.ToLower(strings.TrimSpace(modes[provider]))
+	if mode == "" {
+		return "normal"
+	}
+
+	return mode
+}
+
+func applyMultiplier(base int, multiplier float64) int {
+	if base <= 0 {
+		return 0
+	}
+	if multiplier <= 0 {
+		return 1
+	}
+
+	adjusted := int(float64(base) * multiplier)
+	if adjusted < 1 {
+		return 1
+	}
+
+	return adjusted
 }
 
 func domainMatchesSuffix(domain, suffix string) bool {

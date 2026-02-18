@@ -4,17 +4,19 @@ namespace App\Jobs;
 
 use App\Enums\VerificationJobOrigin;
 use App\Enums\VerificationJobStatus;
-use App\Contracts\CacheWriteBackService;
 use App\Models\VerificationJob;
-use App\Services\JobStorage;
 use App\Services\JobMetricsRecorder;
+use App\Services\JobStorage;
 use App\Services\VerificationOutputMapper;
 use App\Services\VerificationResultsMerger;
+use App\Support\EngineSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
@@ -25,17 +27,54 @@ class FinalizeVerificationJob implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
+    public int $timeout = 900;
+
+    public int $tries = 3;
+
+    public bool $failOnTimeout = true;
+
     public function __construct(public string $jobId)
     {
+        $this->connection = 'redis_finalize';
+        $this->queue = (string) config('queue.connections.redis_finalize.queue', 'finalize');
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [30, 120, 300];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function tags(): array
+    {
+        return [
+            'lane:finalize',
+            'verification_job:'.$this->jobId,
+        ];
+    }
+
+    /**
+     * @return array<int, object>
+     */
+    public function middleware(): array
+    {
+        return [
+            (new WithoutOverlapping("finalize:{$this->jobId}"))
+                ->expireAfter($this->timeout + 120)
+                ->releaseAfter(30),
+        ];
     }
 
     public function handle(
         VerificationResultsMerger $merger,
         JobStorage $storage,
-        CacheWriteBackService $writeBack,
         JobMetricsRecorder $metricsRecorder
-    ): void
-    {
+    ): void {
         $job = VerificationJob::query()
             ->with('chunks')
             ->find($this->jobId);
@@ -94,12 +133,6 @@ class FinalizeVerificationJob implements ShouldQueue
                 return;
             }
 
-            $metricsRecorder->recordPhase($job, 'writeback', [
-                'progress_percent' => 90,
-            ]);
-
-            $writebackResult = $writeBack->writeBack($job, $result);
-
             $counts = $result['counts'];
             $validCount = (int) ($counts['valid'] ?? 0);
             $invalidCount = (int) ($counts['invalid'] ?? 0);
@@ -152,8 +185,10 @@ class FinalizeVerificationJob implements ShouldQueue
                 'progress_percent' => 100,
                 'total_emails' => $job->total_emails,
                 'processed_emails' => $job->total_emails,
-                'writeback_written_count' => (int) ($writebackResult['written'] ?? 0),
+                'writeback_status' => null,
             ]);
+
+            $this->scheduleWriteBack($job, $metricsRecorder);
         } catch (Throwable $exception) {
             $this->markJobFailed($job, 'Finalization failed.', [
                 'error' => $exception->getMessage(),
@@ -161,13 +196,61 @@ class FinalizeVerificationJob implements ShouldQueue
         }
     }
 
+    private function scheduleWriteBack(VerificationJob $job, JobMetricsRecorder $metricsRecorder): void
+    {
+        if (! EngineSettings::cacheWritebackEnabled()) {
+            $metricsRecorder->recordPhase($job, 'completed', [
+                'progress_percent' => 100,
+                'writeback_status' => 'disabled',
+                'writeback_attempted_count' => 0,
+                'writeback_written_count' => 0,
+                'writeback_last_error' => null,
+                'writeback_queued_at' => null,
+                'writeback_started_at' => null,
+                'writeback_finished_at' => now(),
+            ]);
+
+            return;
+        }
+
+        if (! $job->cache_miss_key) {
+            $metricsRecorder->recordPhase($job, 'completed', [
+                'progress_percent' => 100,
+                'writeback_status' => 'skipped',
+                'writeback_attempted_count' => 0,
+                'writeback_written_count' => 0,
+                'writeback_last_error' => null,
+                'writeback_queued_at' => null,
+                'writeback_started_at' => null,
+                'writeback_finished_at' => now(),
+            ]);
+
+            return;
+        }
+
+        $queuedAt = now();
+        $metricsRecorder->recordPhase($job, 'completed', [
+            'progress_percent' => 100,
+            'writeback_status' => 'queued',
+            'writeback_attempted_count' => 0,
+            'writeback_written_count' => 0,
+            'writeback_last_error' => null,
+            'writeback_queued_at' => $queuedAt,
+            'writeback_started_at' => null,
+            'writeback_finished_at' => null,
+        ]);
+
+        DB::afterCommit(function () use ($job): void {
+            WriteBackVerificationCacheJob::dispatch($job->id);
+        });
+    }
+
     private function markJobFailed(
         VerificationJob $job,
         string $message,
         array $context = [],
         ?JobMetricsRecorder $metricsRecorder = null
-    ): void
-    {
+    ): void {
         $job->update([
             'status' => VerificationJobStatus::Failed,
             'finished_at' => now(),
@@ -185,7 +268,7 @@ class FinalizeVerificationJob implements ShouldQueue
     }
 
     /**
-     * @param array{disk: string, keys: array<string, string>, counts: array<string, int>} $result
+     * @param  array{disk: string, keys: array<string, string>, counts: array<string, int>}  $result
      * @return array{email: string, status: string, sub_status: string, score: int|null, reason: string}|null
      */
     private function extractSingleResult(array $result): ?array

@@ -7,6 +7,7 @@ use App\Models\EngineSetting;
 use App\Models\User;
 use App\Models\VerificationJob;
 use App\Services\EmailVerificationCache\DynamoDbCacheWriteBackService;
+use App\Services\JobMetricsRecorder;
 use App\Services\JobStorage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -72,8 +73,14 @@ class DynamoDbCacheWriteBackTest extends TestCase
             'hit-two@example.com,invalid,mx_missing,5,mx_missing',
         ]));
 
-        $service = new class extends DynamoDbCacheWriteBackService {
+        $service = new class extends DynamoDbCacheWriteBackService
+        {
             public array $captured = [];
+
+            public function __construct()
+            {
+                parent::__construct(app(JobMetricsRecorder::class));
+            }
 
             protected function sendBatch(array $items): array
             {
@@ -148,8 +155,14 @@ class DynamoDbCacheWriteBackTest extends TestCase
             'miss-two@example.com',
         ]));
 
-        $service = new class extends DynamoDbCacheWriteBackService {
+        $service = new class extends DynamoDbCacheWriteBackService
+        {
             public array $captured = [];
+
+            public function __construct()
+            {
+                parent::__construct(app(JobMetricsRecorder::class));
+            }
 
             protected function sendBatch(array $items): array
             {
@@ -216,8 +229,14 @@ class DynamoDbCacheWriteBackTest extends TestCase
             'miss@example.com,valid,smtp_connect_ok,90,smtp_connect_ok',
         ]));
 
-        $service = new class extends DynamoDbCacheWriteBackService {
+        $service = new class extends DynamoDbCacheWriteBackService
+        {
             public array $captured = [];
+
+            public function __construct()
+            {
+                parent::__construct(app(JobMetricsRecorder::class));
+            }
 
             protected function sendBatch(array $items): array
             {

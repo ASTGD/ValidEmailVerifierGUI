@@ -1,6 +1,9 @@
-# Engine Worker (Go) — Phase 8B
+# Engine Worker (Go)
 
-This worker pulls chunks from the Laravel API, downloads inputs via signed URLs, performs **DNS/MX + SMTP connectivity** checks, uploads outputs, and completes chunks. It does **not** perform mailbox-level RCPT probing.
+This worker pulls chunks from the Laravel API, downloads inputs via signed URLs, runs stage-specific verification, uploads outputs, and completes chunks.
+
+- `screening` stage uses fast DNS/MX + SMTP connectivity checks.
+- `smtp_probe` stage uses mailbox-level SMTP probing (`MAIL FROM` + `RCPT TO`) when policy and identity prerequisites are available.
 
 ## Requirements
 - Go 1.22+
@@ -13,7 +16,17 @@ Never paste tokens into chat or commit them to git. Use environment variables or
 ## Configuration (env)
 - `ENGINE_API_BASE_URL` (required) — e.g. `http://localhost:8082`
 - `ENGINE_API_TOKEN` (required) — Sanctum token for verifier-service
+- `CONTROL_PLANE_BASE_URL` (optional) — e.g. `http://localhost:9091`
+- `CONTROL_PLANE_TOKEN` (optional) — Go control-plane bearer token
+- `CONTROL_PLANE_HEARTBEAT_ENABLED` (default `true` when control-plane URL/token are present)
+- `CONTROL_PLANE_POLICY_SYNC_ENABLED` (default `true` when control-plane URL/token are present)
+- `LARAVEL_HEARTBEAT_ENABLED` (default `true`)
+- `LARAVEL_HEARTBEAT_EVERY_N` (default `10`) — send Laravel fallback heartbeat every N control-plane heartbeats
 - `WORKER_ID` (optional) — defaults to hostname
+- `WORKER_CAPABILITY` (optional) — `screening`, `smtp_probe`, or `all` (default `all`)
+- `WORKER_POOL` (optional) — routing hint for probe chunk affinity (example: `smtp-gmail`)
+- `WORKER_PROVIDER_AFFINITY` (optional) — `gmail`, `microsoft`, `yahoo`, `generic`
+- `WORKER_TRUST_TIER` (optional) — `bronze`, `silver`, `gold`, `platinum`
 - `ENGINE_SERVER_NAME` (optional) — defaults to worker id
 - `ENGINE_SERVER_IP` (required) — IP address to register/heartbeat
 - `ENGINE_SERVER_ENV` (optional) — e.g. `local`
@@ -32,6 +45,9 @@ Never paste tokens into chat or commit them to git. Use environment variables or
 - `PER_DOMAIN_CONCURRENCY` (default 2)
 - `SMTP_RATE_LIMIT_PER_MINUTE` (default 0, disabled)
 - `HELO_NAME` (optional; defaults to hostname)
+- `PROVIDER_POLICY_ENGINE_ENABLED` (default `false`)
+- `ADAPTIVE_RETRY_ENABLED` (default `false`)
+- `PROVIDER_REPLY_POLICY_JSON` (optional JSON override for provider reply rules/retry windows)
 
 ## Run
 ```bash
@@ -78,7 +94,24 @@ $token = $user->createToken('engine-worker')->plainTextToken;
 
 ## Notes
 - Outputs use schema `email,reason`.
-- Classification uses **connectivity-only** checks:
+- Screening lane classifications are connectivity-oriented:
   - invalid: `syntax`, `mx_missing`, `smtp_unavailable`
   - risky: `dns_timeout`, `dns_servfail`, `smtp_connect_timeout`, `smtp_timeout`, `smtp_tempfail`
   - valid: `smtp_connect_ok`
+- SMTP probe lane adds mailbox-level reasons:
+  - valid: `rcpt_ok`
+  - invalid: `rcpt_rejected`
+  - risky: `catch_all_high_confidence`, `catch_all_medium_confidence`, `catch_all_low_confidence`, `smtp_tempfail`, `smtp_probe_disabled`, `smtp_probe_identity_missing`
+- SMTP reply intelligence is provider-aware and conservative:
+  - parses multiline SMTP replies and enhanced status codes (`X.Y.Z`)
+  - applies deterministic decision classes internally (`deliverable`, `undeliverable`, `retryable`, `policy_blocked`, `unknown`)
+  - keeps uncertain evidence in risky paths (never silently promotes unknown signals to valid)
+  - writes structured reason metadata suffixes (decision, confidence, retry strategy, rule/policy version when available) for auditability
+
+## Dual heartbeat and policy sync
+- Control-plane heartbeat (`/api/workers/heartbeat`) is primary for operational desired-state (`running|paused|draining|stopped`) and telemetry.
+- Laravel heartbeat (`/api/verifier/heartbeat`) remains as fallback liveness/identity refresh.
+- Worker policy behavior can be pinned by active policy version from control-plane:
+  - control-plane advertises active version,
+  - worker loads payload from Laravel policy version endpoint when available,
+  - if payload is unavailable/invalid, worker keeps last-known-good policy.

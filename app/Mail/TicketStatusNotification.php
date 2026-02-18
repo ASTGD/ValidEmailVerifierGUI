@@ -17,12 +17,12 @@ class TicketStatusNotification extends Mailable implements ShouldQueue
     public function __construct(
         public SupportTicket $ticket,
         public string $action // 'updated', 'closed', 'deleted'
-    ) {
-    }
+    ) {}
 
     public function envelope(): Envelope
     {
         $status = $this->action === 'deleted' ? 'Deleted' : $this->ticket->status->label();
+
         return new Envelope(
             subject: "[Ticket #{$this->ticket->ticket_number}] Status Update: {$status}",
         );
@@ -33,5 +33,18 @@ class TicketStatusNotification extends Mailable implements ShouldQueue
         return new Content(
             view: 'emails.ticket-status',
         );
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function tags(): array
+    {
+        return [
+            'lane:default',
+            'mail:ticket_status',
+            'ticket:'.$this->ticket->id,
+            'ticket_action:'.$this->action,
+        ];
     }
 }

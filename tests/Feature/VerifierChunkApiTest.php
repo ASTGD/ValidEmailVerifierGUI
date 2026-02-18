@@ -5,13 +5,19 @@ namespace Tests\Feature;
 use App\Contracts\EngineStorageUrlSigner;
 use App\Enums\VerificationJobStatus;
 use App\Enums\VerificationMode;
+use App\Jobs\RecordSmtpDecisionTracesJob;
+use App\Models\EngineServer;
+use App\Models\EngineSetting;
+use App\Models\EngineVerificationPolicy;
 use App\Models\User;
 use App\Models\VerificationJob;
 use App\Models\VerificationJobChunk;
-use App\Models\EngineServer;
-use App\Models\EngineSetting;
+use App\Services\ScreeningToProbeChunkPlanner;
 use App\Support\Roles;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -49,10 +55,19 @@ class VerifierChunkApiTest extends TestCase
             'verification_job_id' => $job->id,
             'chunk_no' => 1,
             'status' => 'processing',
+            'processing_stage' => 'screening',
             'input_disk' => 'local',
             'input_key' => 'chunks/'.$job->id.'/1/input.txt',
             'email_count' => 10,
         ], $overrides));
+    }
+
+    private function setProbeStageEnabled(bool $enabled): void
+    {
+        EngineSetting::query()->update(['enhanced_mode_enabled' => $enabled]);
+        EngineVerificationPolicy::query()
+            ->where('mode', 'enhanced')
+            ->update(['enabled' => $enabled]);
     }
 
     public function test_job_complete_is_idempotent(): void
@@ -152,11 +167,43 @@ class VerifierChunkApiTest extends TestCase
             ->assertStatus(409);
     }
 
+    public function test_chunk_complete_dispatches_trace_recorder_for_smtp_probe_stage(): void
+    {
+        Bus::fake();
+        $this->actingAsVerifier();
+
+        $job = $this->makeJob();
+        $chunk = $this->makeChunk($job, [
+            'status' => 'processing',
+            'processing_stage' => 'smtp_probe',
+            'output_disk' => null,
+        ]);
+
+        $payload = [
+            'output_disk' => 'local',
+            'valid_key' => 'results/chunks/'.$job->id.'/1/valid.csv',
+            'invalid_key' => 'results/chunks/'.$job->id.'/1/invalid.csv',
+            'risky_key' => 'results/chunks/'.$job->id.'/1/risky.csv',
+            'email_count' => 5,
+            'valid_count' => 2,
+            'invalid_count' => 1,
+            'risky_count' => 2,
+        ];
+
+        $this->postJson(route('api.verifier.chunks.complete', $chunk), $payload)
+            ->assertOk();
+
+        Bus::assertDispatched(RecordSmtpDecisionTracesJob::class, function (RecordSmtpDecisionTracesJob $job) use ($chunk): bool {
+            return $job->chunkId === (string) $chunk->id;
+        });
+    }
+
     public function test_signed_url_endpoints_use_signer(): void
     {
         $this->actingAsVerifier();
 
-        $this->app->instance(EngineStorageUrlSigner::class, new class implements EngineStorageUrlSigner {
+        $this->app->instance(EngineStorageUrlSigner::class, new class implements EngineStorageUrlSigner
+        {
             public function temporaryDownloadUrl(string $disk, string $key, int $expirySeconds): string
             {
                 return sprintf('https://example.test/download?disk=%s&key=%s', $disk, $key);
@@ -238,7 +285,9 @@ class VerifierChunkApiTest extends TestCase
             'chunk_id' => (string) $chunk->id,
             'job_id' => (string) $job->id,
             'chunk_no' => 1,
-            'verification_mode' => VerificationMode::Standard->value,
+            'verification_mode' => VerificationMode::Enhanced->value,
+            'processing_stage' => 'screening',
+            'worker_capability_required' => 'screening',
         ]);
 
         $chunk->refresh();
@@ -331,5 +380,503 @@ class VerifierChunkApiTest extends TestCase
 
         $futureChunk->refresh();
         $this->assertSame('pending', $futureChunk->status);
+    }
+
+    public function test_claim_next_respects_worker_capability_stage_filter(): void
+    {
+        $this->actingAsVerifier();
+        EngineSetting::query()->update(['engine_paused' => false]);
+
+        $job = $this->makeJob();
+        $screeningChunk = $this->makeChunk($job, [
+            'chunk_no' => 1,
+            'status' => 'pending',
+            'processing_stage' => 'screening',
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+        ]);
+        $probeChunk = $this->makeChunk($job, [
+            'chunk_no' => 2,
+            'status' => 'pending',
+            'processing_stage' => 'smtp_probe',
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+        ]);
+
+        $this->postJson(route('api.verifier.chunks.claim-next'), [
+            'engine_server' => [
+                'name' => 'engine-screening',
+                'ip_address' => '127.0.0.31',
+                'environment' => 'test',
+                'region' => 'local',
+            ],
+            'worker_id' => 'worker-screening',
+            'worker_capability' => 'screening',
+        ])->assertOk()->assertJsonFragment([
+            'chunk_id' => (string) $screeningChunk->id,
+            'processing_stage' => 'screening',
+        ]);
+
+        $this->postJson(route('api.verifier.chunks.claim-next'), [
+            'engine_server' => [
+                'name' => 'engine-probe',
+                'ip_address' => '127.0.0.32',
+                'environment' => 'test',
+                'region' => 'local',
+            ],
+            'worker_id' => 'worker-probe',
+            'worker_capability' => 'smtp_probe',
+        ])->assertOk()->assertJsonFragment([
+            'chunk_id' => (string) $probeChunk->id,
+            'processing_stage' => 'smtp_probe',
+            'worker_capability_required' => 'smtp_probe',
+        ]);
+    }
+
+    public function test_screening_chunk_completion_creates_probe_chunk_candidates(): void
+    {
+        $this->actingAsVerifier();
+        $this->setProbeStageEnabled(true);
+        Storage::fake('local');
+
+        $job = $this->makeJob();
+        $chunk = $this->makeChunk($job, [
+            'status' => 'processing',
+            'processing_stage' => 'screening',
+            'input_disk' => 'local',
+            'claim_expires_at' => now()->addMinutes(5),
+            'claim_token' => 'claim-token',
+            'assigned_worker_id' => 'worker-1',
+        ]);
+
+        $validKey = 'results/chunks/'.$job->id.'/1/valid.csv';
+        $invalidKey = 'results/chunks/'.$job->id.'/1/invalid.csv';
+        $riskyKey = 'results/chunks/'.$job->id.'/1/risky.csv';
+
+        Storage::disk('local')->put($validKey, "email,reason\nvalid@example.com,smtp_connect_ok\n");
+        Storage::disk('local')->put($invalidKey, "email,reason\nhard-invalid@example.com,syntax\n");
+        Storage::disk('local')->put($riskyKey, "email,reason\nprobe@example.com,smtp_tempfail\n");
+
+        $this->postJson(route('api.verifier.chunks.complete', $chunk), [
+            'output_disk' => 'local',
+            'valid_key' => $validKey,
+            'invalid_key' => $invalidKey,
+            'risky_key' => $riskyKey,
+            'email_count' => 3,
+            'valid_count' => 1,
+            'invalid_count' => 1,
+            'risky_count' => 1,
+        ])->assertOk();
+
+        $probeChunk = VerificationJobChunk::query()
+            ->where('verification_job_id', $job->id)
+            ->where('processing_stage', 'smtp_probe')
+            ->where('parent_chunk_id', $chunk->id)
+            ->first();
+
+        $this->assertNotNull($probeChunk);
+        $this->assertSame('pending', $probeChunk->status);
+        $this->assertSame(2, $probeChunk->email_count);
+        $this->assertTrue(Storage::disk('local')->exists((string) $probeChunk->input_key));
+        $this->assertStringContainsString('valid@example.com', Storage::disk('local')->get((string) $probeChunk->input_key));
+        $this->assertStringContainsString('probe@example.com', Storage::disk('local')->get((string) $probeChunk->input_key));
+        $this->assertStringNotContainsString('hard-invalid@example.com', Storage::disk('local')->get((string) $probeChunk->input_key));
+
+        $this->assertSame("email,reason\n", Storage::disk('local')->get($validKey));
+        $this->assertSame("email,reason\n", Storage::disk('local')->get($riskyKey));
+        $this->assertStringContainsString('hard-invalid@example.com,syntax', Storage::disk('local')->get($invalidKey));
+    }
+
+    public function test_screening_chunk_completion_does_not_treat_email_address_as_header(): void
+    {
+        $this->actingAsVerifier();
+        $this->setProbeStageEnabled(true);
+        Storage::fake('local');
+
+        $job = $this->makeJob();
+        $chunk = $this->makeChunk($job, [
+            'status' => 'processing',
+            'processing_stage' => 'screening',
+            'input_disk' => 'local',
+            'claim_expires_at' => now()->addMinutes(5),
+            'claim_token' => 'claim-token',
+            'assigned_worker_id' => 'worker-1',
+        ]);
+
+        $validKey = 'results/chunks/'.$job->id.'/1/valid.csv';
+        $invalidKey = 'results/chunks/'.$job->id.'/1/invalid.csv';
+        $riskyKey = 'results/chunks/'.$job->id.'/1/risky.csv';
+
+        Storage::disk('local')->put($validKey, "email,reason\nemail@example.com,smtp_connect_ok\n");
+        Storage::disk('local')->put($invalidKey, "email,reason\nhard-invalid@example.com,syntax\n");
+        Storage::disk('local')->put($riskyKey, "email,reason\nprobe@example.com,smtp_tempfail\n");
+
+        $this->postJson(route('api.verifier.chunks.complete', $chunk), [
+            'output_disk' => 'local',
+            'valid_key' => $validKey,
+            'invalid_key' => $invalidKey,
+            'risky_key' => $riskyKey,
+            'email_count' => 3,
+            'valid_count' => 1,
+            'invalid_count' => 1,
+            'risky_count' => 1,
+        ])->assertOk();
+
+        $probeChunk = VerificationJobChunk::query()
+            ->where('verification_job_id', $job->id)
+            ->where('processing_stage', 'smtp_probe')
+            ->where('parent_chunk_id', $chunk->id)
+            ->first();
+
+        $this->assertNotNull($probeChunk);
+        $this->assertSame(2, $probeChunk->email_count);
+        $this->assertStringContainsString('email@example.com', Storage::disk('local')->get((string) $probeChunk->input_key));
+        $this->assertStringContainsString('probe@example.com', Storage::disk('local')->get((string) $probeChunk->input_key));
+    }
+
+    public function test_screening_chunk_completion_skips_probe_handoff_when_probe_disabled(): void
+    {
+        $this->actingAsVerifier();
+        $this->setProbeStageEnabled(false);
+        Storage::fake('local');
+
+        $job = $this->makeJob();
+        $chunk = $this->makeChunk($job, [
+            'status' => 'processing',
+            'processing_stage' => 'screening',
+            'input_disk' => 'local',
+            'claim_expires_at' => now()->addMinutes(5),
+            'claim_token' => 'claim-token',
+            'assigned_worker_id' => 'worker-1',
+        ]);
+
+        $validKey = 'results/chunks/'.$job->id.'/1/valid.csv';
+        $invalidKey = 'results/chunks/'.$job->id.'/1/invalid.csv';
+        $riskyKey = 'results/chunks/'.$job->id.'/1/risky.csv';
+
+        Storage::disk('local')->put($validKey, "email,reason\nvalid@example.com,smtp_connect_ok\n");
+        Storage::disk('local')->put($invalidKey, "email,reason\nhard-invalid@example.com,syntax\n");
+        Storage::disk('local')->put($riskyKey, "email,reason\nprobe@example.com,smtp_tempfail\n");
+
+        $this->postJson(route('api.verifier.chunks.complete', $chunk), [
+            'output_disk' => 'local',
+            'valid_key' => $validKey,
+            'invalid_key' => $invalidKey,
+            'risky_key' => $riskyKey,
+            'email_count' => 3,
+            'valid_count' => 1,
+            'invalid_count' => 1,
+            'risky_count' => 1,
+        ])->assertOk();
+
+        $probeChunk = VerificationJobChunk::query()
+            ->where('verification_job_id', $job->id)
+            ->where('processing_stage', 'smtp_probe')
+            ->where('parent_chunk_id', $chunk->id)
+            ->first();
+
+        $this->assertNull($probeChunk);
+        $this->assertStringContainsString('valid@example.com', Storage::disk('local')->get($validKey));
+        $this->assertStringContainsString('probe@example.com', Storage::disk('local')->get($riskyKey));
+        $this->assertStringContainsString('hard-invalid@example.com,syntax', Storage::disk('local')->get($invalidKey));
+
+        $job->refresh();
+        $this->assertNotNull($job->metrics);
+        $this->assertSame(3, (int) $job->metrics->screening_total_count);
+        $this->assertSame(0, (int) $job->metrics->probe_candidate_count);
+    }
+
+    public function test_screening_probe_handoff_failure_returns_retryable_response_without_data_loss(): void
+    {
+        $this->actingAsVerifier();
+        $this->setProbeStageEnabled(true);
+        Storage::fake('local');
+
+        $job = $this->makeJob();
+        $chunk = $this->makeChunk($job, [
+            'status' => 'processing',
+            'processing_stage' => 'screening',
+            'input_disk' => 'local',
+            'claim_expires_at' => now()->addMinutes(5),
+            'claim_token' => 'claim-token',
+            'assigned_worker_id' => 'worker-1',
+        ]);
+
+        $validKey = 'results/chunks/'.$job->id.'/1/valid.csv';
+        $invalidKey = 'results/chunks/'.$job->id.'/1/invalid.csv';
+        $riskyKey = 'results/chunks/'.$job->id.'/1/risky.csv';
+
+        Storage::disk('local')->put($validKey, "email,reason\nvalid@example.com,smtp_connect_ok\n");
+        Storage::disk('local')->put($invalidKey, "email,reason\nhard-invalid@example.com,syntax\n");
+        Storage::disk('local')->put($riskyKey, "email,reason\nprobe@example.com,smtp_tempfail\n");
+
+        $this->app->bind(ScreeningToProbeChunkPlanner::class, static fn () => new class extends ScreeningToProbeChunkPlanner
+        {
+            public function __construct() {}
+
+            public function plan(VerificationJob $job, VerificationJobChunk $chunk, string $outputDisk): array
+            {
+                throw new \RuntimeException('forced planner failure');
+            }
+        });
+
+        $this->postJson(route('api.verifier.chunks.complete', $chunk), [
+            'output_disk' => 'local',
+            'valid_key' => $validKey,
+            'invalid_key' => $invalidKey,
+            'risky_key' => $riskyKey,
+            'email_count' => 3,
+            'valid_count' => 1,
+            'invalid_count' => 1,
+            'risky_count' => 1,
+        ])->assertStatus(503);
+
+        $chunk->refresh();
+        $this->assertSame('processing', $chunk->status);
+        $this->assertNull($chunk->output_disk);
+        $this->assertNull($chunk->valid_key);
+        $this->assertNull($chunk->invalid_key);
+        $this->assertNull($chunk->risky_key);
+        $this->assertStringContainsString('valid@example.com', Storage::disk('local')->get($validKey));
+        $this->assertStringContainsString('probe@example.com', Storage::disk('local')->get($riskyKey));
+    }
+
+    public function test_screening_chunk_completion_creates_multiple_probe_shards_with_routing_hints(): void
+    {
+        $this->actingAsVerifier();
+        $this->setProbeStageEnabled(true);
+        Storage::fake('local');
+
+        config([
+            'engine.probe_sharding_enabled' => true,
+            'engine.probe_shard_target_size' => 2,
+            'engine.probe_shard_min_size' => 1,
+            'engine.probe_shard_max_size' => 2,
+            'engine.probe_max_attempts' => 4,
+            'engine.probe_preferred_pools' => 'gmail:pool-gmail,microsoft:pool-msft,yahoo:pool-yahoo,generic:pool-generic',
+        ]);
+
+        $job = $this->makeJob();
+        $chunk = $this->makeChunk($job, [
+            'status' => 'processing',
+            'processing_stage' => 'screening',
+            'input_disk' => 'local',
+            'claim_expires_at' => now()->addMinutes(5),
+            'claim_token' => 'claim-token',
+            'assigned_worker_id' => 'worker-1',
+        ]);
+
+        $validKey = 'results/chunks/'.$job->id.'/1/valid.csv';
+        $invalidKey = 'results/chunks/'.$job->id.'/1/invalid.csv';
+        $riskyKey = 'results/chunks/'.$job->id.'/1/risky.csv';
+
+        Storage::disk('local')->put($validKey, implode("\n", [
+            'email,reason',
+            'a@gmail.com,smtp_connect_ok',
+            'b@gmail.com,smtp_connect_ok',
+            'c@yahoo.com,smtp_connect_ok',
+        ])."\n");
+        Storage::disk('local')->put($invalidKey, "email,reason\nhard-invalid@example.com,syntax\n");
+        Storage::disk('local')->put($riskyKey, implode("\n", [
+            'email,reason',
+            'd@outlook.com,smtp_tempfail',
+            'e@example.com,smtp_tempfail',
+        ])."\n");
+
+        $this->postJson(route('api.verifier.chunks.complete', $chunk), [
+            'output_disk' => 'local',
+            'valid_key' => $validKey,
+            'invalid_key' => $invalidKey,
+            'risky_key' => $riskyKey,
+            'email_count' => 6,
+            'valid_count' => 3,
+            'invalid_count' => 1,
+            'risky_count' => 2,
+        ])->assertOk();
+
+        $probeChunks = VerificationJobChunk::query()
+            ->where('verification_job_id', $job->id)
+            ->where('processing_stage', 'smtp_probe')
+            ->where('parent_chunk_id', $chunk->id)
+            ->orderBy('chunk_no')
+            ->get();
+
+        $this->assertGreaterThanOrEqual(3, $probeChunks->count());
+        $this->assertTrue($probeChunks->every(fn (VerificationJobChunk $probeChunk): bool => $probeChunk->max_probe_attempts === 4));
+        $this->assertTrue($probeChunks->every(fn (VerificationJobChunk $probeChunk): bool => is_string($probeChunk->routing_domain) && str_starts_with((string) $probeChunk->routing_domain, 'sha1:')));
+        $this->assertContains('gmail', $probeChunks->pluck('routing_provider')->all());
+        $this->assertContains('microsoft', $probeChunks->pluck('routing_provider')->all());
+        $this->assertContains('yahoo', $probeChunks->pluck('routing_provider')->all());
+    }
+
+    public function test_claim_next_prefers_matching_provider_affinity_and_pool_for_probe_chunks(): void
+    {
+        $this->actingAsVerifier();
+        EngineSetting::query()->update(['engine_paused' => false]);
+
+        config([
+            'engine.probe_routing_enabled' => true,
+            'engine.probe_rotation_retry_enabled' => true,
+        ]);
+
+        $job = $this->makeJob();
+        $gmailChunk = $this->makeChunk($job, [
+            'chunk_no' => 1,
+            'status' => 'pending',
+            'processing_stage' => 'smtp_probe',
+            'routing_provider' => 'gmail',
+            'preferred_pool' => 'pool-gmail',
+            'max_probe_attempts' => 5,
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+        ]);
+        $this->makeChunk($job, [
+            'chunk_no' => 2,
+            'status' => 'pending',
+            'processing_stage' => 'smtp_probe',
+            'routing_provider' => 'yahoo',
+            'preferred_pool' => 'pool-yahoo',
+            'max_probe_attempts' => 5,
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+        ]);
+
+        $this->postJson(route('api.verifier.chunks.claim-next'), [
+            'engine_server' => [
+                'name' => 'engine-probe-hint',
+                'ip_address' => '127.0.0.77',
+                'environment' => 'test',
+                'region' => 'local',
+                'meta' => [
+                    'pool' => 'pool-gmail',
+                    'provider_affinity' => 'gmail',
+                    'trust_tier' => 'gold',
+                ],
+            ],
+            'worker_id' => 'worker-probe-hint',
+            'worker_capability' => 'smtp_probe',
+        ])->assertOk()->assertJsonFragment([
+            'chunk_id' => (string) $gmailChunk->id,
+            'routing_provider' => 'gmail',
+            'preferred_pool' => 'pool-gmail',
+            'max_probe_attempts' => 5,
+        ]);
+    }
+
+    public function test_claim_next_avoids_same_worker_retry_rotation_when_alternative_exists(): void
+    {
+        $this->actingAsVerifier();
+        EngineSetting::query()->update(['engine_paused' => false]);
+
+        config([
+            'engine.probe_routing_enabled' => true,
+            'engine.probe_rotation_retry_enabled' => true,
+        ]);
+
+        $job = $this->makeJob();
+        $alreadySeenChunk = $this->makeChunk($job, [
+            'chunk_no' => 1,
+            'status' => 'pending',
+            'processing_stage' => 'smtp_probe',
+            'routing_provider' => 'gmail',
+            'preferred_pool' => 'pool-gmail',
+            'last_worker_ids' => ['worker-rotate-1'],
+            'retry_attempt' => 1,
+            'rotation_group_id' => (string) Str::uuid(),
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+        ]);
+        $alternativeChunk = $this->makeChunk($job, [
+            'chunk_no' => 2,
+            'status' => 'pending',
+            'processing_stage' => 'smtp_probe',
+            'routing_provider' => 'gmail',
+            'preferred_pool' => 'pool-gmail',
+            'last_worker_ids' => [],
+            'retry_attempt' => 1,
+            'rotation_group_id' => $alreadySeenChunk->rotation_group_id,
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+        ]);
+
+        $this->postJson(route('api.verifier.chunks.claim-next'), [
+            'engine_server' => [
+                'name' => 'engine-rotate',
+                'ip_address' => '127.0.0.78',
+                'environment' => 'test',
+                'region' => 'local',
+                'meta' => [
+                    'pool' => 'pool-gmail',
+                    'provider_affinity' => 'gmail',
+                ],
+            ],
+            'worker_id' => 'worker-rotate-1',
+            'worker_capability' => 'smtp_probe',
+        ])->assertOk()->assertJsonFragment([
+            'chunk_id' => (string) $alternativeChunk->id,
+        ]);
+    }
+
+    public function test_claim_next_enforces_retry_anti_affinity_even_when_alternative_has_lower_score(): void
+    {
+        $this->actingAsVerifier();
+        EngineSetting::query()->update(['engine_paused' => false]);
+
+        config([
+            'engine.probe_routing_enabled' => true,
+            'engine.probe_rotation_retry_enabled' => true,
+        ]);
+
+        $job = $this->makeJob();
+        $sameRouteChunk = $this->makeChunk($job, [
+            'chunk_no' => 1,
+            'status' => 'pending',
+            'processing_stage' => 'smtp_probe',
+            'routing_provider' => 'gmail',
+            'preferred_pool' => 'pool-gmail',
+            'last_worker_ids' => ['worker-rotate-hard'],
+            'retry_attempt' => 2,
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+        ]);
+        $alternativeChunk = $this->makeChunk($job, [
+            'chunk_no' => 2,
+            'status' => 'pending',
+            'processing_stage' => 'smtp_probe',
+            'routing_provider' => 'yahoo',
+            'preferred_pool' => 'pool-yahoo',
+            'last_worker_ids' => [],
+            'retry_attempt' => 2,
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+        ]);
+
+        $this->postJson(route('api.verifier.chunks.claim-next'), [
+            'engine_server' => [
+                'name' => 'engine-rotate-hard',
+                'ip_address' => '127.0.0.179',
+                'environment' => 'test',
+                'region' => 'local',
+                'meta' => [
+                    'pool' => 'pool-gmail',
+                    'provider_affinity' => 'gmail',
+                ],
+            ],
+            'worker_id' => 'worker-rotate-hard',
+            'worker_capability' => 'smtp_probe',
+        ])->assertOk()->assertJsonFragment([
+            'chunk_id' => (string) $alternativeChunk->id,
+        ]);
+
+        $sameRouteChunk->refresh();
+        $this->assertNull($sameRouteChunk->assigned_worker_id);
     }
 }

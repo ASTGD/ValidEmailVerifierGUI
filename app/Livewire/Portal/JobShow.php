@@ -3,6 +3,7 @@
 namespace App\Livewire\Portal;
 
 use App\Enums\VerificationJobStatus;
+use App\Models\SeedSendCampaign;
 use App\Models\VerificationJob;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Attributes\Layout;
@@ -17,7 +18,17 @@ class JobShow extends Component
 
     public function getShouldPollProperty(): bool
     {
-        return in_array($this->job->status, [VerificationJobStatus::Pending, VerificationJobStatus::Processing], true);
+        if (in_array($this->job->status, [VerificationJobStatus::Pending, VerificationJobStatus::Processing], true)) {
+            return true;
+        }
+
+        if ((bool) config('seed_send.enabled', false) && $this->job->status === VerificationJobStatus::Completed) {
+            return $this->job->seedSendCampaigns()
+                ->whereIn('status', [SeedSendCampaign::STATUS_QUEUED, SeedSendCampaign::STATUS_RUNNING])
+                ->exists();
+        }
+
+        return false;
     }
 
     public function mount(VerificationJob $job): void
@@ -33,6 +44,8 @@ class JobShow extends Component
 
         return view('livewire.portal.job-show', [
             'job' => $this->job,
+            'latestSeedSendConsent' => $this->job->seedSendConsents()->latest('id')->first(),
+            'latestSeedSendCampaign' => $this->job->seedSendCampaigns()->latest('created_at')->first(),
             'activityLogs' => $this->job->logs()
                 ->latest()
                 ->limit(20)

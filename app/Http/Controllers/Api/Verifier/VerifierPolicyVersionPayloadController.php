@@ -1,0 +1,41 @@
+<?php
+
+namespace App\Http\Controllers\Api\Verifier;
+
+use App\Models\SmtpPolicyVersion;
+use Illuminate\Http\JsonResponse;
+
+class VerifierPolicyVersionPayloadController
+{
+    public function __invoke(string $version): JsonResponse
+    {
+        $normalizedVersion = trim($version);
+        if ($normalizedVersion === '') {
+            abort(404);
+        }
+
+        $policyVersion = SmtpPolicyVersion::query()
+            ->where('version', $normalizedVersion)
+            ->first();
+
+        if (! $policyVersion || ! is_array($policyVersion->policy_payload) || $policyVersion->policy_payload === []) {
+            abort(404);
+        }
+
+        if ((string) ($policyVersion->validation_status ?? 'pending') !== 'valid') {
+            abort(404);
+        }
+
+        return response()->json([
+            'data' => [
+                'version' => $policyVersion->version,
+                'is_active' => (bool) $policyVersion->is_active,
+                'status' => (string) $policyVersion->status,
+                'validation_status' => (string) ($policyVersion->validation_status ?? 'pending'),
+                'schema_version' => (string) ($policyVersion->schema_version ?? 'v2'),
+                'mode_semantics_hash' => $policyVersion->mode_semantics_hash,
+                'policy_payload' => $policyVersion->policy_payload,
+            ],
+        ]);
+    }
+}

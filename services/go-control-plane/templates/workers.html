@@ -1,0 +1,612 @@
+{{ define "workers" }}
+<section class="space-y-4">
+    <div class="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/70 p-1 text-xs">
+        <a
+            href="{{ .BasePath }}/workers?tab=runtime"
+            class="rounded-full px-4 py-2 font-medium {{ if eq .ActiveTab "runtime" }}bg-amber-500 text-slate-900{{ else }}text-slate-300 hover:bg-slate-800{{ end }}"
+        >Runtime Workers</a>
+        {{ if .ServerRegistry.Enabled }}
+        <a
+            href="{{ .BasePath }}/workers?tab=registry"
+            class="rounded-full px-4 py-2 font-medium {{ if eq .ActiveTab "registry" }}bg-amber-500 text-slate-900{{ else }}text-slate-300 hover:bg-slate-800{{ end }}"
+        >Server Registry &amp; Provisioning</a>
+        {{ end }}
+    </div>
+
+    {{ if eq .ActiveTab "registry" }}
+        <section class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold">Server Registry &amp; Provisioning</h2>
+                    <p class="text-sm text-slate-400">Laravel-backed worker records and provisioning bundles.</p>
+                </div>
+            </div>
+
+            <div class="mt-4 flex flex-wrap items-center gap-2 text-xs">
+                <span class="text-slate-400">Filter:</span>
+                <a href="{{ .BasePath }}/workers?tab=registry&registry_filter=all" class="rounded-full px-3 py-1 {{ if eq .ServerRegistry.Filter "all" }}bg-amber-500 text-slate-900{{ else }}bg-slate-800 text-slate-300 hover:bg-slate-700{{ end }}">All</a>
+                <a href="{{ .BasePath }}/workers?tab=registry&registry_filter=matched" class="rounded-full px-3 py-1 {{ if eq .ServerRegistry.Filter "matched" }}bg-amber-500 text-slate-900{{ else }}bg-slate-800 text-slate-300 hover:bg-slate-700{{ end }}">Matched</a>
+                <a href="{{ .BasePath }}/workers?tab=registry&registry_filter=mismatch" class="rounded-full px-3 py-1 {{ if eq .ServerRegistry.Filter "mismatch" }}bg-amber-500 text-slate-900{{ else }}bg-slate-800 text-slate-300 hover:bg-slate-700{{ end }}">Mismatch</a>
+                <a href="{{ .BasePath }}/workers?tab=registry&registry_filter=offline" class="rounded-full px-3 py-1 {{ if eq .ServerRegistry.Filter "offline" }}bg-amber-500 text-slate-900{{ else }}bg-slate-800 text-slate-300 hover:bg-slate-700{{ end }}">Offline</a>
+            </div>
+
+            {{ if not .ServerRegistry.Configured }}
+                <div class="mt-6 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                    Server registry integration is disabled. Set <code class="text-red-100">LARAVEL_INTERNAL_API_BASE_URL</code>
+                    and <code class="text-red-100">LARAVEL_INTERNAL_API_TOKEN</code> in Go control-plane env.
+                </div>
+            {{ else }}
+                {{ if .ServerRegistry.Notice }}
+                    <div class="mt-6 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                        {{ .ServerRegistry.Notice }}
+                    </div>
+                {{ end }}
+                {{ if .ServerRegistry.Error }}
+                    <div class="mt-6 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                        {{ .ServerRegistry.Error }}
+                    </div>
+                {{ end }}
+                {{ if .ServerRegistry.Warning }}
+                    <div class="mt-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                        {{ .ServerRegistry.Warning }}
+                    </div>
+                {{ end }}
+
+                <div class="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <h3 class="text-sm font-semibold text-slate-100">Add Server</h3>
+                    <form method="POST" action="{{ .BasePath }}/workers/servers" class="mt-3 grid gap-3 md:grid-cols-2">
+                        <label class="space-y-1 text-xs text-slate-400">
+                            <span>Name</span>
+                            <input name="name" required class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                        </label>
+                        <label class="space-y-1 text-xs text-slate-400">
+                            <span>IP Address</span>
+                            <input name="ip_address" required class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                        </label>
+                        <label class="space-y-1 text-xs text-slate-400">
+                            <span>Environment</span>
+                            <input name="environment" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                        </label>
+                        <label class="space-y-1 text-xs text-slate-400">
+                            <span>Region</span>
+                            <input name="region" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                        </label>
+                        <label class="space-y-1 text-xs text-slate-400">
+                            <span>HELO Name</span>
+                            <input name="helo_name" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                        </label>
+                        <label class="space-y-1 text-xs text-slate-400">
+                            <span>MAIL FROM</span>
+                            <input name="mail_from_address" type="email" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                        </label>
+                        <label class="space-y-1 text-xs text-slate-400">
+                            <span>Verifier Domain</span>
+                            <select name="verifier_domain_id" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+                                <option value="">Select active domain</option>
+                                {{ range .ServerRegistry.VerifierDomains }}
+                                    <option value="{{ .ID }}">{{ .Domain }}</option>
+                                {{ end }}
+                            </select>
+                        </label>
+                        <label class="space-y-1 text-xs text-slate-400">
+                            <span>Max Concurrency</span>
+                            <input name="max_concurrency" type="number" min="1" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                        </label>
+                        <label class="md:col-span-2 space-y-1 text-xs text-slate-400">
+                            <span>Notes</span>
+                            <textarea name="notes" rows="2" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"></textarea>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-slate-300">
+                            <input type="checkbox" name="is_active" value="1" checked class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500" />
+                            Enabled
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-slate-300">
+                            <input type="checkbox" name="drain_mode" value="1" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500" />
+                            Drain mode
+                        </label>
+                        <div class="md:col-span-2">
+                            <button type="submit" class="rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-400">Create Server</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="mt-6 overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="text-xs uppercase text-slate-500">
+                            <tr>
+                                <th class="py-2">Name</th>
+                                <th class="py-2">IP</th>
+                                <th class="py-2">Environment</th>
+                                <th class="py-2">Region</th>
+                                <th class="py-2">Status</th>
+                                <th class="py-2">Runtime Match</th>
+                                <th class="py-2">Identity</th>
+                                <th class="py-2">Last Heartbeat</th>
+                                <th class="py-2">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800">
+                            {{ range .ServerRegistry.Servers }}
+                                <tr class="{{ if eq $.ServerRegistry.EditServerID .ID }}bg-amber-500/5{{ end }}">
+                                    <td class="py-3 font-medium">{{ .Name }}</td>
+                                    <td class="py-3 text-slate-300">{{ .IPAddress }}</td>
+                                    <td class="py-3 text-slate-300">{{ if .Environment }}{{ .Environment }}{{ else }}-{{ end }}</td>
+                                    <td class="py-3 text-slate-300">{{ if .Region }}{{ .Region }}{{ else }}-{{ end }}</td>
+                                    <td class="py-3">
+                                        <span class="rounded-full px-3 py-1 text-xs {{ if eq .Status "online" }}bg-emerald-500/20 text-emerald-300{{ else }}bg-rose-500/20 text-rose-300{{ end }}">
+                                            {{ .Status }}
+                                        </span>
+                                    </td>
+                                    <td class="py-3">
+                                        {{ if eq .RuntimeMatchStatus "matched" }}
+                                            <span class="rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300">matched</span>
+                                            {{ if .RuntimeMatchWorkerID }}<span class="mt-1 block text-xs text-slate-400">{{ .RuntimeMatchWorkerID }}</span>{{ end }}
+                                        {{ else }}
+                                            <span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-200">no runtime heartbeat</span>
+                                        {{ end }}
+                                    </td>
+                                    <td class="py-3 text-slate-300">
+                                        {{ if .MailFromAddress }}{{ .MailFromAddress }}{{ else }}-{{ end }}
+                                        {{ if .IdentityDomain }}<span class="block text-xs text-slate-500">{{ .IdentityDomain }}</span>{{ end }}
+                                    </td>
+                                    <td class="py-3 text-slate-400">{{ if .LastHeartbeatAt }}{{ .LastHeartbeatAt }}{{ else }}-{{ end }}</td>
+                                    <td class="py-3">
+                                        <div class="flex flex-wrap gap-2">
+                                            <a href="{{ $.BasePath }}/workers?tab=registry&edit_server_id={{ .ID }}&bundle_server_id={{ $.ServerRegistry.ProvisionBundleServerID }}" class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700">Edit</a>
+                                            <form method="POST" action="{{ $.BasePath }}/workers/servers/{{ .ID }}/provision">
+                                                <button class="rounded-full bg-cyan-500/20 px-3 py-1 text-xs text-cyan-200 hover:bg-cyan-500/30" type="submit">Generate Bundle</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {{ else }}
+                                <tr>
+                                    <td class="py-6 text-center text-slate-400" colspan="9">No servers registered.</td>
+                                </tr>
+                            {{ end }}
+                        </tbody>
+                    </table>
+                </div>
+
+                {{ if .ServerRegistry.OrphanWorkers }}
+                    <div class="mt-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+                        <h3 class="text-sm font-semibold text-amber-100">Runtime-only orphan workers</h3>
+                        <p class="mt-1 text-xs text-amber-200">These workers are heartbeating but have no matching Laravel registry record.</p>
+                        <ul class="mt-3 space-y-1 text-xs text-amber-100">
+                            {{ range .ServerRegistry.OrphanWorkers }}
+                                <li><code class="rounded bg-slate-900 px-2 py-1 text-amber-200">{{ .WorkerID }}</code> {{ if .Host }}· {{ .Host }}{{ end }} {{ if .IPAddress }}· {{ .IPAddress }}{{ end }}</li>
+                            {{ end }}
+                        </ul>
+                    </div>
+                {{ end }}
+
+                {{ if .ServerRegistry.EditServer }}
+                    <div class="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-sm font-semibold text-slate-100">Edit Server: {{ .ServerRegistry.EditServer.Name }}</h3>
+                            <a href="{{ .BasePath }}/workers?tab=registry&bundle_server_id={{ .ServerRegistry.ProvisionBundleServerID }}" class="text-xs text-slate-400 hover:text-slate-200">Clear selection</a>
+                        </div>
+                        <form method="POST" action="{{ .BasePath }}/workers/servers/{{ .ServerRegistry.EditServer.ID }}" class="mt-3 grid gap-3 md:grid-cols-2">
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Name</span>
+                                <input name="name" value="{{ .ServerRegistry.EditServer.Name }}" required class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>IP Address</span>
+                                <input name="ip_address" value="{{ .ServerRegistry.EditServer.IPAddress }}" required class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Environment</span>
+                                <input name="environment" value="{{ .ServerRegistry.EditServer.Environment }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Region</span>
+                                <input name="region" value="{{ .ServerRegistry.EditServer.Region }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>HELO Name</span>
+                                <input name="helo_name" value="{{ .ServerRegistry.EditServer.HeloName }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>MAIL FROM</span>
+                                <input name="mail_from_address" type="email" value="{{ .ServerRegistry.EditServer.MailFromAddress }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Verifier Domain</span>
+                                <select name="verifier_domain_id" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+                                    <option value="">Select active domain</option>
+                                    {{ range $.ServerRegistry.VerifierDomains }}
+                                        <option value="{{ .ID }}" {{ if eq $.ServerRegistry.EditServer.VerifierDomainID .ID }}selected{{ end }}>{{ .Domain }}</option>
+                                    {{ end }}
+                                </select>
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Max Concurrency</span>
+                                <input name="max_concurrency" type="number" min="1" value="{{ if gt .ServerRegistry.EditServer.MaxConcurrency 0 }}{{ .ServerRegistry.EditServer.MaxConcurrency }}{{ end }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="md:col-span-2 space-y-1 text-xs text-slate-400">
+                                <span>Notes</span>
+                                <textarea name="notes" rows="2" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">{{ .ServerRegistry.EditServer.Notes }}</textarea>
+                            </label>
+                            <label class="flex items-center gap-2 text-xs text-slate-300">
+                                <input type="checkbox" name="is_active" value="1" {{ if .ServerRegistry.EditServer.IsActive }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500" />
+                                Enabled
+                            </label>
+                            <label class="flex items-center gap-2 text-xs text-slate-300">
+                                <input type="checkbox" name="drain_mode" value="1" {{ if .ServerRegistry.EditServer.DrainMode }}checked{{ end }} class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500" />
+                                Drain mode
+                            </label>
+                            <div class="md:col-span-2">
+                                <button type="submit" class="rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-400">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                {{ end }}
+
+                {{ if .ServerRegistry.ProvisionBundleServerID }}
+                    <div class="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                        <h3 class="text-sm font-semibold text-slate-100">Latest Provisioning Bundle (Server #{{ .ServerRegistry.ProvisionBundleServerID }})</h3>
+                        {{ if .ServerRegistry.ProvisionBundleLoadError }}
+                            <p class="mt-2 text-sm text-red-300">{{ .ServerRegistry.ProvisionBundleLoadError }}</p>
+                        {{ else if .ServerRegistry.ProvisionBundle }}
+                            <dl class="mt-3 grid gap-2 text-sm text-slate-300">
+                                <div>
+                                    <dt class="text-xs uppercase tracking-wider text-slate-500">Bundle</dt>
+                                    <dd>{{ .ServerRegistry.ProvisionBundle.BundleUUID }}</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-xs uppercase tracking-wider text-slate-500">Expires At</dt>
+                                    <dd>{{ .ServerRegistry.ProvisionBundle.ExpiresAt }}</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-xs uppercase tracking-wider text-slate-500">Install Script URL</dt>
+                                    <dd>
+                                        {{ with index .ServerRegistry.ProvisionBundle.DownloadURLs "install" }}
+                                            <a href="{{ . }}" target="_blank" class="text-cyan-300 hover:text-cyan-200">{{ . }}</a>
+                                        {{ else }}
+                                            -
+                                        {{ end }}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt class="text-xs uppercase tracking-wider text-slate-500">Worker Env URL</dt>
+                                    <dd>
+                                        {{ with index .ServerRegistry.ProvisionBundle.DownloadURLs "env" }}
+                                            <a href="{{ . }}" target="_blank" class="text-cyan-300 hover:text-cyan-200">{{ . }}</a>
+                                        {{ else }}
+                                            -
+                                        {{ end }}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt class="text-xs uppercase tracking-wider text-slate-500">One-line Install Command</dt>
+                                    <dd>
+                                        <code class="block rounded-lg border border-slate-800 bg-slate-900 p-3 text-xs text-amber-200">{{ .ServerRegistry.ProvisionBundle.InstallCommandTemplate }}</code>
+                                    </dd>
+                                </div>
+                            </dl>
+                        {{ end }}
+                    </div>
+                {{ end }}
+            {{ end }}
+        </section>
+    {{ else }}
+        <section class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold">Workers</h2>
+                    <p class="text-sm text-slate-400">Manage worker state with safe actions.</p>
+                </div>
+                <span id="workers-active-count" class="text-xs text-slate-400">{{ .WorkerCount }} active</span>
+            </div>
+
+            <div class="mt-6 overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="text-xs uppercase text-slate-500">
+                        <tr>
+                            <th class="py-2">Worker</th>
+                            <th class="py-2">Host</th>
+                            <th class="py-2">Pool</th>
+                            <th class="py-2">Status</th>
+                            <th class="py-2">Desired</th>
+                            <th class="py-2">Quarantine</th>
+                            <th class="py-2">Last Heartbeat</th>
+                            <th class="py-2">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="workers-table-body" class="divide-y divide-slate-800">
+                        {{ range .Workers }}
+                        <tr>
+                            <td class="py-3 font-medium">{{ .WorkerID }}</td>
+                            <td class="py-3 text-slate-300">{{ .Host }}</td>
+                            <td class="py-3 text-slate-300">{{ if .Pool }}{{ .Pool }}{{ else }}-{{ end }}</td>
+                            <td class="py-3">
+                                {{ if eq .DesiredState "stopped" }}
+                                    <span class="rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300">stopped</span>
+                                {{ else if and (eq .Status "stopped") (eq .DesiredState "running") }}
+                                    <span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-200">starting</span>
+                                {{ else if and (eq .Status "running") (eq .DesiredState "stopped") }}
+                                    <span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-200">stopping</span>
+                                {{ else if eq .Status "online" }}
+                                    <span class="rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300">online</span>
+                                {{ else if eq .Status "offline" }}
+                                    <span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-200">offline</span>
+                                {{ else }}
+                                    <span class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200">{{ .Status }}</span>
+                                {{ end }}
+                            </td>
+                            <td class="py-3">
+                                <span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300">{{ .DesiredState }}</span>
+                            </td>
+                            <td class="py-3">
+                                <span class="rounded-full px-3 py-1 text-xs {{ if .Quarantined }}bg-red-500/20 text-red-300{{ else }}bg-emerald-500/20 text-emerald-300{{ end }}">{{ if .Quarantined }}on{{ else }}off{{ end }}</span>
+                            </td>
+                            <td class="py-3 text-slate-400">{{ .LastHeartbeat }}</td>
+                            <td class="py-3">
+                                <div class="flex flex-wrap gap-2">
+                                    {{ if eq .DesiredState "stopped" }}
+                                    <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/resume">
+                                        <button class="rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-500/30" type="submit">Start</button>
+                                    </form>
+                                    {{ else }}
+                                    <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/pause">
+                                        <button class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700" type="submit">Pause</button>
+                                    </form>
+                                    <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/resume">
+                                        <button class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700" type="submit">Resume</button>
+                                    </form>
+                                    <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/drain">
+                                        <button class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300 hover:bg-amber-500/30" type="submit">Drain</button>
+                                    </form>
+                                    <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/stop">
+                                        <button class="rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300 hover:bg-red-500/30" type="submit">Stop</button>
+                                    </form>
+                                    {{ end }}
+                                    {{ if .Quarantined }}
+                                    <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/unquarantine">
+                                        <button class="rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-500/30" type="submit">Unquarantine</button>
+                                    </form>
+                                    {{ else }}
+                                    <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/quarantine">
+                                        <button class="rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300 hover:bg-red-500/30" type="submit">Quarantine</button>
+                                    </form>
+                                    {{ end }}
+                                </div>
+                            </td>
+                        </tr>
+                        {{ else }}
+                        <tr>
+                            <td class="py-6 text-center text-slate-400" colspan="8">No active workers yet.</td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold">Decision Trace Explorer</h2>
+                    <p class="text-sm text-slate-400">Inspect risky/unknown probe decisions with attempt-chain evidence.</p>
+                </div>
+            </div>
+
+            {{ if .DecisionTraces.Error }}
+                <div class="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                    {{ .DecisionTraces.Error }}
+                </div>
+            {{ end }}
+
+            <form method="GET" action="{{ .BasePath }}/workers" class="mt-4 grid gap-3 md:grid-cols-5">
+                <input type="hidden" name="tab" value="runtime" />
+                <label class="space-y-1 text-xs text-slate-400">
+                    <span>Provider</span>
+                    <select name="trace_provider" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+                        <option value="">All providers</option>
+                        <option value="gmail" {{ if eq .DecisionTraces.Filter.Provider "gmail" }}selected{{ end }}>gmail</option>
+                        <option value="microsoft" {{ if eq .DecisionTraces.Filter.Provider "microsoft" }}selected{{ end }}>microsoft</option>
+                        <option value="yahoo" {{ if eq .DecisionTraces.Filter.Provider "yahoo" }}selected{{ end }}>yahoo</option>
+                        <option value="generic" {{ if eq .DecisionTraces.Filter.Provider "generic" }}selected{{ end }}>generic</option>
+                    </select>
+                </label>
+                <label class="space-y-1 text-xs text-slate-400">
+                    <span>Decision class</span>
+                    <select name="trace_decision_class" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+                        <option value="">All decisions</option>
+                        <option value="unknown" {{ if eq .DecisionTraces.Filter.DecisionClass "unknown" }}selected{{ end }}>unknown</option>
+                        <option value="retryable" {{ if eq .DecisionTraces.Filter.DecisionClass "retryable" }}selected{{ end }}>retryable</option>
+                        <option value="policy_blocked" {{ if eq .DecisionTraces.Filter.DecisionClass "policy_blocked" }}selected{{ end }}>policy_blocked</option>
+                        <option value="deliverable" {{ if eq .DecisionTraces.Filter.DecisionClass "deliverable" }}selected{{ end }}>deliverable</option>
+                        <option value="undeliverable" {{ if eq .DecisionTraces.Filter.DecisionClass "undeliverable" }}selected{{ end }}>undeliverable</option>
+                    </select>
+                </label>
+                <label class="space-y-1 text-xs text-slate-400">
+                    <span>Unknown reason tag</span>
+                    <input name="trace_reason_tag" value="{{ .DecisionTraces.Filter.ReasonTag }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" placeholder="provider_tempfail_unresolved" />
+                </label>
+                <label class="space-y-1 text-xs text-slate-400">
+                    <span>Policy version</span>
+                    <input name="trace_policy_version" value="{{ .DecisionTraces.Filter.PolicyVersion }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" placeholder="v4.0.0" />
+                </label>
+                <label class="space-y-1 text-xs text-slate-400">
+                    <span>Limit</span>
+                    <input name="trace_limit" type="number" min="1" max="100" value="{{ if gt .DecisionTraces.Filter.Limit 0 }}{{ .DecisionTraces.Filter.Limit }}{{ else }}20{{ end }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                </label>
+                <div class="md:col-span-5 flex flex-wrap items-center gap-2">
+                    <button type="submit" class="rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-400">Apply Filters</button>
+                    <a href="{{ .BasePath }}/workers?tab=runtime" class="rounded-full bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700">Reset</a>
+                </div>
+            </form>
+
+            <div class="mt-4 overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="text-xs uppercase text-slate-500">
+                        <tr>
+                            <th class="py-2">Observed</th>
+                            <th class="py-2">Provider</th>
+                            <th class="py-2">Decision</th>
+                            <th class="py-2">Reason</th>
+                            <th class="py-2">SMTP</th>
+                            <th class="py-2">Policy</th>
+                            <th class="py-2">Rule</th>
+                            <th class="py-2">Attempts</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800">
+                        {{ range .DecisionTraces.Records }}
+                            <tr>
+                                <td class="py-3 text-slate-400">{{ if .ObservedAt }}{{ .ObservedAt }}{{ else }}{{ .CreatedAt }}{{ end }}</td>
+                                <td class="py-3 text-slate-200">{{ .Provider }}</td>
+                                <td class="py-3 text-slate-200">{{ .DecisionClass }}</td>
+                                <td class="py-3 text-slate-300">{{ .ReasonTag }}</td>
+                                <td class="py-3 text-slate-300">{{ if .SMTPCode }}{{ .SMTPCode }}{{ else }}-{{ end }} {{ if .EnhancedCode }}({{ .EnhancedCode }}){{ end }}</td>
+                                <td class="py-3 text-slate-300">{{ if .PolicyVersion }}{{ .PolicyVersion }}{{ else }}-{{ end }}</td>
+                                <td class="py-3 text-slate-300">{{ if .MatchedRuleID }}{{ .MatchedRuleID }}{{ else }}-{{ end }}</td>
+                                <td class="py-3 text-slate-300">{{ len .AttemptChain }}</td>
+                            </tr>
+                        {{ else }}
+                            <tr>
+                                <td colspan="8" class="py-6 text-center text-slate-400">No decision traces found for this filter.</td>
+                            </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+
+            {{ if gt .DecisionTraces.NextBeforeID 0 }}
+                <div class="mt-4">
+                    <a
+                        href="{{ .BasePath }}/workers?tab=runtime&trace_provider={{ .DecisionTraces.Filter.Provider }}&trace_decision_class={{ .DecisionTraces.Filter.DecisionClass }}&trace_reason_tag={{ .DecisionTraces.Filter.ReasonTag }}&trace_policy_version={{ .DecisionTraces.Filter.PolicyVersion }}&trace_limit={{ .DecisionTraces.Filter.Limit }}&trace_before_id={{ .DecisionTraces.NextBeforeID }}"
+                        class="rounded-full bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                    >Load More</a>
+                </div>
+            {{ end }}
+        </section>
+    {{ end }}
+</section>
+
+<script defer>
+    window.addEventListener('DOMContentLoaded', () => {
+        const tbody = document.getElementById('workers-table-body');
+        const activeCount = document.getElementById('workers-active-count');
+        const pollIntervalSeconds = Math.max(2, Number({{ .PollIntervalSeconds }}) || 10);
+        const pollIntervalMs = pollIntervalSeconds * 1000;
+        if (!tbody) {
+            return;
+        }
+
+        const basePath = '{{ .BasePath }}';
+        const escapeHtml = (value) => String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+
+        const actionButton = (action, label, classes) => `
+            <form method="POST" action="${basePath}/workers/${encodeURIComponent(action.workerID)}/${action.name}">
+                <button class="${classes}" type="submit">${label}</button>
+            </form>
+        `;
+
+        const renderActions = (workerID, quarantined, desiredState) => {
+            const isStopped = desiredState === 'stopped';
+            const base = isStopped
+                ? [
+                    actionButton({ workerID, name: 'resume' }, 'Start', 'rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-500/30'),
+                ]
+                : [
+                    actionButton({ workerID, name: 'pause' }, 'Pause', 'rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700'),
+                    actionButton({ workerID, name: 'resume' }, 'Resume', 'rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700'),
+                    actionButton({ workerID, name: 'drain' }, 'Drain', 'rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300 hover:bg-amber-500/30'),
+                    actionButton({ workerID, name: 'stop' }, 'Stop', 'rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300 hover:bg-red-500/30'),
+                ];
+            if (quarantined) {
+                base.push(actionButton({ workerID, name: 'unquarantine' }, 'Unquarantine', 'rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-500/30'));
+            } else {
+                base.push(actionButton({ workerID, name: 'quarantine' }, 'Quarantine', 'rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300 hover:bg-red-500/30'));
+            }
+
+            return `<div class="flex flex-wrap gap-2">${base.join('')}</div>`;
+        };
+
+        const renderWorkers = (workers) => {
+            if (!Array.isArray(workers) || workers.length === 0) {
+                tbody.innerHTML = '<tr><td class="py-6 text-center text-slate-400" colspan="8">No active workers yet.</td></tr>';
+                if (activeCount) {
+                    activeCount.textContent = '0 active';
+                }
+                return;
+            }
+
+            const rows = workers.map((worker) => {
+                const rawWorkerID = String(worker.worker_id || '');
+                const workerID = escapeHtml(rawWorkerID);
+                const host = escapeHtml(worker.host || '');
+                const pool = escapeHtml(worker.pool || '-');
+                const status = escapeHtml(worker.status || 'unknown');
+                const desired = escapeHtml(worker.desired_state || 'running');
+                const statusLower = String(worker.status || 'unknown').toLowerCase();
+                const desiredLower = String(worker.desired_state || 'running').toLowerCase();
+                const heartbeat = escapeHtml(worker.last_heartbeat_at || '-');
+                const quarantined = Boolean(worker.quarantined);
+                const quarantineClass = quarantined ? 'bg-red-500/20 text-red-300' : 'bg-emerald-500/20 text-emerald-300';
+                const quarantineText = quarantined ? 'on' : 'off';
+                let statusClass = 'bg-slate-800 text-slate-200';
+                if (desiredLower === 'stopped') {
+                    statusClass = 'bg-red-500/20 text-red-300';
+                } else if (statusLower === 'online') {
+                    statusClass = 'bg-emerald-500/20 text-emerald-300';
+                } else if (statusLower === 'offline') {
+                    statusClass = 'bg-amber-500/20 text-amber-200';
+                }
+                let statusText = status;
+                if (desiredLower === 'stopped') {
+                    statusText = 'stopped';
+                } else if (statusLower === 'stopped' && desiredLower === 'running') {
+                    statusClass = 'bg-amber-500/20 text-amber-200';
+                    statusText = 'starting';
+                } else if (statusLower === 'running' && desiredLower === 'stopped') {
+                    statusClass = 'bg-amber-500/20 text-amber-200';
+                    statusText = 'stopping';
+                }
+
+                return `
+                    <tr>
+                        <td class="py-3 font-medium">${workerID}</td>
+                        <td class="py-3 text-slate-300">${host || '-'}</td>
+                        <td class="py-3 text-slate-300">${pool}</td>
+                        <td class="py-3"><span class="rounded-full px-3 py-1 text-xs ${statusClass}">${statusText}</span></td>
+                        <td class="py-3"><span class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300">${desired}</span></td>
+                        <td class="py-3"><span class="rounded-full px-3 py-1 text-xs ${quarantineClass}">${quarantineText}</span></td>
+                        <td class="py-3 text-slate-400">${heartbeat}</td>
+                        <td class="py-3">${renderActions(rawWorkerID, quarantined, desiredLower)}</td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = rows.join('');
+            if (activeCount) {
+                activeCount.textContent = `${workers.length} active`;
+            }
+        };
+
+        const refreshWorkers = async () => {
+            try {
+                const response = await fetch('/api/workers', { headers: { 'Accept': 'application/json' } });
+                if (!response.ok) {
+                    return;
+                }
+
+                const payload = await response.json();
+                renderWorkers(payload.data);
+            } catch (_) {}
+        };
+
+        refreshWorkers();
+        const intervalId = window.setInterval(refreshWorkers, pollIntervalMs);
+        window.addEventListener('beforeunload', () => window.clearInterval(intervalId));
+    });
+</script>
+{{ end }}

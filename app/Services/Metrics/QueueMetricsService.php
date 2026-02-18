@@ -11,60 +11,171 @@ use Illuminate\Support\Facades\Redis;
 
 class QueueMetricsService
 {
-    public function capture(): ?QueueMetric
+    /**
+     * Capture queue metrics for all active queue lanes.
+     */
+    public function capture(): int
     {
-        $driver = (string) config('queue.default', 'sync');
-        $queue = (string) config("queue.connections.{$driver}.queue", 'default');
+        $targets = $this->queueTargets();
+        if ($targets === []) {
+            return 0;
+        }
+
         $interval = max(1, (int) config('engine.metrics_sample_interval_seconds', 60));
-
-        $last = QueueMetric::query()
-            ->where('driver', $driver)
-            ->where('queue', $queue)
-            ->latest('captured_at')
-            ->first();
-
-        if ($last && $last->captured_at && $last->captured_at->diffInSeconds(now()) < $interval) {
-            return null;
-        }
-
-        try {
-            $metrics = match ($driver) {
-                'database' => $this->captureDatabaseQueue($queue),
-                'redis' => $this->captureRedisQueue($queue),
-                default => [
-                    'depth' => 0,
-                    'oldest_age_seconds' => null,
-                ],
-            };
-        } catch (\Throwable $exception) {
-            return null;
-        }
-
         $failedCount = (int) DB::table(config('queue.failed.table', 'failed_jobs'))->count();
         $throughput = VerificationJob::query()
             ->where('status', VerificationJobStatus::Completed)
             ->where('finished_at', '>=', now()->subMinute())
             ->count();
 
-        return QueueMetric::create([
+        $captured = 0;
+
+        foreach ($targets as $target) {
+            if (! $this->shouldCapture($target['connection'], $target['queue'], $interval)) {
+                continue;
+            }
+
+            try {
+                $metrics = match ($target['driver']) {
+                    'database' => $this->captureDatabaseQueue($target['connection'], $target['queue']),
+                    'redis' => $this->captureRedisQueue($target['connection'], $target['queue']),
+                    default => [
+                        'depth' => 0,
+                        'oldest_age_seconds' => null,
+                    ],
+                };
+            } catch (\Throwable $exception) {
+                continue;
+            }
+
+            QueueMetric::create([
+                'driver' => $target['connection'],
+                'queue' => $target['queue'],
+                'depth' => (int) ($metrics['depth'] ?? 0),
+                'oldest_age_seconds' => $metrics['oldest_age_seconds'] ?? null,
+                'failed_count' => $failedCount,
+                'throughput_per_min' => $throughput,
+                'captured_at' => now(),
+            ]);
+
+            $captured++;
+        }
+
+        return $captured;
+    }
+
+    private function shouldCapture(string $connection, string $queue, int $interval): bool
+    {
+        $last = QueueMetric::query()
+            ->where('driver', $connection)
+            ->where('queue', $queue)
+            ->latest('captured_at')
+            ->first();
+
+        if (! $last || ! $last->captured_at) {
+            return true;
+        }
+
+        return $last->captured_at->diffInSeconds(now()) >= $interval;
+    }
+
+    /**
+     * @return array<int, array{connection: string, driver: string, queue: string}>
+     */
+    private function queueTargets(): array
+    {
+        $defaultConnection = (string) config('queue.default', 'sync');
+        $targets = [];
+
+        if ($defaultConnection === 'redis') {
+            foreach ([
+                'redis_prepare',
+                'redis_parse',
+                'redis_smtp_probe',
+                'redis_finalize',
+                'redis_import',
+                'redis_cache_writeback',
+                'redis_seed_send_dispatch',
+                'redis_seed_send_events',
+                'redis_seed_send_reconcile',
+            ] as $connection) {
+                $driver = (string) config("queue.connections.{$connection}.driver", '');
+                $queue = (string) config("queue.connections.{$connection}.queue", '');
+
+                if ($driver !== 'redis' || $queue === '') {
+                    continue;
+                }
+
+                $targets[] = [
+                    'connection' => $connection,
+                    'driver' => 'redis',
+                    'queue' => $queue,
+                ];
+            }
+
+            $defaultQueue = (string) config('queue.connections.redis.queue', '');
+            if ($defaultQueue !== '') {
+                $targets[] = [
+                    'connection' => 'redis',
+                    'driver' => 'redis',
+                    'queue' => $defaultQueue,
+                ];
+            }
+
+            return $this->dedupeTargets($targets);
+        }
+
+        $driver = (string) config("queue.connections.{$defaultConnection}.driver", '');
+        if (! in_array($driver, ['database', 'redis'], true)) {
+            return [];
+        }
+
+        return [[
+            'connection' => $defaultConnection,
             'driver' => $driver,
-            'queue' => $queue,
-            'depth' => (int) ($metrics['depth'] ?? 0),
-            'oldest_age_seconds' => $metrics['oldest_age_seconds'] ?? null,
-            'failed_count' => $failedCount,
-            'throughput_per_min' => $throughput,
-            'captured_at' => now(),
-        ]);
+            'queue' => (string) config("queue.connections.{$defaultConnection}.queue", 'default'),
+        ]];
+    }
+
+    /**
+     * @param  array<int, array{connection: string, driver: string, queue: string}>  $targets
+     * @return array<int, array{connection: string, driver: string, queue: string}>
+     */
+    private function dedupeTargets(array $targets): array
+    {
+        $seen = [];
+        $deduped = [];
+
+        foreach ($targets as $target) {
+            $key = $target['connection'].'|'.$target['queue'];
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $deduped[] = $target;
+        }
+
+        return $deduped;
     }
 
     /**
      * @return array{depth: int, oldest_age_seconds: int|null}
      */
-    private function captureDatabaseQueue(string $queue): array
+    private function captureDatabaseQueue(string $connection, string $queue): array
     {
-        $table = config('queue.connections.database.table', 'jobs');
-        $depth = (int) DB::table($table)->where('queue', $queue)->count();
-        $oldest = DB::table($table)->where('queue', $queue)->min('created_at');
+        $table = (string) config("queue.connections.{$connection}.table", 'jobs');
+        $dbConnection = config("queue.connections.{$connection}.connection");
+
+        $depthQuery = $dbConnection
+            ? DB::connection((string) $dbConnection)->table($table)
+            : DB::table($table);
+        $oldestQuery = $dbConnection
+            ? DB::connection((string) $dbConnection)->table($table)
+            : DB::table($table);
+
+        $depth = (int) $depthQuery->where('queue', $queue)->count();
+        $oldest = $oldestQuery->where('queue', $queue)->min('created_at');
 
         return [
             'depth' => $depth,
@@ -75,12 +186,12 @@ class QueueMetricsService
     /**
      * @return array{depth: int, oldest_age_seconds: int|null}
      */
-    private function captureRedisQueue(string $queue): array
+    private function captureRedisQueue(string $connection, string $queue): array
     {
-        $connection = (string) config('queue.connections.redis.connection', 'default');
-        $redis = Redis::connection($connection);
+        $redisConnection = (string) config("queue.connections.{$connection}.connection", 'default');
+        $redis = Redis::connection($redisConnection);
 
-        $prefix = (string) config('queue.connections.redis.prefix', 'queues');
+        $prefix = (string) config("queue.connections.{$connection}.prefix", 'queues');
         $prefix = rtrim($prefix, ':');
         $key = $prefix.':'.$queue;
         $depth = (int) $redis->llen($key);
@@ -96,9 +207,9 @@ class QueueMetricsService
         ];
     }
 
-    private function parsePayloadAge(?string $payload): ?int
+    private function parsePayloadAge(mixed $payload): ?int
     {
-        if (! $payload) {
+        if (! is_string($payload) || $payload === '') {
             return null;
         }
 
