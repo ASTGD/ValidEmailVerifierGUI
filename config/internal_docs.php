@@ -66,7 +66,7 @@ return [
             'pages' => [
                 'change-log' => [
                     'title' => 'Operational Change Log',
-                    'path' => 'docs/CONTEXT_HANDOFF.md',
+                    'path' => 'docs/OPS_CHANGELOG.md',
                 ],
             ],
         ],

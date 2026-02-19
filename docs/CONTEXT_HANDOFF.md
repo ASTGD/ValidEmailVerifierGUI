@@ -1,6 +1,6 @@
 # Context Handoff (ValidEmailVerifierGUI)
 
-Last updated: 2026-02-11
+Last updated: 2026-02-19
 
 This document is the handoff bundle for a fresh workspace. It summarizes the current system state, key decisions, and how to resume work without losing context. Do not place secrets in this file.
 
@@ -28,9 +28,10 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Go control-plane is primary operational heartbeat source; Laravel heartbeat is fallback identity/liveness.
 
 ## 3) Important docs
+- `docs/README.md`
 - `docs/ENGINE_CONTRACT.md`
 - `docs/DEEP_VERIFICATION_ENGINE_PLAN.md`
-- `docs/SG5_AND_MONITORING_PLAN.md`
+- `docs/GO_WORKER_CONTROL_PLANE_SPEC.md`
 - `docs/S3_SETUP.md`
 - `docs/DYNAMODB_CACHE_READ_CONTROLS_PLAN.md`
 
@@ -125,6 +126,17 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 ---
 
 ## Update log
+
+### 2026-02-19 — Docs cleanup and reorganization (feature/docs-cleanup-reorg)
+- Consolidated Go UI reference into `docs/GO_WORKER_CONTROL_PLANE_SPEC.md`.
+- Moved historical docs into `docs/archive/`:
+  - `ADMIN_UI_PLAN.md`
+  - `SG5_AND_MONITORING_PLAN.md`
+  - `deep-verification-engine-plan.md` (legacy full copy)
+  - `GO_WORKER_DASHBOARD_UI.md` (legacy full copy)
+- Added canonical docs map: `docs/README.md`.
+- Added PM/Admin-facing operational changelog: `docs/OPS_CHANGELOG.md`.
+- Internal docs portal release-notes page now points to `docs/OPS_CHANGELOG.md` instead of `docs/CONTEXT_HANDOFF.md`.
 
 ### 2026-02-01 — Settings tabs (feature/settings-tabs)
 - Reorganized Engine Settings form into Filament tabs: Verification, Cache (DynamoDB), Monitoring.
