@@ -245,3 +245,48 @@ func TestLaravelEngineServerClientListDecisionTraces(t *testing.T) {
 		t.Fatalf("expected next_before_id 99, got %d", response.NextBeforeID)
 	}
 }
+
+func TestLaravelEngineServerClientExecuteServerCommand(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/internal/engine-servers/42/commands" {
+			t.Fatalf("unexpected request path %q", r.URL.Path)
+		}
+		if r.Method != http.MethodPost {
+			t.Fatalf("expected POST method, got %s", r.Method)
+		}
+		if got := r.Header.Get("X-Triggered-By"); got != "go-ui:test" {
+			t.Fatalf("expected triggered by header, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"id":               "cmd-123",
+				"engine_server_id": 42,
+				"action":           "stop",
+				"status":           "success",
+				"request_id":       "req-1",
+				"agent_command_id": "agt-999",
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewLaravelEngineServerClient(Config{
+		LaravelInternalAPIBaseURL: server.URL,
+		LaravelInternalAPIToken:   "internal-token",
+	})
+	if client == nil {
+		t.Fatal("expected configured client")
+	}
+
+	command, err := client.ExecuteServerCommand(context.Background(), 42, LaravelEngineServerCommandPayload{
+		Action: "stop",
+		Reason: "maintenance",
+	}, "go-ui:test")
+	if err != nil {
+		t.Fatalf("expected execute command to succeed, got %v", err)
+	}
+	if command.ID != "cmd-123" || command.Status != "success" {
+		t.Fatalf("unexpected command response: %#v", command)
+	}
+}

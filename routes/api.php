@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Feedback\FeedbackOutcomesController;
+use App\Http\Controllers\Api\Internal\EngineServerCommandController;
 use App\Http\Controllers\Api\Internal\EngineServerController;
 use App\Http\Controllers\Api\Internal\EngineServerProvisioningBundleController;
 use App\Http\Controllers\Api\Internal\SmtpDecisionTraceController;
@@ -117,6 +118,14 @@ Route::middleware(['go.internal.token', 'throttle:go-internal-api'])
             'engine-servers/{engineServer}/provisioning-bundles',
             [EngineServerProvisioningBundleController::class, 'store']
         )->name('engine-servers.provisioning-bundles.store');
+        Route::post(
+            'engine-servers/{engineServer}/commands',
+            [EngineServerCommandController::class, 'store']
+        )->name('engine-servers.commands.store');
+        Route::get(
+            'engine-servers/{engineServer}/commands/{engineServerCommand}',
+            [EngineServerCommandController::class, 'show']
+        )->name('engine-servers.commands.show');
         Route::get(
             'engine-servers/{engineServer}/provisioning-bundles/latest',
             [EngineServerProvisioningBundleController::class, 'showLatest']

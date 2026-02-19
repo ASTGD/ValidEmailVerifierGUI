@@ -117,6 +117,14 @@ class EngineServerController extends Controller
             'verifier_domain_id' => $server->verifier_domain_id,
             'verifier_domain' => $server->verifierDomain?->domain,
             'notes' => $server->notes,
+            'process_control_mode' => $server->process_control_mode,
+            'agent_enabled' => (bool) $server->agent_enabled,
+            'agent_base_url' => $server->agent_base_url,
+            'agent_timeout_seconds' => $server->agent_timeout_seconds,
+            'agent_verify_tls' => (bool) $server->agent_verify_tls,
+            'agent_service_name' => $server->agent_service_name,
+            'last_agent_seen_at' => $server->last_agent_seen_at?->toISOString(),
+            'last_agent_error' => $server->last_agent_error,
             'latest_provisioning_bundle' => $latestBundleData,
         ];
     }

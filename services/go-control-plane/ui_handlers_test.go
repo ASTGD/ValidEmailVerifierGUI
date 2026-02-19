@@ -141,6 +141,9 @@ func TestWorkersTemplateRendersRegistryTabAndForms(t *testing.T) {
 					Status:               "online",
 					RuntimeMatchStatus:   "matched",
 					RuntimeMatchWorkerID: "7",
+					ProcessControlMode:   "agent_systemd",
+					AgentEnabled:         true,
+					AgentServiceName:     "vev-worker.service",
 				},
 			},
 			VerifierDomains: []LaravelVerifierDomainOption{
@@ -154,6 +157,11 @@ func TestWorkersTemplateRendersRegistryTabAndForms(t *testing.T) {
 				VerifierDomainID:       1,
 				MaxConcurrency:         10,
 				Status:                 "online",
+				ProcessControlMode:     "agent_systemd",
+				AgentEnabled:           true,
+				AgentVerifyTLS:         true,
+				AgentTimeoutSeconds:    8,
+				AgentServiceName:       "vev-worker.service",
 				LatestProvisioningInfo: nil,
 			},
 			ProvisionBundleServerID: 7,
@@ -187,6 +195,7 @@ func TestWorkersTemplateRendersRegistryTabAndForms(t *testing.T) {
 	assertContains("Server Registry &amp; Provisioning")
 	assertContains("/verifier-engine-room/workers/servers")
 	assertContains("/verifier-engine-room/workers/servers/7/provision")
+	assertContains("/verifier-engine-room/workers/servers/7/command")
 	assertContains("Latest Provisioning Bundle")
 	assertContains("Create Server")
 	assertContains("Save Changes")

@@ -32,6 +32,14 @@ type LaravelEngineServerRecord struct {
 	VerifierDomainID       int                             `json:"verifier_domain_id"`
 	VerifierDomain         string                          `json:"verifier_domain"`
 	Notes                  string                          `json:"notes"`
+	ProcessControlMode     string                          `json:"process_control_mode"`
+	AgentEnabled           bool                            `json:"agent_enabled"`
+	AgentBaseURL           string                          `json:"agent_base_url"`
+	AgentTimeoutSeconds    int                             `json:"agent_timeout_seconds"`
+	AgentVerifyTLS         bool                            `json:"agent_verify_tls"`
+	AgentServiceName       string                          `json:"agent_service_name"`
+	LastAgentSeenAt        string                          `json:"last_agent_seen_at"`
+	LastAgentError         string                          `json:"last_agent_error"`
 	LatestProvisioningInfo *LaravelProvisioningBundleBrief `json:"latest_provisioning_bundle"`
 	RuntimeMatchStatus     string                          `json:"-"`
 	RuntimeMatchWorkerID   string                          `json:"-"`
@@ -95,17 +103,46 @@ type LaravelDecisionTraceResponse struct {
 }
 
 type LaravelEngineServerUpsertPayload struct {
-	Name             string `json:"name"`
-	IPAddress        string `json:"ip_address"`
-	Environment      string `json:"environment"`
-	Region           string `json:"region"`
-	IsActive         bool   `json:"is_active"`
-	DrainMode        bool   `json:"drain_mode"`
-	MaxConcurrency   *int   `json:"max_concurrency"`
-	HeloName         string `json:"helo_name"`
-	MailFromAddress  string `json:"mail_from_address"`
-	VerifierDomainID *int   `json:"verifier_domain_id"`
-	Notes            string `json:"notes"`
+	Name                string `json:"name"`
+	IPAddress           string `json:"ip_address"`
+	Environment         string `json:"environment"`
+	Region              string `json:"region"`
+	IsActive            bool   `json:"is_active"`
+	DrainMode           bool   `json:"drain_mode"`
+	MaxConcurrency      *int   `json:"max_concurrency"`
+	HeloName            string `json:"helo_name"`
+	MailFromAddress     string `json:"mail_from_address"`
+	VerifierDomainID    *int   `json:"verifier_domain_id"`
+	Notes               string `json:"notes"`
+	ProcessControlMode  string `json:"process_control_mode"`
+	AgentEnabled        bool   `json:"agent_enabled"`
+	AgentBaseURL        string `json:"agent_base_url"`
+	AgentTimeoutSeconds *int   `json:"agent_timeout_seconds"`
+	AgentVerifyTLS      bool   `json:"agent_verify_tls"`
+	AgentServiceName    string `json:"agent_service_name"`
+}
+
+type LaravelEngineServerCommandPayload struct {
+	Action         string `json:"action"`
+	Reason         string `json:"reason,omitempty"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+}
+
+type LaravelEngineServerCommandRecord struct {
+	ID             string `json:"id"`
+	EngineServerID int    `json:"engine_server_id"`
+	Action         string `json:"action"`
+	Status         string `json:"status"`
+	Source         string `json:"source"`
+	RequestID      string `json:"request_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+	AgentCommandID string `json:"agent_command_id"`
+	Reason         string `json:"reason"`
+	ErrorMessage   string `json:"error_message"`
+	StartedAt      string `json:"started_at"`
+	FinishedAt     string `json:"finished_at"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
 }
 
 type LaravelEngineServerClient struct {
@@ -274,6 +311,27 @@ func (c *LaravelEngineServerClient) LatestProvisioningBundle(ctx context.Context
 	}{}
 	path := "/api/internal/engine-servers/" + url.PathEscape(strconv.Itoa(serverID)) + "/provisioning-bundles/latest"
 	if err := c.doJSON(ctx, http.MethodGet, path, nil, "", &responseBody); err != nil {
+		return nil, err
+	}
+
+	return &responseBody.Data, nil
+}
+
+func (c *LaravelEngineServerClient) ExecuteServerCommand(
+	ctx context.Context,
+	serverID int,
+	payload LaravelEngineServerCommandPayload,
+	triggeredBy string,
+) (*LaravelEngineServerCommandRecord, error) {
+	if c == nil {
+		return nil, fmt.Errorf("laravel engine server client is not configured")
+	}
+
+	responseBody := struct {
+		Data LaravelEngineServerCommandRecord `json:"data"`
+	}{}
+	path := "/api/internal/engine-servers/" + url.PathEscape(strconv.Itoa(serverID)) + "/commands"
+	if err := c.doJSON(ctx, http.MethodPost, path, payload, triggeredBy, &responseBody); err != nil {
 		return nil, err
 	}
 
@@ -574,6 +632,8 @@ func internalAPIAction(method string, path string) string {
 		return "latest_bundle"
 	case strings.HasSuffix(normalized, "/provisioning-bundles"):
 		return "provision_bundle"
+	case strings.HasSuffix(normalized, "/commands") && strings.EqualFold(method, http.MethodPost):
+		return "execute_server_command"
 	case strings.HasPrefix(normalized, "/api/internal/engine-servers/") && strings.EqualFold(method, http.MethodPut):
 		return "update_server"
 	default:
