@@ -24,6 +24,26 @@ Practical rule:
   - Username: any non-empty value
   - Password: `CONTROL_PLANE_TOKEN`
 
+## Operator UI Surface
+Route base: `/verifier-engine-room`.
+
+Main pages:
+- `overview`
+  - Worker/pool/desired/error/incident summary
+  - Provider health and probe quality summary
+  - Routing quality KPIs (anti-affinity, affinity hit, fallback, pool skew)
+  - SSE event stream for live updates
+- `workers`
+  - `Runtime Workers` tab for live workers and control actions
+  - `Server Registry & Provisioning` tab for Laravel-backed server CRUD and bundle generation
+  - Runtime/registry match indicators: `matched`, `no runtime heartbeat`, `runtime-only orphan`
+- `pools`
+  - Pool desired/online visibility and scale actions
+- `alerts`
+  - Alert history and incident lifecycle visibility
+- `settings`
+  - Runtime safety, provider controls, and policy lifecycle controls
+
 ## Core Endpoints
 ### Worker and pool control
 - `POST /api/workers/heartbeat`
