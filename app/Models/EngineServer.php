@@ -23,6 +23,15 @@ class EngineServer extends Model
         'identity_domain',
         'verifier_domain_id',
         'notes',
+        'process_control_mode',
+        'agent_enabled',
+        'agent_base_url',
+        'agent_timeout_seconds',
+        'agent_verify_tls',
+        'agent_service_name',
+        'last_agent_status',
+        'last_agent_seen_at',
+        'last_agent_error',
     ];
 
     protected $casts = [
@@ -30,6 +39,11 @@ class EngineServer extends Model
         'is_active' => 'boolean',
         'drain_mode' => 'boolean',
         'max_concurrency' => 'integer',
+        'agent_enabled' => 'boolean',
+        'agent_timeout_seconds' => 'integer',
+        'agent_verify_tls' => 'boolean',
+        'last_agent_status' => 'array',
+        'last_agent_seen_at' => 'datetime',
     ];
 
     public function isOnline(): bool
@@ -85,6 +99,11 @@ class EngineServer extends Model
         return $this->hasMany(EngineServerProvisioningBundle::class);
     }
 
+    public function commands(): HasMany
+    {
+        return $this->hasMany(EngineServerCommand::class);
+    }
+
     public function latestProvisioningBundle(): HasOne
     {
         return $this->hasOne(EngineServerProvisioningBundle::class)->latestOfMany();
@@ -93,5 +112,10 @@ class EngineServer extends Model
     public function verifierDomain(): BelongsTo
     {
         return $this->belongsTo(VerifierDomain::class);
+    }
+
+    public function supportsAgentProcessControl(): bool
+    {
+        return $this->process_control_mode === 'agent_systemd' && $this->agent_enabled;
     }
 }

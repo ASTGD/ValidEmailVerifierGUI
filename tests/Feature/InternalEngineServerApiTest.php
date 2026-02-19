@@ -6,6 +6,7 @@ use App\Models\EngineServer;
 use App\Models\SmtpDecisionTrace;
 use App\Models\VerifierDomain;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class InternalEngineServerApiTest extends TestCase
@@ -21,6 +22,9 @@ class InternalEngineServerApiTest extends TestCase
         config()->set('engine.worker_registry', 'ghcr.io');
         config()->set('engine.worker_image', 'ghcr.io/astgd/vev-engine');
         config()->set('engine.worker_env_path', '/opt/vev/worker.env');
+        config()->set('engine.worker_agent_port', 9713);
+        config()->set('engine_servers.process_control.agent_token', 'agent-token');
+        config()->set('engine_servers.process_control.agent_hmac_secret', 'agent-secret');
     }
 
     public function test_internal_engine_server_api_requires_internal_token(): void
@@ -254,6 +258,118 @@ class InternalEngineServerApiTest extends TestCase
             ->assertJsonStructure([
                 'meta' => ['next_before_id'],
             ]);
+    }
+
+    public function test_internal_engine_server_api_can_execute_agent_command(): void
+    {
+        Http::fake([
+            'https://agent.example/v1/commands' => Http::response([
+                'status' => 'success',
+                'agent_command_id' => 'agt-100',
+                'service_state' => 'inactive',
+            ], 200),
+        ]);
+
+        $server = EngineServer::query()->create([
+            'name' => 'engine-command',
+            'ip_address' => '10.0.0.50',
+            'is_active' => true,
+            'drain_mode' => false,
+            'process_control_mode' => 'agent_systemd',
+            'agent_enabled' => true,
+            'agent_base_url' => 'https://agent.example',
+            'agent_timeout_seconds' => 6,
+            'agent_verify_tls' => true,
+            'agent_service_name' => 'vev-worker.service',
+        ]);
+
+        $response = $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/engine-servers/'.$server->id.'/commands', [
+                'action' => 'stop',
+                'reason' => 'maintenance',
+                'idempotency_key' => 'stop-'.$server->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.action', 'stop')
+            ->assertJsonPath('data.status', 'success')
+            ->assertJsonPath('data.agent_command_id', 'agt-100');
+
+        $commandId = (string) $response->json('data.id');
+        $this->assertDatabaseHas('engine_server_commands', [
+            'id' => $commandId,
+            'engine_server_id' => $server->id,
+            'action' => 'stop',
+            'status' => 'success',
+            'agent_command_id' => 'agt-100',
+        ]);
+
+        $this->withHeaders($this->internalHeaders())
+            ->getJson('/api/internal/engine-servers/'.$server->id.'/commands/'.$commandId)
+            ->assertOk()
+            ->assertJsonPath('data.id', $commandId)
+            ->assertJsonPath('data.status', 'success');
+
+        Http::assertSent(function (\Illuminate\Http\Client\Request $request): bool {
+            return $request->url() === 'https://agent.example/v1/commands'
+                && $request->method() === 'POST'
+                && $request->header('Authorization')[0] === 'Bearer agent-token';
+        });
+    }
+
+    public function test_internal_engine_server_api_defaults_agent_base_url_for_agent_mode(): void
+    {
+        $response = $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/engine-servers', [
+                'name' => 'engine-agent-default-url',
+                'ip_address' => '10.0.0.77',
+                'is_active' => true,
+                'drain_mode' => false,
+                'process_control_mode' => 'agent_systemd',
+                'agent_enabled' => true,
+                'agent_service_name' => 'vev-worker.service',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.process_control_mode', 'agent_systemd')
+            ->assertJsonPath('data.agent_enabled', true)
+            ->assertJsonPath('data.agent_base_url', 'http://10.0.0.77:9713');
+
+        $this->assertDatabaseHas('engine_servers', [
+            'id' => (int) $response->json('data.id'),
+            'agent_base_url' => 'http://10.0.0.77:9713',
+        ]);
+    }
+
+    public function test_internal_engine_server_api_marks_command_failed_when_agent_process_control_disabled(): void
+    {
+        Http::fake();
+
+        $server = EngineServer::query()->create([
+            'name' => 'engine-command-disabled',
+            'ip_address' => '10.0.0.51',
+            'is_active' => true,
+            'drain_mode' => false,
+            'process_control_mode' => 'control_plane_only',
+            'agent_enabled' => false,
+        ]);
+
+        $response = $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/engine-servers/'.$server->id.'/commands', [
+                'action' => 'start',
+                'idempotency_key' => 'start-'.$server->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.action', 'start')
+            ->assertJsonPath('data.status', 'failed');
+
+        $commandId = (string) $response->json('data.id');
+        $this->assertDatabaseHas('engine_server_commands', [
+            'id' => $commandId,
+            'engine_server_id' => $server->id,
+            'action' => 'start',
+            'status' => 'failed',
+        ]);
+
+        Http::assertNothingSent();
     }
 
     /**

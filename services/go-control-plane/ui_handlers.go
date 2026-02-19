@@ -510,6 +510,81 @@ func (s *Server) handleUIProvisionEngineServer(w http.ResponseWriter, r *http.Re
 	})
 }
 
+func (s *Server) handleUIEngineServerCommand(w http.ResponseWriter, r *http.Request) {
+	if !s.cfg.ServerRegistryUIEnabled {
+		http.NotFound(w, r)
+		return
+	}
+	if s.laravelEngineClient == nil {
+		s.redirectWorkersRegistry(w, r, url.Values{
+			"registry_error": []string{"Laravel internal API is not configured."},
+		})
+		return
+	}
+
+	serverID, err := strconv.Atoi(strings.TrimSpace(chi.URLParam(r, "serverID")))
+	if err != nil || serverID <= 0 {
+		s.redirectWorkersRegistry(w, r, url.Values{
+			"registry_error": []string{"Invalid server id."},
+		})
+		return
+	}
+
+	if parseErr := r.ParseForm(); parseErr != nil {
+		s.redirectWorkersRegistry(w, r, url.Values{
+			"registry_error": []string{"Invalid command payload."},
+			"edit_server_id": []string{strconv.Itoa(serverID)},
+		})
+		return
+	}
+
+	action := strings.ToLower(strings.TrimSpace(r.FormValue("action")))
+	switch action {
+	case "start", "stop", "restart", "status":
+	default:
+		s.redirectWorkersRegistry(w, r, url.Values{
+			"registry_error": []string{"Invalid command action."},
+			"edit_server_id": []string{strconv.Itoa(serverID)},
+		})
+		return
+	}
+
+	command, execErr := s.laravelEngineClient.ExecuteServerCommand(
+		r.Context(),
+		serverID,
+		LaravelEngineServerCommandPayload{
+			Action:         action,
+			Reason:         strings.TrimSpace(r.FormValue("reason")),
+			IdempotencyKey: strings.TrimSpace(r.FormValue("idempotency_key")),
+		},
+		uiTriggeredBy(r),
+	)
+	if execErr != nil {
+		s.redirectWorkersRegistry(w, r, url.Values{
+			"registry_error": []string{mapRegistryActionError("execute server command", execErr)},
+			"edit_server_id": []string{strconv.Itoa(serverID)},
+		})
+		return
+	}
+
+	if strings.EqualFold(command.Status, "failed") {
+		message := strings.TrimSpace(command.ErrorMessage)
+		if message == "" {
+			message = "Server command failed."
+		}
+		s.redirectWorkersRegistry(w, r, url.Values{
+			"registry_error": []string{message},
+			"edit_server_id": []string{strconv.Itoa(serverID)},
+		})
+		return
+	}
+
+	s.redirectWorkersRegistry(w, r, url.Values{
+		"registry_notice": []string{fmt.Sprintf("Server command %s completed (%s).", action, command.Status)},
+		"edit_server_id":  []string{strconv.Itoa(serverID)},
+	})
+}
+
 func (s *Server) redirectWorkersRegistry(w http.ResponseWriter, r *http.Request, query url.Values) {
 	if query == nil {
 		query = url.Values{}
@@ -539,15 +614,24 @@ func parseEngineServerUpsertPayload(r *http.Request) (LaravelEngineServerUpsertP
 	}
 
 	payload := LaravelEngineServerUpsertPayload{
-		Name:            name,
-		IPAddress:       ipAddress,
-		Environment:     strings.TrimSpace(r.FormValue("environment")),
-		Region:          strings.TrimSpace(r.FormValue("region")),
-		IsActive:        parseFormBoolean(r.FormValue("is_active")),
-		DrainMode:       parseFormBoolean(r.FormValue("drain_mode")),
-		HeloName:        strings.TrimSpace(r.FormValue("helo_name")),
-		MailFromAddress: strings.TrimSpace(r.FormValue("mail_from_address")),
-		Notes:           strings.TrimSpace(r.FormValue("notes")),
+		Name:               name,
+		IPAddress:          ipAddress,
+		Environment:        strings.TrimSpace(r.FormValue("environment")),
+		Region:             strings.TrimSpace(r.FormValue("region")),
+		IsActive:           parseFormBoolean(r.FormValue("is_active")),
+		DrainMode:          parseFormBoolean(r.FormValue("drain_mode")),
+		HeloName:           strings.TrimSpace(r.FormValue("helo_name")),
+		MailFromAddress:    strings.TrimSpace(r.FormValue("mail_from_address")),
+		Notes:              strings.TrimSpace(r.FormValue("notes")),
+		ProcessControlMode: normalizeProcessControlMode(r.FormValue("process_control_mode")),
+		AgentEnabled:       parseFormBoolean(r.FormValue("agent_enabled")),
+		AgentBaseURL:       strings.TrimSpace(r.FormValue("agent_base_url")),
+		AgentVerifyTLS:     true,
+		AgentServiceName:   strings.TrimSpace(r.FormValue("agent_service_name")),
+	}
+
+	if rawAgentVerifyTLS := strings.TrimSpace(r.FormValue("agent_verify_tls")); rawAgentVerifyTLS != "" {
+		payload.AgentVerifyTLS = parseFormBoolean(rawAgentVerifyTLS)
 	}
 
 	if maxConcurrencyRaw := strings.TrimSpace(r.FormValue("max_concurrency")); maxConcurrencyRaw != "" {
@@ -566,7 +650,24 @@ func parseEngineServerUpsertPayload(r *http.Request) (LaravelEngineServerUpsertP
 		payload.VerifierDomainID = &verifierDomainID
 	}
 
+	if agentTimeoutRaw := strings.TrimSpace(r.FormValue("agent_timeout_seconds")); agentTimeoutRaw != "" {
+		agentTimeout, err := strconv.Atoi(agentTimeoutRaw)
+		if err != nil || agentTimeout < 2 || agentTimeout > 30 {
+			return LaravelEngineServerUpsertPayload{}, fmt.Errorf("agent timeout must be between 2 and 30 seconds")
+		}
+		payload.AgentTimeoutSeconds = &agentTimeout
+	}
+
 	return payload, nil
+}
+
+func normalizeProcessControlMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "agent_systemd":
+		return "agent_systemd"
+	default:
+		return "control_plane_only"
+	}
 }
 
 func parseFormBoolean(raw string) bool {

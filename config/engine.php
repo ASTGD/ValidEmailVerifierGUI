@@ -180,6 +180,7 @@ return [
     'worker_runtime_pids_limit' => (int) env('ENGINE_WORKER_RUNTIME_PIDS_LIMIT', 256),
     'worker_runtime_memory_limit' => env('ENGINE_WORKER_RUNTIME_MEMORY_LIMIT'),
     'worker_runtime_cpu_limit' => env('ENGINE_WORKER_RUNTIME_CPU_LIMIT'),
+    'worker_agent_port' => (int) env('ENGINE_WORKER_AGENT_PORT', 9713),
     'deliverability_score' => [
         'base' => [
             'valid' => (int) env('ENGINE_SCORE_BASE_VALID', 90),
