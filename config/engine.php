@@ -134,6 +134,23 @@ return [
         'preferred_pool' => (int) env('PROBE_ROUTING_WEIGHT_PREFERRED_POOL', 30),
         'retry_bonus' => (int) env('PROBE_ROUTING_WEIGHT_RETRY_BONUS', 10),
     ],
+    'pool_policy_profiles' => [
+        'standard' => [
+            'label' => 'Standard',
+            'provider_mode' => 'normal',
+            'routing_bonus' => 0,
+        ],
+        'low_hit' => [
+            'label' => 'Low Hit',
+            'provider_mode' => 'cautious',
+            'routing_bonus' => 20,
+        ],
+        'warmup' => [
+            'label' => 'Warmup',
+            'provider_mode' => 'degraded_probe',
+            'routing_bonus' => 10,
+        ],
+    ],
     'reputation_window_hours' => (int) env('ENGINE_REPUTATION_WINDOW_HOURS', 24),
     'reputation_min_samples' => (int) env('ENGINE_REPUTATION_MIN_SAMPLES', 100),
     'reputation_tempfail_warn_rate' => (float) env('ENGINE_REPUTATION_TEMPFAIL_WARN_RATE', 0.2),

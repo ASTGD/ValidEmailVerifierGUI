@@ -290,3 +290,278 @@ func TestLaravelEngineServerClientExecuteServerCommand(t *testing.T) {
 		t.Fatalf("unexpected command response: %#v", command)
 	}
 }
+
+func TestLaravelEngineServerClientLatestProvisioningBundleAllowsArrayDownloadURLs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/internal/engine-servers/7/provisioning-bundles/latest" {
+			t.Fatalf("unexpected request path %q", r.URL.Path)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"bundle_uuid":              "bundle-7",
+				"engine_server_id":         7,
+				"download_urls":            []any{},
+				"install_command_template": nil,
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewLaravelEngineServerClient(Config{
+		LaravelInternalAPIBaseURL: server.URL,
+		LaravelInternalAPIToken:   "internal-token",
+	})
+	if client == nil {
+		t.Fatal("expected configured client")
+	}
+
+	bundle, err := client.LatestProvisioningBundle(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("expected latest bundle call to succeed, got %v", err)
+	}
+	if bundle == nil {
+		t.Fatal("expected bundle response")
+	}
+	if len(bundle.DownloadURLs) != 0 {
+		t.Fatalf("expected empty download URLs map, got %#v", bundle.DownloadURLs)
+	}
+}
+
+func TestLaravelEngineServerClientListPools(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/internal/engine-pools" {
+			t.Fatalf("unexpected request path %q", r.URL.Path)
+		}
+		if r.Method != http.MethodGet {
+			t.Fatalf("expected GET method, got %s", r.Method)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer internal-token" {
+			t.Fatalf("expected bearer token, got %q", got)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{
+					"id":          2,
+					"slug":        "gmail-lowhit",
+					"name":        "Gmail Low Hit",
+					"is_active":   true,
+					"is_default":  false,
+					"description": "Low frequency profile for Gmail",
+					"provider_profiles": map[string]string{
+						"generic":   "standard",
+						"gmail":     "low_hit",
+						"microsoft": "standard",
+						"yahoo":     "standard",
+					},
+					"linked_servers_count": 3,
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewLaravelEngineServerClient(Config{
+		LaravelInternalAPIBaseURL: server.URL,
+		LaravelInternalAPIToken:   "internal-token",
+	})
+	if client == nil {
+		t.Fatal("expected configured client")
+	}
+
+	pools, err := client.ListPools(context.Background())
+	if err != nil {
+		t.Fatalf("expected list pools to succeed, got %v", err)
+	}
+	if len(pools) != 1 {
+		t.Fatalf("expected one pool, got %d", len(pools))
+	}
+	if pools[0].Slug != "gmail-lowhit" {
+		t.Fatalf("expected pool slug gmail-lowhit, got %q", pools[0].Slug)
+	}
+	if pools[0].ProviderProfiles["gmail"] != "low_hit" {
+		t.Fatalf("expected gmail profile low_hit, got %q", pools[0].ProviderProfiles["gmail"])
+	}
+}
+
+func TestLaravelEngineServerClientPoolMutations(t *testing.T) {
+	var createSeen bool
+	var updateSeen bool
+	var archiveSeen bool
+	var setDefaultSeen bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/internal/engine-pools":
+			createSeen = true
+			var payload LaravelEnginePoolUpsertPayload
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("failed to decode create payload: %v", err)
+			}
+			if payload.Slug != "gmail-lowhit" {
+				t.Fatalf("expected create slug gmail-lowhit, got %q", payload.Slug)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"id":         7,
+					"slug":       payload.Slug,
+					"name":       payload.Name,
+					"is_active":  true,
+					"is_default": false,
+					"provider_profiles": map[string]string{
+						"generic":   "standard",
+						"gmail":     "low_hit",
+						"microsoft": "standard",
+						"yahoo":     "standard",
+					},
+				},
+			})
+		case r.Method == http.MethodPut && r.URL.Path == "/api/internal/engine-pools/7":
+			updateSeen = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"id":         7,
+					"slug":       "gmail-lowhit",
+					"name":       "Gmail Low Hit Updated",
+					"is_active":  true,
+					"is_default": false,
+					"provider_profiles": map[string]string{
+						"generic":   "standard",
+						"gmail":     "low_hit",
+						"microsoft": "warmup",
+						"yahoo":     "standard",
+					},
+				},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/internal/engine-pools/7/archive":
+			archiveSeen = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"id":         7,
+					"slug":       "gmail-lowhit",
+					"name":       "Gmail Low Hit Updated",
+					"is_active":  false,
+					"is_default": false,
+				},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/internal/engine-pools/7/set-default":
+			setDefaultSeen = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"id":         7,
+					"slug":       "gmail-lowhit",
+					"name":       "Gmail Low Hit Updated",
+					"is_active":  true,
+					"is_default": true,
+				},
+			})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := NewLaravelEngineServerClient(Config{
+		LaravelInternalAPIBaseURL: server.URL,
+		LaravelInternalAPIToken:   "internal-token",
+	})
+	if client == nil {
+		t.Fatal("expected configured client")
+	}
+
+	payload := LaravelEnginePoolUpsertPayload{
+		Slug:        "gmail-lowhit",
+		Name:        "Gmail Low Hit",
+		Description: "Low frequency profile for Gmail",
+		IsActive:    true,
+		ProviderProfiles: map[string]string{
+			"generic":   "standard",
+			"gmail":     "low_hit",
+			"microsoft": "standard",
+			"yahoo":     "standard",
+		},
+	}
+
+	created, err := client.CreatePool(context.Background(), payload, "go-ui:test")
+	if err != nil {
+		t.Fatalf("expected create pool to succeed, got %v", err)
+	}
+	if created == nil || created.ID != 7 {
+		t.Fatalf("unexpected create response %#v", created)
+	}
+
+	updated, err := client.UpdatePool(context.Background(), 7, payload, "go-ui:test")
+	if err != nil {
+		t.Fatalf("expected update pool to succeed, got %v", err)
+	}
+	if updated == nil || updated.Name != "Gmail Low Hit Updated" {
+		t.Fatalf("unexpected update response %#v", updated)
+	}
+
+	archived, err := client.ArchivePool(context.Background(), 7, "go-ui:test")
+	if err != nil {
+		t.Fatalf("expected archive pool to succeed, got %v", err)
+	}
+	if archived == nil || archived.IsActive {
+		t.Fatalf("unexpected archive response %#v", archived)
+	}
+
+	defaulted, err := client.SetDefaultPool(context.Background(), 7, "go-ui:test")
+	if err != nil {
+		t.Fatalf("expected set default pool to succeed, got %v", err)
+	}
+	if defaulted == nil || !defaulted.IsDefault {
+		t.Fatalf("unexpected set default response %#v", defaulted)
+	}
+
+	if !createSeen || !updateSeen || !archiveSeen || !setDefaultSeen {
+		t.Fatalf("expected all pool mutation endpoints to be called, create=%t update=%t archive=%t setDefault=%t", createSeen, updateSeen, archiveSeen, setDefaultSeen)
+	}
+}
+
+func TestLaravelEngineServerClientDeleteServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/internal/engine-servers/42" {
+			t.Fatalf("unexpected request path %q", r.URL.Path)
+		}
+		if r.Method != http.MethodDelete {
+			t.Fatalf("expected DELETE method, got %s", r.Method)
+		}
+		if got := r.Header.Get("X-Triggered-By"); got != "go-ui:test" {
+			t.Fatalf("expected triggered by header, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"id":      42,
+				"name":    "engine-42",
+				"deleted": true,
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewLaravelEngineServerClient(Config{
+		LaravelInternalAPIBaseURL: server.URL,
+		LaravelInternalAPIToken:   "internal-token",
+	})
+	if client == nil {
+		t.Fatal("expected configured client")
+	}
+
+	deleted, err := client.DeleteServer(context.Background(), 42, "go-ui:test")
+	if err != nil {
+		t.Fatalf("expected delete server to succeed, got %v", err)
+	}
+	if deleted == nil {
+		t.Fatal("expected deleted server payload")
+	}
+	if deleted.ID != 42 || deleted.Name != "engine-42" {
+		t.Fatalf("unexpected delete response: %#v", deleted)
+	}
+}

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\EngineServer;
 use App\Models\EngineServerProvisioningBundle;
+use App\Models\EngineWorkerPool;
 use App\Models\User;
 use App\Support\Roles;
 use Illuminate\Support\Facades\Storage;
@@ -19,7 +20,7 @@ class EngineWorkerProvisioningService
     {
         $this->guardConfig($server);
 
-        $server->loadMissing('verifierDomain');
+        $server->loadMissing(['verifierDomain', 'workerPool']);
 
         $ttlMinutes = (int) config('engine.worker_provisioning_ttl_minutes', 60);
         $expiresAt = now()->addMinutes(max(1, $ttlMinutes));
@@ -34,9 +35,13 @@ class EngineWorkerProvisioningService
         $scriptKey = $prefix.'/'.$server->id.'/'.$bundleUuid.'/install.sh';
 
         $identityDomain = $server->verifierDomain?->domain ?? $server->identity_domain;
+        $workerPool = trim((string) ($server->workerPool?->slug ?? EngineWorkerPool::resolveDefaultSlug()));
+        if ($workerPool === '') {
+            $workerPool = 'default';
+        }
         $apiBaseUrl = trim((string) config('app.url'), '/');
 
-        $workerEnv = $this->buildWorkerEnv($server, $apiBaseUrl, $token->plainTextToken, $identityDomain);
+        $workerEnv = $this->buildWorkerEnv($server, $apiBaseUrl, $token->plainTextToken, $identityDomain, $workerPool);
         $installScript = $this->buildInstallScript($server, $workerEnv);
 
         $disk = (string) config('engine.worker_provisioning_disk', 'local');
@@ -111,7 +116,8 @@ class EngineWorkerProvisioningService
         EngineServer $server,
         string $apiBaseUrl,
         string $plainTextToken,
-        ?string $identityDomain
+        ?string $identityDomain,
+        string $workerPool
     ): string {
         $controlPlaneBaseUrl = trim((string) config('services.go_control_plane.base_url', ''));
         $controlPlaneToken = trim((string) config('services.go_control_plane.token', ''));
@@ -122,6 +128,7 @@ class EngineWorkerProvisioningService
             $this->envLine('ENGINE_SERVER_IP', $server->ip_address),
             $this->envLine('ENGINE_SERVER_NAME', $server->name),
             $this->envLine('WORKER_ID', (string) $server->id),
+            $this->envLine('WORKER_POOL', $workerPool),
             $this->envLine('LARAVEL_HEARTBEAT_ENABLED', 'true'),
             $this->envLine('LARAVEL_HEARTBEAT_EVERY_N', '10'),
         ];

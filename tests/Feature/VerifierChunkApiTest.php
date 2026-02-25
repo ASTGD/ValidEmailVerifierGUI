@@ -9,6 +9,7 @@ use App\Jobs\RecordSmtpDecisionTracesJob;
 use App\Models\EngineServer;
 use App\Models\EngineSetting;
 use App\Models\EngineVerificationPolicy;
+use App\Models\EngineWorkerPool;
 use App\Models\User;
 use App\Models\VerificationJob;
 use App\Models\VerificationJobChunk;
@@ -64,10 +65,45 @@ class VerifierChunkApiTest extends TestCase
 
     private function setProbeStageEnabled(bool $enabled): void
     {
-        EngineSetting::query()->update(['enhanced_mode_enabled' => $enabled]);
-        EngineVerificationPolicy::query()
-            ->where('mode', 'enhanced')
-            ->update(['enabled' => $enabled]);
+        $this->upsertEngineSettings([
+            'enhanced_mode_enabled' => $enabled,
+        ]);
+
+        $defaults = config('engine.policy_defaults.enhanced', []);
+
+        EngineVerificationPolicy::query()->updateOrCreate(
+            ['mode' => 'enhanced'],
+            [
+                'enabled' => $enabled,
+                'dns_timeout_ms' => (int) ($defaults['dns_timeout_ms'] ?? 2000),
+                'smtp_connect_timeout_ms' => (int) ($defaults['smtp_connect_timeout_ms'] ?? 2000),
+                'smtp_read_timeout_ms' => (int) ($defaults['smtp_read_timeout_ms'] ?? 2000),
+                'max_mx_attempts' => (int) ($defaults['max_mx_attempts'] ?? 2),
+                'max_concurrency_default' => (int) ($defaults['max_concurrency_default'] ?? 1),
+                'per_domain_concurrency' => (int) ($defaults['per_domain_concurrency'] ?? 2),
+                'catch_all_detection_enabled' => (bool) ($defaults['catch_all_detection_enabled'] ?? true),
+                'global_connects_per_minute' => $defaults['global_connects_per_minute'] ?? null,
+                'tempfail_backoff_seconds' => $defaults['tempfail_backoff_seconds'] ?? null,
+                'circuit_breaker_tempfail_rate' => $defaults['circuit_breaker_tempfail_rate'] ?? null,
+            ]
+        );
+    }
+
+    private function setEnginePaused(bool $paused): void
+    {
+        $this->upsertEngineSettings([
+            'engine_paused' => $paused,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function upsertEngineSettings(array $attributes): void
+    {
+        $settings = EngineSetting::query()->first() ?? new EngineSetting;
+        $settings->fill($attributes);
+        $settings->save();
     }
 
     public function test_job_complete_is_idempotent(): void
@@ -260,7 +296,7 @@ class VerifierChunkApiTest extends TestCase
     public function test_claim_next_returns_single_chunk_and_leases(): void
     {
         $this->actingAsVerifier();
-        EngineSetting::query()->update(['engine_paused' => false]);
+        $this->setEnginePaused(false);
 
         $job = $this->makeJob();
         $chunk = $this->makeChunk($job, [
@@ -314,7 +350,7 @@ class VerifierChunkApiTest extends TestCase
     {
         $this->actingAsVerifier();
 
-        EngineSetting::query()->update(['engine_paused' => true]);
+        $this->setEnginePaused(true);
 
         $job = $this->makeJob();
         $chunk = $this->makeChunk($job, [
@@ -343,7 +379,7 @@ class VerifierChunkApiTest extends TestCase
     public function test_claim_next_skips_unavailable_chunks(): void
     {
         $this->actingAsVerifier();
-        EngineSetting::query()->update(['engine_paused' => false]);
+        $this->setEnginePaused(false);
 
         $job = $this->makeJob();
         $futureChunk = $this->makeChunk($job, [
@@ -385,7 +421,7 @@ class VerifierChunkApiTest extends TestCase
     public function test_claim_next_respects_worker_capability_stage_filter(): void
     {
         $this->actingAsVerifier();
-        EngineSetting::query()->update(['engine_paused' => false]);
+        $this->setEnginePaused(false);
 
         $job = $this->makeJob();
         $screeningChunk = $this->makeChunk($job, [
@@ -714,7 +750,7 @@ class VerifierChunkApiTest extends TestCase
     public function test_claim_next_prefers_matching_provider_affinity_and_pool_for_probe_chunks(): void
     {
         $this->actingAsVerifier();
-        EngineSetting::query()->update(['engine_paused' => false]);
+        $this->setEnginePaused(false);
 
         config([
             'engine.probe_routing_enabled' => true,
@@ -767,10 +803,83 @@ class VerifierChunkApiTest extends TestCase
         ]);
     }
 
+    public function test_claim_next_applies_pool_profile_routing_bonus_for_provider(): void
+    {
+        $this->actingAsVerifier();
+        $this->setEnginePaused(false);
+
+        config([
+            'engine.probe_routing_enabled' => true,
+            'engine.probe_rotation_retry_enabled' => true,
+            'engine.probe_routing_weights' => [
+                'affinity' => 0,
+                'anti_affinity' => 0,
+                'preferred_pool' => 0,
+                'retry_bonus' => 0,
+            ],
+        ]);
+
+        EngineWorkerPool::query()->create([
+            'slug' => 'gmail-lowhit',
+            'name' => 'Gmail Low Hit',
+            'is_active' => true,
+            'is_default' => false,
+            'provider_profiles' => [
+                'generic' => 'standard',
+                'gmail' => 'low_hit',
+                'microsoft' => 'standard',
+                'yahoo' => 'standard',
+            ],
+        ]);
+
+        $job = $this->makeJob();
+        $this->makeChunk($job, [
+            'chunk_no' => 1,
+            'status' => 'pending',
+            'processing_stage' => 'smtp_probe',
+            'routing_provider' => 'yahoo',
+            'preferred_pool' => 'pool-yahoo',
+            'max_probe_attempts' => 5,
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+            'created_at' => now()->subMinute(),
+        ]);
+        $gmailChunk = $this->makeChunk($job, [
+            'chunk_no' => 2,
+            'status' => 'pending',
+            'processing_stage' => 'smtp_probe',
+            'routing_provider' => 'gmail',
+            'preferred_pool' => 'pool-gmail',
+            'max_probe_attempts' => 5,
+            'claim_expires_at' => null,
+            'claim_token' => null,
+            'assigned_worker_id' => null,
+            'created_at' => now(),
+        ]);
+
+        $this->postJson(route('api.verifier.chunks.claim-next'), [
+            'engine_server' => [
+                'name' => 'engine-pool-bonus',
+                'ip_address' => '127.0.0.180',
+                'environment' => 'test',
+                'region' => 'local',
+                'meta' => [
+                    'pool' => 'gmail-lowhit',
+                ],
+            ],
+            'worker_id' => 'worker-pool-bonus',
+            'worker_capability' => 'smtp_probe',
+        ])->assertOk()->assertJsonFragment([
+            'chunk_id' => (string) $gmailChunk->id,
+            'routing_provider' => 'gmail',
+        ]);
+    }
+
     public function test_claim_next_avoids_same_worker_retry_rotation_when_alternative_exists(): void
     {
         $this->actingAsVerifier();
-        EngineSetting::query()->update(['engine_paused' => false]);
+        $this->setEnginePaused(false);
 
         config([
             'engine.probe_routing_enabled' => true,
@@ -826,7 +935,7 @@ class VerifierChunkApiTest extends TestCase
     public function test_claim_next_enforces_retry_anti_affinity_even_when_alternative_has_lower_score(): void
     {
         $this->actingAsVerifier();
-        EngineSetting::query()->update(['engine_paused' => false]);
+        $this->setEnginePaused(false);
 
         config([
             'engine.probe_routing_enabled' => true,

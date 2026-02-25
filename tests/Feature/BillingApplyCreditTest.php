@@ -30,8 +30,14 @@ class BillingApplyCreditTest extends TestCase
         $billing = app(BillingService::class);
 
         // Apply partial credit
-        $txn = $billing->applyCreditToInvoice($invoice, 2500);
-        $this->assertDatabaseHas('transactions', ['id' => $txn->id, 'amount' => 2500]);
+        $applied = $billing->applyCreditToInvoice($invoice, 2500);
+        $this->assertTrue($applied);
+        $this->assertDatabaseHas('transactions', [
+            'invoice_id' => $invoice->id,
+            'user_id' => $user->id,
+            'payment_method' => 'Credit Balance',
+            'amount' => 2500,
+        ]);
 
         $user->refresh();
         $this->assertEquals(7500, $user->balance);

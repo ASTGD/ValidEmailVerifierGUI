@@ -22,6 +22,7 @@ type BasePageData struct {
 	DocsURL          string
 	LiveStreamPath   string
 	AutoReloadOnLive bool
+	ShowProvisioning bool
 }
 
 func NewViewRenderer() (*ViewRenderer, error) {

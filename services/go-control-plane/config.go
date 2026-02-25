@@ -60,7 +60,6 @@ type Config struct {
 	LaravelInternalAPITimeoutSeconds          int
 	LaravelInternalAPIRetryMax                int
 	LaravelInternalAPIRetryBackoffMS          int
-	ServerRegistryUIEnabled                   bool
 	ServerRegistryRequireRuntimeMatch         bool
 	OpsDocsURL                                string
 	PolicyPayloadStrictValidationEnabled      bool
@@ -93,7 +92,6 @@ func LoadConfig() (Config, error) {
 	cfg.LaravelVerifierToken = strings.TrimSpace(os.Getenv("LARAVEL_VERIFIER_TOKEN"))
 	cfg.LaravelInternalAPIBaseURL = strings.TrimSpace(os.Getenv("LARAVEL_INTERNAL_API_BASE_URL"))
 	cfg.LaravelInternalAPIToken = strings.TrimSpace(os.Getenv("LARAVEL_INTERNAL_API_TOKEN"))
-	cfg.ServerRegistryUIEnabled = parseBool(os.Getenv("GO_SERVER_REGISTRY_UI_ENABLED"))
 	cfg.ServerRegistryRequireRuntimeMatch = parseBool(os.Getenv("GO_SERVER_REGISTRY_REQUIRE_RUNTIME_MATCH"))
 	cfg.OpsDocsURL = strings.TrimSpace(os.Getenv("OPS_DOCS_URL"))
 

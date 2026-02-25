@@ -1,0 +1,275 @@
+{{ define "provisioning" }}
+<section class="space-y-4">
+    <section class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <div class="space-y-2">
+            <h2 class="text-lg font-semibold">Provisioning Wizard</h2>
+            <p class="text-sm text-slate-400">Onboarding only. Create/select a server, generate a bundle, run install, and verify checks.</p>
+            <p class="text-xs text-slate-500">Server inventory and infrastructure controls are managed from the Servers page.</p>
+        </div>
+
+        {{ if not .ServerRegistry.Configured }}
+            <div class="mt-6 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                Provisioning integration is disabled. Set <code class="text-red-100">LARAVEL_INTERNAL_API_BASE_URL</code>
+                and <code class="text-red-100">LARAVEL_INTERNAL_API_TOKEN</code> in Go control-plane env.
+            </div>
+        {{ else }}
+            {{ if .ServerRegistry.Notice }}
+                <div class="mt-6 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                    {{ .ServerRegistry.Notice }}
+                </div>
+            {{ end }}
+            {{ if .ServerRegistry.Error }}
+                <div class="mt-6 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                    {{ .ServerRegistry.Error }}
+                </div>
+            {{ end }}
+            {{ if .ServerRegistry.Warning }}
+                <div class="mt-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                    {{ .ServerRegistry.Warning }}
+                </div>
+            {{ end }}
+
+            <div class="mt-6 space-y-4">
+                <section class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <h3 class="text-sm font-semibold text-slate-100">
+                                {{ if eq .Mode "existing" }}Step 1: Select Server{{ else }}Step 1: Add New Server{{ end }}
+                            </h3>
+                            <p class="text-xs text-slate-400">
+                                {{ if eq .Mode "existing" }}Choose an existing server before bundle generation.{{ else }}Create a new server record before bundle generation.{{ end }}
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs">
+                            <a href="{{ .BasePath }}/provisioning?mode=create" class="rounded-full px-3 py-1 {{ if ne .Mode "existing" }}bg-amber-500 text-slate-900{{ else }}bg-slate-800 text-slate-300 hover:bg-slate-700{{ end }}">Add New Server</a>
+                            <a href="{{ .BasePath }}/provisioning?mode=existing" class="rounded-full px-3 py-1 {{ if eq .Mode "existing" }}bg-amber-500 text-slate-900{{ else }}bg-slate-800 text-slate-300 hover:bg-slate-700{{ end }}">Select Server</a>
+                            <a href="{{ .BasePath }}/pools" class="rounded-full bg-slate-800 px-3 py-1 text-slate-300 hover:bg-slate-700">Manage Pools</a>
+                        </div>
+                    </div>
+
+                    {{ if eq .Mode "existing" }}
+                        <form method="GET" action="{{ .BasePath }}/provisioning" class="mt-3 flex flex-wrap items-end gap-2">
+                            <input type="hidden" name="mode" value="existing" />
+                            <label class="min-w-[160px] flex-1 space-y-1 text-xs text-slate-400">
+                                <span>Server</span>
+                                <select name="server_id" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+                                    <option value="">Select a server</option>
+                                    {{ range .ServerRegistry.Servers }}
+                                        <option value="{{ .ID }}" {{ if and $.SelectedServer (eq $.SelectedServer.ID .ID) }}selected{{ end }}>{{ .Name }} ({{ .IPAddress }})</option>
+                                    {{ end }}
+                                </select>
+                            </label>
+                            <button type="submit" class="rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-400">Continue</button>
+                            <a href="{{ .BasePath }}/servers" class="rounded-full bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700">Manage Inventory</a>
+                        </form>
+                    {{ else }}
+                        {{ if or .Prefill.WorkerID .Prefill.Host .Prefill.IP }}
+                            <div class="mt-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
+                                Runtime hints prefilled from unmatched worker:
+                                {{ if .Prefill.WorkerID }}<code class="text-cyan-100">{{ .Prefill.WorkerID }}</code>{{ end }}
+                                {{ if .Prefill.Host }} · {{ .Prefill.Host }}{{ end }}
+                                {{ if .Prefill.IP }} · {{ .Prefill.IP }}{{ end }}
+                            </div>
+                        {{ end }}
+                        <form method="POST" action="{{ .BasePath }}/provisioning/servers" class="mt-3 grid gap-3 md:grid-cols-2">
+                            <input type="hidden" name="return_to" value="provisioning" />
+                            <input type="hidden" name="mode" value="create" />
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Name</span>
+                                <input name="name" required value="{{ if .Prefill.Host }}{{ .Prefill.Host }}{{ end }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>IP Address</span>
+                                <input name="ip_address" required value="{{ .Prefill.IP }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Environment</span>
+                                <input name="environment" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Region</span>
+                                <input name="region" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>HELO Name</span>
+                                <input name="helo_name" value="{{ if .Prefill.Host }}{{ .Prefill.Host }}{{ end }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>MAIL FROM</span>
+                                <input name="mail_from_address" type="email" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Verifier Domain</span>
+                                <select name="verifier_domain_id" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+                                    <option value="">Select active domain</option>
+                                    {{ range .ServerRegistry.VerifierDomains }}
+                                        <option value="{{ .ID }}">{{ .Domain }}</option>
+                                    {{ end }}
+                                </select>
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Worker Pool</span>
+                                <select name="worker_pool_id" required class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+                                    <option value="">Select pool</option>
+                                    {{ range .ServerRegistry.Pools }}
+                                        {{ if .IsActive }}
+                                            <option value="{{ .ID }}" {{ if .IsDefault }}selected{{ end }}>{{ .Name }} ({{ .Slug }}){{ if .IsDefault }} · default{{ end }}</option>
+                                        {{ end }}
+                                    {{ end }}
+                                </select>
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Max Concurrency</span>
+                                <input name="max_concurrency" type="number" min="1" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Process control mode</span>
+                                <select name="process_control_mode" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+                                    <option value="control_plane_only">Control-plane only</option>
+                                    <option value="agent_systemd">Agent (systemd)</option>
+                                </select>
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Agent base URL</span>
+                                <input name="agent_base_url" placeholder="https://worker-agent.internal:9713" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Agent service name</span>
+                                <input name="agent_service_name" value="vev-worker.service" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Agent timeout (seconds)</span>
+                                <input name="agent_timeout_seconds" type="number" min="2" max="30" value="8" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+                            </label>
+                            <label class="md:col-span-2 space-y-1 text-xs text-slate-400">
+                                <span>Notes</span>
+                                <textarea name="notes" rows="2" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"></textarea>
+                            </label>
+                            <label class="flex items-center gap-2 text-xs text-slate-300">
+                                <input type="checkbox" name="is_active" value="1" checked class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500" />
+                                Enabled
+                            </label>
+                            <label class="flex items-center gap-2 text-xs text-slate-300">
+                                <input type="checkbox" name="drain_mode" value="1" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500" />
+                                Drain mode
+                            </label>
+                            <label class="flex items-center gap-2 text-xs text-slate-300">
+                                <input type="checkbox" name="agent_enabled" value="1" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500" />
+                                Agent control enabled
+                            </label>
+                            <label class="space-y-1 text-xs text-slate-400">
+                                <span>Verify agent TLS</span>
+                                <select name="agent_verify_tls" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+                                    <option value="1" selected>Enabled</option>
+                                    <option value="0">Disabled</option>
+                                </select>
+                            </label>
+                            <div class="md:col-span-2">
+                                <button type="submit" class="rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-400">Create Server and Continue</button>
+                            </div>
+                        </form>
+                    {{ end }}
+
+                    {{ if .SelectedServer }}
+                        <div class="mt-4 rounded-lg border border-slate-800 bg-slate-900/70 p-3 text-xs text-slate-300">
+                            <p><span class="font-semibold text-slate-100">Selected:</span> {{ .SelectedServer.Name }} ({{ .SelectedServer.IPAddress }})</p>
+                            <p class="mt-1"><span class="font-semibold text-slate-100">Control mode:</span> {{ if .SelectedServer.ProcessControlMode }}{{ .SelectedServer.ProcessControlMode }}{{ else }}control_plane_only{{ end }}</p>
+                            <p class="mt-1"><span class="font-semibold text-slate-100">Worker pool:</span> {{ if .SelectedServer.WorkerPoolName }}{{ .SelectedServer.WorkerPoolName }}{{ else if .SelectedServer.WorkerPoolSlug }}{{ .SelectedServer.WorkerPoolSlug }}{{ else }}default{{ end }}</p>
+                            <a href="{{ $.BasePath }}/servers/{{ .SelectedServer.ID }}/edit" class="mt-2 inline-block text-xs text-cyan-200 underline">Edit server details</a>
+                        </div>
+                    {{ end }}
+                </section>
+
+                <section class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <h3 class="text-sm font-semibold text-slate-100">Step 2: Generate Bundle</h3>
+                    {{ if .SelectedServer }}
+                        <p class="mt-2 text-xs text-slate-400">Generate a short-lived provisioning bundle for <span class="text-slate-200">{{ .SelectedServer.Name }}</span>.</p>
+                        <form method="POST" action="{{ .BasePath }}/provisioning/servers/{{ .SelectedServer.ID }}/provision" class="mt-3">
+                            <input type="hidden" name="return_to" value="provisioning" />
+                            <button class="rounded-full bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-cyan-400" type="submit">Generate Bundle</button>
+                        </form>
+                    {{ else }}
+                        <p class="mt-2 text-sm text-slate-400">Select or create a server in Step 1 to continue.</p>
+                    {{ end }}
+                </section>
+
+                <section class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <h3 class="text-sm font-semibold text-slate-100">Step 3: Install on VPS</h3>
+                    {{ if and .ServerRegistry.ProvisionBundle .ServerRegistry.ProvisionBundle.InstallCommandTemplate }}
+                        <p class="mt-2 text-xs text-slate-400">Run this command on your VPS shell as root.</p>
+                        <code class="mt-2 block rounded border border-slate-800 bg-slate-950 p-2 text-xs text-amber-200">{{ .ServerRegistry.ProvisionBundle.InstallCommandTemplate }}</code>
+                        <p class="mt-2 text-xs text-slate-400">Bundle UUID: <span class="text-slate-200">{{ .ServerRegistry.ProvisionBundle.BundleUUID }}</span> · Expires: {{ .ServerRegistry.ProvisionBundle.ExpiresAt }}</p>
+                    {{ else if .ServerRegistry.ProvisionBundle }}
+                        <p class="mt-2 text-sm text-amber-200">Latest bundle is expired or unavailable. Generate a new bundle in Step 2.</p>
+                    {{ else if .ServerRegistry.ProvisionBundleLoadError }}
+                        <p class="mt-2 text-sm text-red-300">{{ .ServerRegistry.ProvisionBundleLoadError }}</p>
+                    {{ else }}
+                        <p class="mt-2 text-sm text-slate-400">Generate a bundle in Step 2 to unlock install instructions.</p>
+                    {{ end }}
+                </section>
+
+                <section class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <h3 class="text-sm font-semibold text-slate-100">Step 4: Verification Checks</h3>
+                        {{ if .SelectedServer }}
+                            <a href="{{ .BasePath }}/servers/{{ .SelectedServer.ID }}/edit" class="text-xs text-cyan-200 underline">Edit server details</a>
+                        {{ end }}
+                    </div>
+                    {{ if .SelectedServer }}
+                        <form method="POST" action="{{ .BasePath }}/provisioning/servers/{{ .SelectedServer.ID }}/verify" class="mt-3">
+                            <input type="hidden" name="return_to" value="provisioning" />
+                            <input type="hidden" name="bundle_server_id" value="{{ if gt .ServerRegistry.ProvisionBundleServerID 0 }}{{ .ServerRegistry.ProvisionBundleServerID }}{{ else }}{{ .SelectedServer.ID }}{{ end }}" />
+                            <button class="rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-400" type="submit">Run Verification Checks</button>
+                        </form>
+
+                        {{ if .VerificationChecked }}
+                            <div class="mt-3 space-y-2 text-xs">
+                                <div class="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2">
+                                    <span class="text-slate-300">Agent reachable</span>
+                                    {{ if .SelectedServer.LastAgentSeenAt }}
+                                        <span class="rounded-full bg-emerald-500/20 px-2 py-1 text-emerald-300">Pass</span>
+                                    {{ else }}
+                                        <span class="rounded-full bg-amber-500/20 px-2 py-1 text-amber-200">Fail</span>
+                                    {{ end }}
+                                </div>
+                                <div class="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2">
+                                    <span class="text-slate-300">Process state</span>
+                                    {{ if eq .SelectedServer.ProcessState "running" }}
+                                        <span class="rounded-full bg-emerald-500/20 px-2 py-1 text-emerald-300">Pass · running</span>
+                                    {{ else }}
+                                        <span class="rounded-full bg-amber-500/20 px-2 py-1 text-amber-200">Fail · {{ .SelectedServer.ProcessState }}</span>
+                                    {{ end }}
+                                </div>
+                                <div class="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2">
+                                    <span class="text-slate-300">Runtime heartbeat</span>
+                                    {{ if eq .SelectedServer.RuntimeMatchStatus "matched" }}
+                                        <span class="rounded-full bg-emerald-500/20 px-2 py-1 text-emerald-300">Pass · matched</span>
+                                    {{ else if eq .SelectedServer.ProcessState "running" }}
+                                        <span class="rounded-full bg-amber-500/20 px-2 py-1 text-amber-200">Pending · waiting for first heartbeat</span>
+                                    {{ else }}
+                                        <span class="rounded-full bg-amber-500/20 px-2 py-1 text-amber-200">Fail · not matched</span>
+                                    {{ end }}
+                                </div>
+                                <div class="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2">
+                                    <span class="text-slate-300">Claim-next auth sanity</span>
+                                    {{ if and (eq .SelectedServer.RuntimeMatchStatus "matched") (eq .SelectedServer.HeartbeatState "healthy") }}
+                                        <span class="rounded-full bg-emerald-500/20 px-2 py-1 text-emerald-300">Pass</span>
+                                    {{ else if eq .SelectedServer.ProcessState "running" }}
+                                        <span class="rounded-full bg-amber-500/20 px-2 py-1 text-amber-200">Pending · run after heartbeat</span>
+                                    {{ else }}
+                                        <span class="rounded-full bg-amber-500/20 px-2 py-1 text-amber-200">Fail · manual check required</span>
+                                    {{ end }}
+                                </div>
+                            </div>
+                        {{ else }}
+                            <p class="mt-3 text-sm text-slate-400">Run verification after installing the bundle on your VPS.</p>
+                        {{ end }}
+                    {{ else }}
+                        <p class="mt-2 text-sm text-slate-400">Select or create a server first to run verification checks.</p>
+                    {{ end }}
+                </section>
+            </div>
+        {{ end }}
+    </section>
+</section>
+{{ end }}
