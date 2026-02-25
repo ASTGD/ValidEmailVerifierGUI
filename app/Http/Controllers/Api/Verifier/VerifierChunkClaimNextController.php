@@ -6,6 +6,7 @@ use App\Enums\VerificationMode;
 use App\Http\Requests\Verifier\ChunkClaimNextRequest;
 use App\Models\EngineServer;
 use App\Models\VerificationJobChunk;
+use App\Services\EngineWorkerPoolPolicyService;
 use App\Support\AdminAuditLogger;
 use App\Support\EngineSettings;
 use Illuminate\Support\Facades\DB;
@@ -13,6 +14,10 @@ use Illuminate\Support\Str;
 
 class VerifierChunkClaimNextController
 {
+    public function __construct(
+        private readonly EngineWorkerPoolPolicyService $engineWorkerPoolPolicyService
+    ) {}
+
     public function __invoke(ChunkClaimNextRequest $request)
     {
         $payload = $request->validated();
@@ -20,6 +25,7 @@ class VerifierChunkClaimNextController
         $workerCapability = $this->resolveWorkerCapability((string) ($payload['worker_capability'] ?? 'all'));
         $serverMeta = is_array($serverData['meta'] ?? null) ? $serverData['meta'] : [];
         $workerPool = $this->normalizeString($serverMeta['pool'] ?? null);
+        $workerPoolProfiles = $this->resolveWorkerPoolProfiles($workerPool);
         $providerAffinity = $this->normalizeProvider($serverMeta['provider_affinity'] ?? null);
         $trustTier = $this->normalizeString($serverMeta['trust_tier'] ?? null);
 
@@ -73,6 +79,7 @@ class VerifierChunkClaimNextController
             $now,
             $workerCapability,
             $workerPool,
+            $workerPoolProfiles,
             $providerAffinity
         ) {
             $chunk = $this->selectClaimableChunk(
@@ -80,6 +87,7 @@ class VerifierChunkClaimNextController
                 $workerCapability,
                 (string) ($payload['worker_id'] ?? ''),
                 $workerPool,
+                $workerPoolProfiles,
                 $providerAffinity
             );
 
@@ -163,6 +171,7 @@ class VerifierChunkClaimNextController
         string $workerCapability,
         string $workerId,
         ?string $workerPool,
+        array $workerPoolProfiles,
         ?string $providerAffinity
     ): ?VerificationJobChunk {
         $query = VerificationJobChunk::query()
@@ -211,9 +220,9 @@ class VerifierChunkClaimNextController
             return $candidates->first();
         }
 
-        $ranked = $candidates->sort(function (VerificationJobChunk $a, VerificationJobChunk $b) use ($workerId, $workerPool, $providerAffinity) {
-            $scoreA = $this->routingScore($a, $workerId, $workerPool, $providerAffinity);
-            $scoreB = $this->routingScore($b, $workerId, $workerPool, $providerAffinity);
+        $ranked = $candidates->sort(function (VerificationJobChunk $a, VerificationJobChunk $b) use ($workerId, $workerPool, $workerPoolProfiles, $providerAffinity) {
+            $scoreA = $this->routingScore($a, $workerId, $workerPool, $workerPoolProfiles, $providerAffinity);
+            $scoreB = $this->routingScore($b, $workerId, $workerPool, $workerPoolProfiles, $providerAffinity);
 
             if ($scoreA !== $scoreB) {
                 return $scoreB <=> $scoreA;
@@ -272,12 +281,17 @@ class VerifierChunkClaimNextController
         VerificationJobChunk $chunk,
         string $workerId,
         ?string $workerPool,
+        array $workerPoolProfiles,
         ?string $providerAffinity
     ): int {
         $score = 0;
         $weights = $this->probeRoutingWeights();
 
         $chunkProvider = $this->normalizeProvider($chunk->routing_provider);
+        if ($chunkProvider !== null) {
+            $profile = strtolower(trim((string) ($workerPoolProfiles[$chunkProvider] ?? 'standard')));
+            $score += $this->poolProfileRoutingBonus($profile);
+        }
         $chunkPreferredPool = $this->normalizeString($chunk->preferred_pool);
         if ($chunkPreferredPool === null && $chunkProvider !== null) {
             $chunkPreferredPool = $this->providerPreferredPoolFromConfig($chunkProvider);
@@ -373,6 +387,24 @@ class VerifierChunkClaimNextController
         $normalized = trim((string) $value);
 
         return $normalized === '' ? null : $normalized;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function resolveWorkerPoolProfiles(?string $workerPool): array
+    {
+        $profiles = [];
+        foreach (['generic', 'gmail', 'microsoft', 'yahoo'] as $provider) {
+            $profiles[$provider] = $this->engineWorkerPoolPolicyService->providerProfileForPool($workerPool, $provider);
+        }
+
+        return $profiles;
+    }
+
+    private function poolProfileRoutingBonus(string $profile): int
+    {
+        return $this->engineWorkerPoolPolicyService->routingBonus($profile);
     }
 
     private function retryTouchesCurrentRoute(VerificationJobChunk $chunk, string $workerId, ?string $workerPool): bool

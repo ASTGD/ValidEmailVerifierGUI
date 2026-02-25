@@ -316,6 +316,27 @@
         let online = {{ toJSON .ChartOnline }};
         let desired = {{ toJSON .ChartDesired }};
 
+        const chartPalette = () => {
+            const isLight = document.body.classList.contains('theme-light');
+            if (isLight) {
+                return {
+                    legend: '#334155',
+                    ticks: '#475569',
+                    grid: 'rgba(100, 116, 139, 0.25)',
+                    onlineBar: '#d97706',
+                    desiredBar: '#334155',
+                };
+            }
+
+            return {
+                legend: '#e2e8f0',
+                ticks: '#94a3b8',
+                grid: 'rgba(148, 163, 184, 0.1)',
+                onlineBar: '#f59e0b',
+                desiredBar: '#1f2937',
+            };
+        };
+
         const poolChart = new Chart(poolCanvas, {
             type: 'bar',
             data: {
@@ -346,6 +367,21 @@
                 },
             },
         });
+
+        const applyPoolChartTheme = () => {
+            const palette = chartPalette();
+            poolChart.data.datasets[0].backgroundColor = palette.onlineBar;
+            poolChart.data.datasets[1].backgroundColor = palette.desiredBar;
+            poolChart.options.plugins.legend.labels.color = palette.legend;
+            poolChart.options.scales.x.ticks.color = palette.ticks;
+            poolChart.options.scales.y.ticks.color = palette.ticks;
+            poolChart.options.scales.x.grid.color = palette.grid;
+            poolChart.options.scales.y.grid.color = palette.grid;
+            poolChart.update('none');
+        };
+
+        applyPoolChartTheme();
+        window.addEventListener('cp:theme-change', applyPoolChartTheme);
 
         const updatePoolSummary = (pools) => {
             const grid = document.getElementById('pool-summary-grid');
@@ -450,7 +486,32 @@
         const historyWorkers = {{ toJSON .HistoryWorkers }};
         const historyDesired = {{ toJSON .HistoryDesired }};
 
-        new Chart(historyCanvas, {
+        const chartPalette = () => {
+            const isLight = document.body.classList.contains('theme-light');
+            if (isLight) {
+                return {
+                    legend: '#334155',
+                    ticks: '#475569',
+                    grid: 'rgba(100, 116, 139, 0.25)',
+                    workersBorder: '#d97706',
+                    workersFill: 'rgba(217, 119, 6, 0.18)',
+                    desiredBorder: '#64748b',
+                    desiredFill: 'rgba(100, 116, 139, 0.2)',
+                };
+            }
+
+            return {
+                legend: '#e2e8f0',
+                ticks: '#94a3b8',
+                grid: 'rgba(148, 163, 184, 0.1)',
+                workersBorder: '#f59e0b',
+                workersFill: 'rgba(245, 158, 11, 0.2)',
+                desiredBorder: '#94a3b8',
+                desiredFill: 'rgba(148, 163, 184, 0.2)',
+            };
+        };
+
+        const historyChart = new Chart(historyCanvas, {
             type: 'line',
             data: {
                 labels: historyLabels,
@@ -482,6 +543,23 @@
                 },
             },
         });
+
+        const applyHistoryChartTheme = () => {
+            const palette = chartPalette();
+            historyChart.data.datasets[0].borderColor = palette.workersBorder;
+            historyChart.data.datasets[0].backgroundColor = palette.workersFill;
+            historyChart.data.datasets[1].borderColor = palette.desiredBorder;
+            historyChart.data.datasets[1].backgroundColor = palette.desiredFill;
+            historyChart.options.plugins.legend.labels.color = palette.legend;
+            historyChart.options.scales.x.ticks.color = palette.ticks;
+            historyChart.options.scales.y.ticks.color = palette.ticks;
+            historyChart.options.scales.x.grid.color = palette.grid;
+            historyChart.options.scales.y.grid.color = palette.grid;
+            historyChart.update('none');
+        };
+
+        applyHistoryChartTheme();
+        window.addEventListener('cp:theme-change', applyHistoryChartTheme);
     });
     {{ end }}
 </script>

@@ -22,6 +22,7 @@ class EngineServer extends Model
         'mail_from_address',
         'identity_domain',
         'verifier_domain_id',
+        'worker_pool_id',
         'notes',
         'process_control_mode',
         'agent_enabled',
@@ -39,6 +40,7 @@ class EngineServer extends Model
         'is_active' => 'boolean',
         'drain_mode' => 'boolean',
         'max_concurrency' => 'integer',
+        'worker_pool_id' => 'integer',
         'agent_enabled' => 'boolean',
         'agent_timeout_seconds' => 'integer',
         'agent_verify_tls' => 'boolean',
@@ -109,9 +111,19 @@ class EngineServer extends Model
         return $this->hasOne(EngineServerProvisioningBundle::class)->latestOfMany();
     }
 
+    public function latestCommand(): HasOne
+    {
+        return $this->hasOne(EngineServerCommand::class)->latestOfMany();
+    }
+
     public function verifierDomain(): BelongsTo
     {
         return $this->belongsTo(VerifierDomain::class);
+    }
+
+    public function workerPool(): BelongsTo
+    {
+        return $this->belongsTo(EngineWorkerPool::class, 'worker_pool_id');
     }
 
     public function supportsAgentProcessControl(): bool

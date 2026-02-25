@@ -65,6 +65,19 @@ class Invoice extends Model
      */
     public function calculateTotal(): int
     {
+        if (! $this->items()->exists()) {
+            $storedTotal = (int) ($this->total ?? 0);
+            if ($storedTotal > 0) {
+                return $storedTotal;
+            }
+
+            $storedSubtotal = (int) ($this->subtotal ?? 0);
+            $tax = (int) ($this->tax ?? 0);
+            $discount = (int) ($this->discount ?? 0);
+
+            return max(0, $storedSubtotal + $tax - $discount);
+        }
+
         $itemsTotal = $this->items()->sum('amount');
         $tax = $this->tax ?? 0;
         $discount = $this->discount ?? 0;
@@ -83,7 +96,7 @@ class Invoice extends Model
         // Sum of all transactions (includes both Payments and Credits now)
         $paid = $this->transactions()->sum('amount');
 
-        // We no longer subtract $this->credit_applied here because 
+        // We no longer subtract $this->credit_applied here because
         // Credits are now recorded as Transactions in the applyCredit() method.
         return max(0, $total - $paid);
     }
@@ -126,10 +139,10 @@ class Invoice extends Model
     /**
      * Apply credit to this invoice
      */
-    public function applyCredit(int $amount, string $description = null): bool
+    public function applyCredit(int $amount, ?string $description = null): bool
     {
         $user = $this->user;
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
@@ -150,12 +163,8 @@ class Invoice extends Model
         $user->balance -= $amount;
         $user->save();
 
-        // Update Invoice credit record
+        // Persist applied credit first so audit/status reflects accumulated credit usage.
         $this->credit_applied = ($this->credit_applied ?? 0) + $amount;
-        $this->balance_due = $this->calculateBalanceDue();
-
-        // Sync status using the new unified logic
-        $this->syncStatus();
         $this->save();
 
         // Record credit history record
@@ -177,13 +186,18 @@ class Invoice extends Model
             'date' => now(),
         ]);
 
+        $this->refresh();
+        $this->balance_due = $this->calculateBalanceDue();
+        $this->syncStatus();
+        $this->save();
+
         return true;
     }
 
     /**
      * Process a payment for this invoice
      */
-    public function processPayment(int $amount, string $paymentMethod, string $transactionId = null): bool
+    public function processPayment(int $amount, string $paymentMethod, ?string $transactionId = null): bool
     {
         $maxPayment = $this->calculateBalanceDue();
         $amount = min($amount, $maxPayment);
@@ -220,7 +234,7 @@ class Invoice extends Model
     /**
      * Process a refund for this invoice
      */
-    public function processRefund(int $amount, string $reason = null): bool
+    public function processRefund(int $amount, ?string $reason = null): bool
     {
         if ($amount <= 0) {
             return false;
@@ -247,7 +261,7 @@ class Invoice extends Model
         }
 
         if ($reason) {
-            $this->notes = ($this->notes ? $this->notes . "\n\n" : '') . "Refund: " . $reason;
+            $this->notes = ($this->notes ? $this->notes."\n\n" : '').'Refund: '.$reason;
         }
 
         $this->save();
@@ -257,12 +271,13 @@ class Invoice extends Model
 
     public function getFormattedTotalAttribute(): string
     {
-        return number_format($this->calculateTotal() / 100, 2) . ' ' . strtoupper($this->currency);
+        return number_format($this->calculateTotal() / 100, 2).' '.strtoupper($this->currency);
     }
 
     public function getFormattedBalanceDueAttribute(): string
     {
         $balance = $this->calculateBalanceDue();
-        return number_format($balance / 100, 2) . ' ' . strtoupper($this->currency);
+
+        return number_format($balance / 100, 2).' '.strtoupper($this->currency);
     }
 }

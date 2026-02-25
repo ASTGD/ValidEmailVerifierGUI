@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Internal;
 
+use App\Models\EngineWorkerPool;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -40,6 +41,11 @@ class EngineServerUpsertRequest extends FormRequest
                 'integer',
                 Rule::exists('verifier_domains', 'id'),
             ],
+            'worker_pool_id' => [
+                'required',
+                'integer',
+                Rule::exists('engine_worker_pools', 'id')->where('is_active', true),
+            ],
             'notes' => ['nullable', 'string'],
             'process_control_mode' => ['nullable', 'string', Rule::in(['control_plane_only', 'agent_systemd'])],
             'agent_enabled' => ['nullable', 'boolean'],
@@ -61,11 +67,16 @@ class EngineServerUpsertRequest extends FormRequest
             $agentBaseUrl = $this->defaultAgentBaseUrl();
         }
 
+        $workerPoolID = $this->filled('worker_pool_id')
+            ? $this->input('worker_pool_id')
+            : EngineWorkerPool::resolveDefaultId();
+
         $this->merge([
             'is_active' => $this->boolean('is_active'),
             'drain_mode' => $this->boolean('drain_mode'),
             'max_concurrency' => $this->filled('max_concurrency') ? $this->input('max_concurrency') : null,
             'verifier_domain_id' => $this->filled('verifier_domain_id') ? $this->input('verifier_domain_id') : null,
+            'worker_pool_id' => $workerPoolID,
             'process_control_mode' => $processControlMode,
             'agent_enabled' => $this->boolean('agent_enabled'),
             'agent_base_url' => $agentBaseUrl,

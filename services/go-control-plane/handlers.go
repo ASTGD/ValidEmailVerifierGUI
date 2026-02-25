@@ -312,7 +312,99 @@ func (s *Server) handleProviderPolicies(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	writeJSON(w, http.StatusOK, ProviderPoliciesResponse{Data: stats.ProviderPolicies})
+	data := stats.ProviderPolicies
+	poolSlug := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("pool")))
+	if poolSlug == "" {
+		poolSlug = strings.ToLower(strings.TrimSpace(r.URL.Query().Get("worker_pool")))
+	}
+	if poolSlug != "" {
+		data.Modes = s.applyPoolProviderModes(r.Context(), data.Modes, poolSlug)
+	}
+
+	writeJSON(w, http.StatusOK, ProviderPoliciesResponse{Data: data})
+}
+
+func (s *Server) applyPoolProviderModes(ctx context.Context, modes []ProviderModeState, poolSlug string) []ProviderModeState {
+	if s.laravelEngineClient == nil {
+		return modes
+	}
+
+	pools, err := s.laravelEngineClient.ListPools(ctx)
+	if err != nil {
+		return modes
+	}
+
+	profiles := map[string]string{}
+	for _, pool := range pools {
+		if !pool.IsActive {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(pool.Slug)) != poolSlug {
+			continue
+		}
+
+		for provider, profile := range pool.ProviderProfiles {
+			normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
+			switch normalizedProvider {
+			case "generic", "gmail", "microsoft", "yahoo":
+				profiles[normalizedProvider] = providerModeFromPoolProfile(profile)
+			}
+		}
+		break
+	}
+
+	if len(profiles) == 0 {
+		return modes
+	}
+
+	output := make([]ProviderModeState, 0, len(modes)+len(profiles))
+	seen := map[string]struct{}{}
+	for _, mode := range modes {
+		provider := strings.ToLower(strings.TrimSpace(mode.Provider))
+		if provider == "" {
+			continue
+		}
+		seen[provider] = struct{}{}
+
+		overrideMode, hasOverride := profiles[provider]
+		if !hasOverride || strings.EqualFold(strings.TrimSpace(mode.Source), "manual") {
+			output = append(output, mode)
+			continue
+		}
+
+		updated := mode
+		updated.Mode = overrideMode
+		updated.Source = "pool_profile"
+		output = append(output, updated)
+	}
+
+	for provider, overrideMode := range profiles {
+		if _, exists := seen[provider]; exists {
+			continue
+		}
+		output = append(output, ProviderModeState{
+			Provider: provider,
+			Mode:     overrideMode,
+			Source:   "pool_profile",
+		})
+	}
+
+	sort.SliceStable(output, func(i, j int) bool {
+		return output[i].Provider < output[j].Provider
+	})
+
+	return output
+}
+
+func providerModeFromPoolProfile(profile string) string {
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "low_hit":
+		return "cautious"
+	case "warmup":
+		return "degraded_probe"
+	default:
+		return "normal"
+	}
 }
 
 func (s *Server) handleProviderModeSemantics(w http.ResponseWriter, r *http.Request) {

@@ -31,6 +31,9 @@ type LaravelEngineServerRecord struct {
 	IdentityDomain         string                          `json:"identity_domain"`
 	VerifierDomainID       int                             `json:"verifier_domain_id"`
 	VerifierDomain         string                          `json:"verifier_domain"`
+	WorkerPoolID           int                             `json:"worker_pool_id"`
+	WorkerPoolSlug         string                          `json:"worker_pool_slug"`
+	WorkerPoolName         string                          `json:"worker_pool_name"`
 	Notes                  string                          `json:"notes"`
 	ProcessControlMode     string                          `json:"process_control_mode"`
 	AgentEnabled           bool                            `json:"agent_enabled"`
@@ -41,9 +44,30 @@ type LaravelEngineServerRecord struct {
 	LastAgentSeenAt        string                          `json:"last_agent_seen_at"`
 	LastAgentError         string                          `json:"last_agent_error"`
 	LatestProvisioningInfo *LaravelProvisioningBundleBrief `json:"latest_provisioning_bundle"`
+	ProcessState           string                          `json:"process_state"`
+	HeartbeatState         string                          `json:"heartbeat_state"`
+	HeartbeatAgeSeconds    *int                            `json:"heartbeat_age_seconds"`
+	LastTransitionAt       string                          `json:"last_transition_at"`
+	LastCommandStatus      string                          `json:"last_command_status"`
+	LastCommandRequestID   string                          `json:"last_command_request_id"`
 	RuntimeMatchStatus     string                          `json:"-"`
 	RuntimeMatchWorkerID   string                          `json:"-"`
 	RuntimeMatchDetail     string                          `json:"-"`
+	HeartbeatAgeText       string                          `json:"-"`
+	UpdatedAtDisplay       string                          `json:"-"`
+}
+
+type LaravelEnginePoolRecord struct {
+	ID                int               `json:"id"`
+	Slug              string            `json:"slug"`
+	Name              string            `json:"name"`
+	Description       string            `json:"description"`
+	IsActive          bool              `json:"is_active"`
+	IsDefault         bool              `json:"is_default"`
+	ProviderProfiles  map[string]string `json:"provider_profiles"`
+	LinkedServersCount int              `json:"linked_servers_count"`
+	CreatedAt         string            `json:"created_at"`
+	UpdatedAt         string            `json:"updated_at"`
 }
 
 type LaravelProvisioningBundleBrief struct {
@@ -59,12 +83,39 @@ type LaravelVerifierDomainOption struct {
 }
 
 type LaravelProvisioningBundleDetails struct {
-	BundleUUID             string            `json:"bundle_uuid"`
-	EngineServerID         int               `json:"engine_server_id"`
-	ExpiresAt              string            `json:"expires_at"`
-	IsExpired              bool              `json:"is_expired"`
-	DownloadURLs           map[string]string `json:"download_urls"`
-	InstallCommandTemplate string            `json:"install_command_template"`
+	BundleUUID             string              `json:"bundle_uuid"`
+	EngineServerID         int                 `json:"engine_server_id"`
+	ExpiresAt              string              `json:"expires_at"`
+	IsExpired              bool                `json:"is_expired"`
+	DownloadURLs           LaravelDownloadURLs `json:"download_urls"`
+	InstallCommandTemplate string              `json:"install_command_template"`
+}
+
+type LaravelDownloadURLs map[string]string
+
+func (urls *LaravelDownloadURLs) UnmarshalJSON(payload []byte) error {
+	trimmed := strings.TrimSpace(string(payload))
+	if trimmed == "" || trimmed == "null" {
+		*urls = LaravelDownloadURLs{}
+		return nil
+	}
+
+	if strings.HasPrefix(trimmed, "[") {
+		var ignored []interface{}
+		if err := json.Unmarshal(payload, &ignored); err != nil {
+			return err
+		}
+		*urls = LaravelDownloadURLs{}
+		return nil
+	}
+
+	decoded := make(map[string]string)
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		return err
+	}
+
+	*urls = decoded
+	return nil
 }
 
 type LaravelDecisionTraceFilter struct {
@@ -113,6 +164,7 @@ type LaravelEngineServerUpsertPayload struct {
 	HeloName            string `json:"helo_name"`
 	MailFromAddress     string `json:"mail_from_address"`
 	VerifierDomainID    *int   `json:"verifier_domain_id"`
+	WorkerPoolID        *int   `json:"worker_pool_id"`
 	Notes               string `json:"notes"`
 	ProcessControlMode  string `json:"process_control_mode"`
 	AgentEnabled        bool   `json:"agent_enabled"`
@@ -126,6 +178,15 @@ type LaravelEngineServerCommandPayload struct {
 	Action         string `json:"action"`
 	Reason         string `json:"reason,omitempty"`
 	IdempotencyKey string `json:"idempotency_key,omitempty"`
+}
+
+type LaravelEnginePoolUpsertPayload struct {
+	Slug             string            `json:"slug"`
+	Name             string            `json:"name"`
+	Description      string            `json:"description"`
+	IsActive         bool              `json:"is_active"`
+	IsDefault        bool              `json:"is_default"`
+	ProviderProfiles map[string]string `json:"provider_profiles"`
 }
 
 type LaravelEngineServerCommandRecord struct {
@@ -254,6 +315,85 @@ func (c *LaravelEngineServerClient) ListServers(ctx context.Context) ([]LaravelE
 	return responseBody.Data.Servers, responseBody.Data.VerifierDomains, nil
 }
 
+func (c *LaravelEngineServerClient) ListPools(ctx context.Context) ([]LaravelEnginePoolRecord, error) {
+	if c == nil {
+		return nil, fmt.Errorf("laravel engine server client is not configured")
+	}
+
+	responseBody := struct {
+		Data []LaravelEnginePoolRecord `json:"data"`
+	}{}
+
+	if err := c.doJSON(ctx, http.MethodGet, "/api/internal/engine-pools", nil, "", &responseBody); err != nil {
+		return nil, err
+	}
+
+	return responseBody.Data, nil
+}
+
+func (c *LaravelEngineServerClient) CreatePool(ctx context.Context, payload LaravelEnginePoolUpsertPayload, triggeredBy string) (*LaravelEnginePoolRecord, error) {
+	if c == nil {
+		return nil, fmt.Errorf("laravel engine server client is not configured")
+	}
+
+	responseBody := struct {
+		Data LaravelEnginePoolRecord `json:"data"`
+	}{}
+	if err := c.doJSON(ctx, http.MethodPost, "/api/internal/engine-pools", payload, triggeredBy, &responseBody); err != nil {
+		return nil, err
+	}
+
+	return &responseBody.Data, nil
+}
+
+func (c *LaravelEngineServerClient) UpdatePool(ctx context.Context, poolID int, payload LaravelEnginePoolUpsertPayload, triggeredBy string) (*LaravelEnginePoolRecord, error) {
+	if c == nil {
+		return nil, fmt.Errorf("laravel engine server client is not configured")
+	}
+
+	responseBody := struct {
+		Data LaravelEnginePoolRecord `json:"data"`
+	}{}
+	path := "/api/internal/engine-pools/" + url.PathEscape(strconv.Itoa(poolID))
+	if err := c.doJSON(ctx, http.MethodPut, path, payload, triggeredBy, &responseBody); err != nil {
+		return nil, err
+	}
+
+	return &responseBody.Data, nil
+}
+
+func (c *LaravelEngineServerClient) ArchivePool(ctx context.Context, poolID int, triggeredBy string) (*LaravelEnginePoolRecord, error) {
+	if c == nil {
+		return nil, fmt.Errorf("laravel engine server client is not configured")
+	}
+
+	responseBody := struct {
+		Data LaravelEnginePoolRecord `json:"data"`
+	}{}
+	path := "/api/internal/engine-pools/" + url.PathEscape(strconv.Itoa(poolID)) + "/archive"
+	if err := c.doJSON(ctx, http.MethodPost, path, map[string]any{}, triggeredBy, &responseBody); err != nil {
+		return nil, err
+	}
+
+	return &responseBody.Data, nil
+}
+
+func (c *LaravelEngineServerClient) SetDefaultPool(ctx context.Context, poolID int, triggeredBy string) (*LaravelEnginePoolRecord, error) {
+	if c == nil {
+		return nil, fmt.Errorf("laravel engine server client is not configured")
+	}
+
+	responseBody := struct {
+		Data LaravelEnginePoolRecord `json:"data"`
+	}{}
+	path := "/api/internal/engine-pools/" + url.PathEscape(strconv.Itoa(poolID)) + "/set-default"
+	if err := c.doJSON(ctx, http.MethodPost, path, map[string]any{}, triggeredBy, &responseBody); err != nil {
+		return nil, err
+	}
+
+	return &responseBody.Data, nil
+}
+
 func (c *LaravelEngineServerClient) CreateServer(ctx context.Context, payload LaravelEngineServerUpsertPayload, triggeredBy string) (*LaravelEngineServerRecord, error) {
 	if c == nil {
 		return nil, fmt.Errorf("laravel engine server client is not configured")
@@ -279,6 +419,22 @@ func (c *LaravelEngineServerClient) UpdateServer(ctx context.Context, serverID i
 	}{}
 	path := "/api/internal/engine-servers/" + url.PathEscape(strconv.Itoa(serverID))
 	if err := c.doJSON(ctx, http.MethodPut, path, payload, triggeredBy, &responseBody); err != nil {
+		return nil, err
+	}
+
+	return &responseBody.Data, nil
+}
+
+func (c *LaravelEngineServerClient) DeleteServer(ctx context.Context, serverID int, triggeredBy string) (*LaravelEngineServerRecord, error) {
+	if c == nil {
+		return nil, fmt.Errorf("laravel engine server client is not configured")
+	}
+
+	responseBody := struct {
+		Data LaravelEngineServerRecord `json:"data"`
+	}{}
+	path := "/api/internal/engine-servers/" + url.PathEscape(strconv.Itoa(serverID))
+	if err := c.doJSON(ctx, http.MethodDelete, path, nil, triggeredBy, &responseBody); err != nil {
 		return nil, err
 	}
 
@@ -622,6 +778,16 @@ func (c *LaravelEngineServerClient) MetricsSnapshot() InternalAPIMetricsSnapshot
 func internalAPIAction(method string, path string) string {
 	normalized := strings.TrimSpace(path)
 	switch {
+	case normalized == "/api/internal/engine-pools" && strings.EqualFold(method, http.MethodGet):
+		return "list_pools"
+	case normalized == "/api/internal/engine-pools" && strings.EqualFold(method, http.MethodPost):
+		return "create_pool"
+	case strings.HasSuffix(normalized, "/archive") && strings.Contains(normalized, "/api/internal/engine-pools/"):
+		return "archive_pool"
+	case strings.HasSuffix(normalized, "/set-default") && strings.Contains(normalized, "/api/internal/engine-pools/"):
+		return "set_default_pool"
+	case strings.HasPrefix(normalized, "/api/internal/engine-pools/") && strings.EqualFold(method, http.MethodPut):
+		return "update_pool"
 	case normalized == "/api/internal/engine-servers" && strings.EqualFold(method, http.MethodGet):
 		return "list_servers"
 	case normalized == "/api/internal/engine-servers" && strings.EqualFold(method, http.MethodPost):
@@ -636,6 +802,8 @@ func internalAPIAction(method string, path string) string {
 		return "execute_server_command"
 	case strings.HasPrefix(normalized, "/api/internal/engine-servers/") && strings.EqualFold(method, http.MethodPut):
 		return "update_server"
+	case strings.HasPrefix(normalized, "/api/internal/engine-servers/") && strings.EqualFold(method, http.MethodDelete):
+		return "delete_server"
 	default:
 		return "unknown"
 	}

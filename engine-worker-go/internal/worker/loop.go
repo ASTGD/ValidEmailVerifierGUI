@@ -800,7 +800,8 @@ func (w *Worker) resolvePolicyRuntime(ctx context.Context, previous policyState)
 	}
 
 	if w.cfg.ControlPlanePolicySyncEnabled && w.cfg.ControlPlaneClient != nil {
-		policies, err := w.cfg.ControlPlaneClient.ProviderPolicies(ctx)
+		workerPool := stringFromMeta(w.cfg.Server.Meta, "pool")
+		policies, err := w.cfg.ControlPlaneClient.ProviderPoliciesForPool(ctx, workerPool)
 		if err != nil {
 			fmt.Printf("control-plane policies fetch error: %v\n", err)
 		} else {

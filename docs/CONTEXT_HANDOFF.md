@@ -122,6 +122,18 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Go policy canary drill automation and wider provider rollout (post-pilot)
 - Additional cache-read optimization for very large uploads
 
+## 16) Pre-release flag burn-down plan (make v1 permanent)
+- Goal: before first production release, remove temporary rollout feature flags and keep only operational/safety flags.
+- Completed in current Go UI segment:
+  - Removed `GO_WORKER_OPS_REORG_ENABLED` runtime branching.
+  - Removed `GO_SERVER_INVENTORY_REARCH_ENABLED` runtime branching.
+  - Removed `GO_SERVER_REGISTRY_UI_ENABLED` toggle behavior (server registry UI path is now permanent).
+- Pending across other segments (track and remove before release):
+  - Audit all `*_ENABLED` feature-cutover flags added during dev-only migrations.
+  - Convert finalized features to permanent defaults in code.
+  - Keep only true runtime controls (timeouts, retry, thresholds, safeguards).
+  - Delete obsolete env keys from `.env.example` after each conversion.
+
 
 ---
 

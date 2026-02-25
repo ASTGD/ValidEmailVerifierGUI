@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -38,6 +39,21 @@ func TestDocsURLReturnsEmptyWhenUnavailable(t *testing.T) {
 
 	if got := server.docsURL(); got != "" {
 		t.Fatalf("expected empty docs URL, got %q", got)
+	}
+}
+
+func TestHandleUIRegistryRedirectTargetsServers(t *testing.T) {
+	server := &Server{cfg: Config{}}
+
+	req := httptest.NewRequest(http.MethodGet, "/verifier-engine-room/registry", nil)
+	recorder := httptest.NewRecorder()
+	server.handleUIRegistryRedirect(recorder, req)
+
+	if recorder.Code != http.StatusFound {
+		t.Fatalf("expected redirect status, got %d", recorder.Code)
+	}
+	if location := recorder.Header().Get("Location"); location != "/verifier-engine-room/servers" {
+		t.Fatalf("expected redirect to servers, got %q", location)
 	}
 }
 
@@ -113,65 +129,55 @@ func TestSettingsTemplateRendersRuntimeHelpKeys(t *testing.T) {
 	}
 }
 
-func TestWorkersTemplateRendersRegistryTabAndForms(t *testing.T) {
+func TestProvisioningTemplateRendersWizardOnly(t *testing.T) {
 	renderer, err := NewViewRenderer()
 	if err != nil {
 		t.Fatalf("failed to create renderer: %v", err)
 	}
 
 	recorder := httptest.NewRecorder()
-	renderer.Render(recorder, WorkersPageData{
+	renderer.Render(recorder, ProvisioningPageData{
 		BasePageData: BasePageData{
-			Title:           "Verifier Engine Room · Workers",
-			Subtitle:        "Live worker status",
-			ActiveNav:       "workers",
-			ContentTemplate: "workers",
+			Title:           "Verifier Engine Room · Provisioning",
+			Subtitle:        "Guided server onboarding",
+			ActiveNav:       "provisioning",
+			ContentTemplate: "provisioning",
 			BasePath:        "/verifier-engine-room",
 		},
-		ActiveTab: "registry",
+		Mode:                "existing",
+		VerificationChecked: true,
+		SelectedServer: &LaravelEngineServerRecord{
+			ID:                   7,
+			Name:                 "engine-7",
+			IPAddress:            "10.0.0.7",
+			ProcessState:         "running",
+			HeartbeatState:       "healthy",
+			RuntimeMatchStatus:   "matched",
+			LastAgentSeenAt:      "2026-02-18T12:00:00Z",
+			ProcessControlMode:   "agent_systemd",
+			AgentEnabled:         true,
+			AgentServiceName:     "vev-worker.service",
+			LastCommandStatus:    "success",
+			LastCommandRequestID: "req-42",
+		},
 		ServerRegistry: EngineServerRegistryPageData{
 			Enabled:    true,
 			Configured: true,
-			Filter:     "all",
 			Servers: []LaravelEngineServerRecord{
 				{
-					ID:                   7,
-					Name:                 "engine-7",
-					IPAddress:            "10.0.0.7",
-					Status:               "online",
-					RuntimeMatchStatus:   "matched",
-					RuntimeMatchWorkerID: "7",
-					ProcessControlMode:   "agent_systemd",
-					AgentEnabled:         true,
-					AgentServiceName:     "vev-worker.service",
+					ID:        7,
+					Name:      "engine-7",
+					IPAddress: "10.0.0.7",
+					Status:    "online",
 				},
 			},
 			VerifierDomains: []LaravelVerifierDomainOption{
 				{ID: 1, Domain: "example.org"},
 			},
-			EditServerID: 7,
-			EditServer: &LaravelEngineServerRecord{
-				ID:                     7,
-				Name:                   "engine-7",
-				IPAddress:              "10.0.0.7",
-				VerifierDomainID:       1,
-				MaxConcurrency:         10,
-				Status:                 "online",
-				ProcessControlMode:     "agent_systemd",
-				AgentEnabled:           true,
-				AgentVerifyTLS:         true,
-				AgentTimeoutSeconds:    8,
-				AgentServiceName:       "vev-worker.service",
-				LatestProvisioningInfo: nil,
-			},
 			ProvisionBundleServerID: 7,
 			ProvisionBundle: &LaravelProvisioningBundleDetails{
-				BundleUUID:     "bundle-uuid",
-				EngineServerID: 7,
-				DownloadURLs: map[string]string{
-					"install": "https://app.test/install.sh",
-					"env":     "https://app.test/worker.env",
-				},
+				BundleUUID:             "bundle-uuid",
+				EngineServerID:         7,
 				InstallCommandTemplate: "curl -fsSL \"https://app.test/install.sh\" | bash -s -- --ghcr-user \"<ghcr-username>\" --ghcr-token \"<ghcr-token>\"",
 			},
 			OrphanWorkers: []WorkerSummary{
@@ -187,24 +193,358 @@ func TestWorkersTemplateRendersRegistryTabAndForms(t *testing.T) {
 	body := recorder.Body.String()
 	assertContains := func(needle string) {
 		if !strings.Contains(body, needle) {
-			t.Fatalf("expected workers template to contain %q", needle)
+			t.Fatalf("expected provisioning template to contain %q", needle)
 		}
 	}
 
-	assertContains("Runtime Workers")
-	assertContains("Server Registry &amp; Provisioning")
-	assertContains("/verifier-engine-room/workers/servers")
-	assertContains("/verifier-engine-room/workers/servers/7/provision")
-	assertContains("/verifier-engine-room/workers/servers/7/command")
-	assertContains("Latest Provisioning Bundle")
-	assertContains("Create Server")
-	assertContains("Save Changes")
-	assertContains("Runtime Match")
-	assertContains("Runtime-only orphan workers")
-	assertContains("registry_filter=matched")
+	assertContains("Provisioning Wizard")
+	assertContains("Step 1: Select Server")
+	assertContains("Step 2: Generate Bundle")
+	assertContains("Step 3: Install on VPS")
+	assertContains("Step 4: Verification Checks")
+	assertContains("/verifier-engine-room/provisioning/servers")
+	assertContains("/verifier-engine-room/provisioning/servers/7/provision")
+	assertContains("/verifier-engine-room/provisioning/servers/7/verify")
+	assertContains("Add New Server")
+	assertContains("Select Server")
+	assertContains("Run this command on your VPS shell as root.")
+	assertContains("Claim-next auth sanity")
+	if strings.Contains(body, "Runtime-only orphan workers") {
+		t.Fatalf("expected provisioning template to hide inventory table blocks")
+	}
+	if strings.Contains(body, "/verifier-engine-room/provisioning/servers/7/command") {
+		t.Fatalf("expected provisioning template to hide infrastructure command controls")
+	}
+	if strings.Contains(body, "Server Inventory") {
+		t.Fatalf("expected provisioning template heading to be wizard-only")
+	}
 }
 
-func TestWorkersTemplateRendersDecisionTraceExplorer(t *testing.T) {
+func TestProvisioningTemplateHidesCheckResultsUntilVerificationRuns(t *testing.T) {
+	renderer, err := NewViewRenderer()
+	if err != nil {
+		t.Fatalf("failed to create renderer: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	renderer.Render(recorder, ProvisioningPageData{
+		BasePageData: BasePageData{
+			Title:           "Verifier Engine Room · Provisioning",
+			Subtitle:        "Guided server onboarding",
+			ActiveNav:       "provisioning",
+			ContentTemplate: "provisioning",
+			BasePath:        "/verifier-engine-room",
+		},
+		Mode: "existing",
+		SelectedServer: &LaravelEngineServerRecord{
+			ID:                 7,
+			Name:               "engine-7",
+			IPAddress:          "10.0.0.7",
+			ProcessState:       "running",
+			HeartbeatState:     "healthy",
+			RuntimeMatchStatus: "matched",
+		},
+		ServerRegistry: EngineServerRegistryPageData{
+			Enabled:    true,
+			Configured: true,
+		},
+	})
+
+	body := recorder.Body.String()
+	if !strings.Contains(body, "Run Verification Checks") {
+		t.Fatalf("expected verification button when server is selected")
+	}
+	if !strings.Contains(body, "Run verification after installing the bundle on your VPS.") {
+		t.Fatalf("expected pre-check helper copy before verification runs")
+	}
+	if strings.Contains(body, "Pass · running") {
+		t.Fatalf("expected check results to remain hidden until verification runs")
+	}
+}
+
+func TestProvisioningTemplateCreateModeRendersPoolSelector(t *testing.T) {
+	renderer, err := NewViewRenderer()
+	if err != nil {
+		t.Fatalf("failed to create renderer: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	renderer.Render(recorder, ProvisioningPageData{
+		BasePageData: BasePageData{
+			Title:           "Verifier Engine Room · Provisioning",
+			Subtitle:        "Guided server onboarding",
+			ActiveNav:       "provisioning",
+			ContentTemplate: "provisioning",
+			BasePath:        "/verifier-engine-room",
+		},
+		Mode: "create",
+		ServerRegistry: EngineServerRegistryPageData{
+			Enabled:    true,
+			Configured: true,
+			Pools: []LaravelEnginePoolRecord{
+				{
+					ID:        1,
+					Slug:      "default",
+					Name:      "Default Pool",
+					IsActive:  true,
+					IsDefault: true,
+				},
+			},
+		},
+	})
+
+	body := recorder.Body.String()
+	if !strings.Contains(body, "name=\"worker_pool_id\"") {
+		t.Fatalf("expected provisioning create mode to render worker pool selector")
+	}
+	if !strings.Contains(body, "Manage Pools") {
+		t.Fatalf("expected provisioning create mode to render manage pools deep link")
+	}
+}
+
+func TestServersTemplateRendersInventoryListWithManageAction(t *testing.T) {
+	renderer, err := NewViewRenderer()
+	if err != nil {
+		t.Fatalf("failed to create renderer: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	renderer.Render(recorder, ServersPageData{
+		BasePageData: BasePageData{
+			Title:           "Verifier Engine Room · Servers",
+			Subtitle:        "Inventory and operational state",
+			ActiveNav:       "servers",
+			ContentTemplate: "servers",
+			BasePath:        "/verifier-engine-room",
+		},
+		ServerRegistry: EngineServerRegistryPageData{
+			Enabled:    true,
+			Configured: true,
+			Filter:     "operational",
+			Servers: []LaravelEngineServerRecord{
+				{
+					ID:                   7,
+					Name:                 "engine-7",
+					IPAddress:            "10.0.0.7",
+					ProcessState:         "running",
+					HeartbeatState:       "healthy",
+					HeartbeatAgeText:     "45s",
+					RuntimeMatchStatus:   "matched",
+					RuntimeMatchWorkerID: "7",
+					UpdatedAtDisplay:     "2026-02-24T09:00:22.000000Z",
+					LastCommandStatus:    "success",
+					LastCommandRequestID: "req-42",
+				},
+			},
+			OrphanWorkers: []WorkerSummary{
+				{
+					WorkerID:  "orphan-1",
+					Host:      "orphan-host",
+					IPAddress: "10.9.0.1",
+				},
+			},
+		},
+	})
+
+	body := recorder.Body.String()
+	assertContains := func(needle string) {
+		if !strings.Contains(body, needle) {
+			t.Fatalf("expected servers template to contain %q", needle)
+		}
+	}
+
+	assertContains("Server Inventory")
+	assertContains("Open Provisioning Wizard")
+	assertContains("List and manage state only")
+	assertContains("Filter:")
+	assertContains("/verifier-engine-room/servers?registry_filter=operational")
+	assertContains("/verifier-engine-room/servers?registry_filter=needs_attention")
+	assertContains("/verifier-engine-room/servers/7")
+	assertContains("matched")
+	assertContains("Runtime-only workers detected")
+	assertContains("req-42")
+	if strings.Contains(body, "method=\"POST\" action=\"/verifier-engine-room/servers\"") {
+		t.Fatalf("expected servers template to avoid inline create-server form")
+	}
+	if strings.Contains(body, "Step 1: Select Server") {
+		t.Fatalf("expected servers template to avoid wizard-only step sections")
+	}
+	if strings.Contains(body, "Generate Bundle") {
+		t.Fatalf("expected servers list to avoid provisioning actions")
+	}
+	if strings.Contains(body, "Delete Server") {
+		t.Fatalf("expected servers list to avoid direct delete control")
+	}
+}
+
+func TestServerManageTemplateRendersInfrastructureControls(t *testing.T) {
+	renderer, err := NewViewRenderer()
+	if err != nil {
+		t.Fatalf("failed to create renderer: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	renderer.Render(recorder, ServerManagePageData{
+		BasePageData: BasePageData{
+			Title:           "Verifier Engine Room · Server · engine-7",
+			Subtitle:        "Server diagnostics and infrastructure control",
+			ActiveNav:       "servers",
+			ContentTemplate: "server_manage",
+			BasePath:        "/verifier-engine-room",
+		},
+		Server: &LaravelEngineServerRecord{
+			ID:                   7,
+			Name:                 "engine-7",
+			IPAddress:            "10.0.0.7",
+			ProcessState:         "running",
+			HeartbeatState:       "healthy",
+			HeartbeatAgeText:     "44s",
+			RuntimeMatchStatus:   "matched",
+			RuntimeMatchWorkerID: "7",
+			RuntimeMatchDetail:   "Matched runtime worker 7",
+			ProcessControlMode:   "agent_systemd",
+			AgentEnabled:         true,
+			LastCommandStatus:    "success",
+			LastCommandRequestID: "req-55",
+		},
+		DeleteLocked: true,
+	})
+
+	body := recorder.Body.String()
+	assertContains := func(needle string) {
+		if !strings.Contains(body, needle) {
+			t.Fatalf("expected server manage template to contain %q", needle)
+		}
+	}
+
+	assertContains("Manage Server")
+	assertContains("Infrastructure Control")
+	assertContains("/verifier-engine-room/servers/7/command")
+	assertContains("go-servers-manage-status")
+	assertContains("Delete Guard")
+	assertContains("Blocked until process is stopped")
+	assertContains("/verifier-engine-room/servers/7/delete")
+	assertContains("/verifier-engine-room/servers/7/edit")
+	assertContains("/verifier-engine-room/provisioning?mode=existing&server_id=7")
+}
+
+func TestServerEditTemplateRendersDedicatedEditForm(t *testing.T) {
+	renderer, err := NewViewRenderer()
+	if err != nil {
+		t.Fatalf("failed to create renderer: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	renderer.Render(recorder, ServerEditPageData{
+		BasePageData: BasePageData{
+			Title:           "Verifier Engine Room · Edit Server · engine-7",
+			Subtitle:        "Edit server metadata",
+			ActiveNav:       "servers",
+			ContentTemplate: "server_edit",
+			BasePath:        "/verifier-engine-room",
+		},
+		Server: &LaravelEngineServerRecord{
+			ID:                  7,
+			Name:                "engine-7",
+			IPAddress:           "10.0.0.7",
+			ProcessControlMode:  "agent_systemd",
+			AgentEnabled:        true,
+			AgentVerifyTLS:      true,
+			AgentTimeoutSeconds: 8,
+		},
+		VerifierDomains: []LaravelVerifierDomainOption{
+			{ID: 1, Domain: "example.org"},
+		},
+		Pools: []LaravelEnginePoolRecord{
+			{
+				ID:        1,
+				Slug:      "default",
+				Name:      "Default Pool",
+				IsActive:  true,
+				IsDefault: true,
+			},
+		},
+	})
+
+	body := recorder.Body.String()
+	assertContains := func(needle string) {
+		if !strings.Contains(body, needle) {
+			t.Fatalf("expected server edit template to contain %q", needle)
+		}
+	}
+
+	assertContains("Edit Server")
+	assertContains("Save Server")
+	assertContains("name=\"process_control_mode\"")
+	assertContains("name=\"agent_base_url\"")
+	assertContains("name=\"worker_pool_id\"")
+	assertContains("View pool policy")
+	assertContains("/verifier-engine-room/servers/7/edit")
+	assertContains("return_to\" value=\"server_edit\"")
+	if strings.Contains(body, "Run Verification Checks") {
+		t.Fatalf("expected server edit page to avoid provisioning controls")
+	}
+}
+
+func TestPoolsTemplateRendersCrudAndRuntimeSummary(t *testing.T) {
+	renderer, err := NewViewRenderer()
+	if err != nil {
+		t.Fatalf("failed to create renderer: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	renderer.Render(recorder, PoolsPageData{
+		BasePageData: BasePageData{
+			Title:           "Verifier Engine Room · Pools",
+			Subtitle:        "Server-group policy and capacity control",
+			ActiveNav:       "pools",
+			ContentTemplate: "pools",
+			BasePath:        "/verifier-engine-room",
+		},
+		Configured: true,
+		Rows: []PoolInventoryRow{
+			{
+				Pool: LaravelEnginePoolRecord{
+					ID:        1,
+					Slug:      "default",
+					Name:      "Default Pool",
+					IsActive:  true,
+					IsDefault: true,
+					ProviderProfiles: map[string]string{
+						"generic":   "standard",
+						"gmail":     "standard",
+						"microsoft": "standard",
+						"yahoo":     "standard",
+					},
+				},
+				RuntimeOnline:      2,
+				RuntimeDesired:     5,
+				RuntimeHealthScore: 0.92,
+			},
+		},
+		ProfileOptions: []PoolProfileOption{
+			{Key: "standard", Label: "Standard"},
+			{Key: "low_hit", Label: "Low Hit"},
+			{Key: "warmup", Label: "Warmup"},
+		},
+	})
+
+	body := recorder.Body.String()
+	assertContains := func(needle string) {
+		if !strings.Contains(body, needle) {
+			t.Fatalf("expected pools template to contain %q", needle)
+		}
+	}
+
+	assertContains("Create Pool")
+	assertContains("Edit Pool")
+	assertContains("Default Pool")
+	assertContains("Policy Summary")
+	assertContains("/verifier-engine-room/pools/default/scale")
+	assertContains("desired")
+}
+
+func TestWorkersRuntimeTemplateRendersDecisionTraceExplorer(t *testing.T) {
 	renderer, err := NewViewRenderer()
 	if err != nil {
 		t.Fatalf("failed to create renderer: %v", err)
@@ -216,10 +556,9 @@ func TestWorkersTemplateRendersDecisionTraceExplorer(t *testing.T) {
 			Title:           "Verifier Engine Room · Workers",
 			Subtitle:        "Live worker status",
 			ActiveNav:       "workers",
-			ContentTemplate: "workers",
+			ContentTemplate: "workers_runtime",
 			BasePath:        "/verifier-engine-room",
 		},
-		ActiveTab: "runtime",
 		Workers: []WorkerSummary{
 			{
 				WorkerID:      "worker-1",
@@ -228,6 +567,12 @@ func TestWorkersTemplateRendersDecisionTraceExplorer(t *testing.T) {
 				Status:        "online",
 				DesiredState:  "running",
 				LastHeartbeat: "2026-02-18T12:00:00Z",
+			},
+		},
+		WorkerServerLinks: map[string]WorkerServerLink{
+			"worker-1": {
+				Matched:   true,
+				ManageURL: "/verifier-engine-room/servers/9",
 			},
 		},
 		DecisionTraces: WorkerDecisionTracePageData{
@@ -269,9 +614,19 @@ func TestWorkersTemplateRendersDecisionTraceExplorer(t *testing.T) {
 	assertContains("provider_tempfail_unresolved")
 	assertContains("Load More")
 	assertContains("retryable")
+	assertContains("/verifier-engine-room/workers/worker-1/pause")
+	assertContains("/verifier-engine-room/workers/worker-1/drain")
+	assertContains("/verifier-engine-room/workers/worker-1/quarantine")
+	assertContains("/verifier-engine-room/servers/9")
+	if strings.Contains(body, "/verifier-engine-room/workers/worker-1/stop") {
+		t.Fatalf("expected workers runtime template to hide stop action")
+	}
+	if strings.Contains(body, "/verifier-engine-room/workers/worker-1/resume") {
+		t.Fatalf("expected running worker to render only Pause action")
+	}
 }
 
-func TestWorkersTemplateRendersStoppedWorkerAsRedWithStartAction(t *testing.T) {
+func TestWorkersRuntimeTemplateRendersRuntimeControlsOnly(t *testing.T) {
 	renderer, err := NewViewRenderer()
 	if err != nil {
 		t.Fatalf("failed to create renderer: %v", err)
@@ -283,68 +638,81 @@ func TestWorkersTemplateRendersStoppedWorkerAsRedWithStartAction(t *testing.T) {
 			Title:           "Verifier Engine Room · Workers",
 			Subtitle:        "Live worker status",
 			ActiveNav:       "workers",
-			ContentTemplate: "workers",
+			ContentTemplate: "workers_runtime",
 			BasePath:        "/verifier-engine-room",
 		},
-		ActiveTab: "runtime",
 		Workers: []WorkerSummary{
 			{
-				WorkerID:      "worker-stopped",
+				WorkerID:      "worker-running",
 				Host:          "host-1",
 				Pool:          "pool-a",
-				Status:        "stopped",
-				DesiredState:  "stopped",
-				LastHeartbeat: "2026-02-18T12:00:00Z",
-			},
-		},
-	})
-
-	body := recorder.Body.String()
-	if !strings.Contains(body, "bg-red-500/20 text-red-300") {
-		t.Fatalf("expected stopped worker status to render in red")
-	}
-	if !strings.Contains(body, "/verifier-engine-room/workers/worker-stopped/resume") {
-		t.Fatalf("expected stopped worker to expose resume endpoint")
-	}
-	if !strings.Contains(body, ">Start</button>") {
-		t.Fatalf("expected stopped worker action to render Start button")
-	}
-}
-
-func TestWorkersTemplateRendersStartingStateWithoutStartAction(t *testing.T) {
-	renderer, err := NewViewRenderer()
-	if err != nil {
-		t.Fatalf("failed to create renderer: %v", err)
-	}
-
-	recorder := httptest.NewRecorder()
-	renderer.Render(recorder, WorkersPageData{
-		BasePageData: BasePageData{
-			Title:           "Verifier Engine Room · Workers",
-			Subtitle:        "Live worker status",
-			ActiveNav:       "workers",
-			ContentTemplate: "workers",
-			BasePath:        "/verifier-engine-room",
-		},
-		ActiveTab: "runtime",
-		Workers: []WorkerSummary{
-			{
-				WorkerID:      "worker-starting",
-				Host:          "host-1",
-				Pool:          "pool-a",
-				Status:        "stopped",
+				Status:        "online",
 				DesiredState:  "running",
 				LastHeartbeat: "2026-02-18T12:00:00Z",
 			},
 		},
+		WorkerServerLinks: map[string]WorkerServerLink{
+			"worker-running": {
+				Matched:     false,
+				RegisterURL: "/verifier-engine-room/provisioning?mode=create&worker_id=worker-running",
+			},
+		},
 	})
 
 	body := recorder.Body.String()
-	if !strings.Contains(body, ">starting<") {
-		t.Fatalf("expected transition state label to render as starting")
+	if !strings.Contains(body, "Runtime controls affect scheduling and claims") {
+		t.Fatalf("expected workers runtime microcopy to be rendered")
 	}
-	if strings.Contains(body, "/verifier-engine-room/workers/worker-starting/resume") && strings.Contains(body, ">Start</button>") {
-		t.Fatalf("expected no Start action while desired state is running")
+	if strings.Contains(body, "Server Registry &amp; Provisioning") {
+		t.Fatalf("expected workers runtime page to hide registry tab")
+	}
+	if strings.Contains(body, "/verifier-engine-room/workers/worker-running/stop") {
+		t.Fatalf("expected workers runtime page to hide stop action")
+	}
+	if !strings.Contains(body, "/verifier-engine-room/workers/worker-running/pause") {
+		t.Fatalf("expected pause action for running worker")
+	}
+	if !strings.Contains(body, "/verifier-engine-room/provisioning?mode=create") || !strings.Contains(body, "worker-running") {
+		t.Fatalf("expected register server link for unmatched runtime worker")
+	}
+}
+
+func TestWorkersRuntimeTemplateRendersPausedWorkerWithResumeAction(t *testing.T) {
+	renderer, err := NewViewRenderer()
+	if err != nil {
+		t.Fatalf("failed to create renderer: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	renderer.Render(recorder, WorkersPageData{
+		BasePageData: BasePageData{
+			Title:           "Verifier Engine Room · Workers",
+			Subtitle:        "Live worker status",
+			ActiveNav:       "workers",
+			ContentTemplate: "workers_runtime",
+			BasePath:        "/verifier-engine-room",
+		},
+		Workers: []WorkerSummary{
+			{
+				WorkerID:      "worker-paused",
+				Host:          "host-1",
+				Pool:          "pool-a",
+				Status:        "online",
+				DesiredState:  "paused",
+				LastHeartbeat: "2026-02-18T12:00:00Z",
+			},
+		},
+	})
+
+	body := recorder.Body.String()
+	if !strings.Contains(body, "/verifier-engine-room/workers/worker-paused/resume") {
+		t.Fatalf("expected paused worker to expose Resume action")
+	}
+	if strings.Contains(body, "/verifier-engine-room/workers/worker-paused/pause") {
+		t.Fatalf("expected paused worker to hide Pause action")
+	}
+	if strings.Contains(body, "/verifier-engine-room/workers/worker-paused/stop") {
+		t.Fatalf("expected paused worker to hide Stop action")
 	}
 }
 
@@ -370,6 +738,27 @@ func TestApplyRegistryRuntimeMatchMarksMatchedAndOrphanWorkers(t *testing.T) {
 	}
 	if len(orphans) != 1 || orphans[0].WorkerID != "orphan-1" {
 		t.Fatalf("expected orphan worker orphan-1, got %#v", orphans)
+	}
+	if matched[0].ProcessState != "running" {
+		t.Fatalf("expected matched server process state fallback to running, got %q", matched[0].ProcessState)
+	}
+	if matched[1].ProcessState != "stopped" {
+		t.Fatalf("expected offline server process state fallback to stopped, got %q", matched[1].ProcessState)
+	}
+	if matched[1].HeartbeatState != "none" {
+		t.Fatalf("expected heartbeat state fallback to none without heartbeat, got %q", matched[1].HeartbeatState)
+	}
+}
+
+func TestHostsLikelyMatchSupportsShortAndFQDNHosts(t *testing.T) {
+	if !hostsLikelyMatch("eng2.vasevev.com", "eng2") {
+		t.Fatal("expected short worker host to match FQDN server name")
+	}
+	if !hostsLikelyMatch("eng2", "eng2.vasevev.com") {
+		t.Fatal("expected FQDN worker host to match short server name")
+	}
+	if hostsLikelyMatch("eng2.vasevev.com", "eng9.vasevev.com") {
+		t.Fatal("expected different hosts not to match")
 	}
 }
 

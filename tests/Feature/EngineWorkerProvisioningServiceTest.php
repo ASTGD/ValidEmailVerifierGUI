@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\EngineServer;
+use App\Models\EngineWorkerPool;
 use App\Models\User;
 use App\Services\EngineWorkerProvisioningService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -111,6 +112,38 @@ class EngineWorkerProvisioningServiceTest extends TestCase
         $this->assertStringContainsString('CONTROL_PLANE_TOKEN=go-token-123', $workerEnv);
         $this->assertStringContainsString('CONTROL_PLANE_HEARTBEAT_ENABLED=true', $workerEnv);
         $this->assertStringContainsString('CONTROL_PLANE_POLICY_SYNC_ENABLED=true', $workerEnv);
+    }
+
+    public function test_bundle_includes_assigned_worker_pool_in_worker_env(): void
+    {
+        Storage::fake('local');
+        $this->setBaseProvisioningConfig();
+
+        $pool = EngineWorkerPool::query()->create([
+            'slug' => 'gmail-lowhit',
+            'name' => 'Gmail Low Hit',
+            'is_active' => true,
+            'is_default' => false,
+            'provider_profiles' => [
+                'generic' => 'standard',
+                'gmail' => 'low_hit',
+                'microsoft' => 'standard',
+                'yahoo' => 'standard',
+            ],
+        ]);
+
+        $server = $this->createEngineServer();
+        $server->update([
+            'worker_pool_id' => $pool->id,
+        ]);
+
+        $bundle = app(EngineWorkerProvisioningService::class)->createBundle(
+            $server->fresh(),
+            User::factory()->create()
+        );
+
+        $workerEnv = Storage::disk('local')->get($bundle->env_key);
+        $this->assertStringContainsString('WORKER_POOL=gmail-lowhit', $workerEnv);
     }
 
     public function test_bundle_installs_worker_agent_and_systemd_units_for_agent_mode(): void

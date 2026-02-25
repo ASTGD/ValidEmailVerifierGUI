@@ -89,3 +89,39 @@ func TestControlPlaneProviderPolicies(t *testing.T) {
 		t.Fatalf("unexpected active version: %s", resp.Data.ActiveVersion)
 	}
 }
+
+func TestControlPlaneProviderPoliciesForPool(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("expected GET, got %s", r.Method)
+		}
+		if r.URL.Path != "/api/providers/policies" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("worker_pool"); got != "gmail-lowhit" {
+			t.Fatalf("expected worker_pool query gmail-lowhit, got %q", got)
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"policy_engine_enabled":  true,
+				"adaptive_retry_enabled": true,
+				"auto_protect_enabled":   false,
+				"active_version":         "v2.2.1",
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewControlPlaneClient(server.URL, "token")
+	resp, err := client.ProviderPoliciesForPool(context.Background(), "gmail-lowhit")
+	if err != nil {
+		t.Fatalf("provider policies returned error: %v", err)
+	}
+
+	if resp.Data.ActiveVersion != "v2.2.1" {
+		t.Fatalf("unexpected active version: %s", resp.Data.ActiveVersion)
+	}
+}

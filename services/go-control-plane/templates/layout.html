@@ -5,46 +5,106 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
-    <link rel="stylesheet" href="/assets/app.css?v=18_4_2_warning_cta_2" />
+    <link rel="stylesheet" href="/assets/app.css?v=22_4_server_inventory_rearch" />
 </head>
 <body class="min-h-screen bg-slate-950 text-slate-100">
-    <div class="min-h-screen">
-        <header class="border-b border-slate-800 bg-slate-900/60">
-            <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-                <div>
-                    <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Verifier Engine Room</p>
-                    <h1 class="text-xl font-semibold">Go Worker Control Center</h1>
-                </div>
-                <div class="flex items-center gap-3">
-                    {{ if .DocsURL }}
-                    <a href="{{ .DocsURL }}" target="_blank" class="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-200 hover:bg-slate-800">Docs</a>
-                    {{ end }}
-                    <div class="text-xs text-slate-400">{{ .Subtitle }}</div>
-                </div>
+    <div class="min-h-screen md:flex">
+        <aside class="border-b border-slate-800 bg-slate-900/60 md:min-h-screen md:w-72 md:border-b-0 md:border-r">
+            <div class="px-5 py-5">
+                <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Verifier Engine Room</p>
+                <h1 class="mt-1 text-xl font-semibold">Go Worker Control Center</h1>
             </div>
-            <nav class="mx-auto flex max-w-6xl gap-3 px-6 pb-4 text-sm">
-                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "overview" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/overview">Overview</a>
-                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "workers" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/workers">Workers</a>
-                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "pools" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/pools">Pools</a>
-                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "alerts" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/alerts">Alerts</a>
-                <a class="rounded-full px-4 py-2 {{ if eq .ActiveNav "settings" }}bg-amber-500 text-slate-900{{ else }}bg-slate-900/70 text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/settings">Settings</a>
-            </nav>
-        </header>
 
-        <main class="mx-auto max-w-6xl px-6 py-8">
-            {{ if eq .ActiveNav "overview" }}
-                {{ template "overview" . }}
-            {{ else if eq .ActiveNav "workers" }}
-                {{ template "workers" . }}
-            {{ else if eq .ActiveNav "pools" }}
-                {{ template "pools" . }}
-            {{ else if eq .ActiveNav "alerts" }}
-                {{ template "alerts" . }}
-            {{ else if eq .ActiveNav "settings" }}
-                {{ template "settings" . }}
-            {{ end }}
-        </main>
+            <nav class="px-3 pb-5 text-sm">
+                <div class="px-2 pb-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">Ops</div>
+                <div class="space-y-1">
+                    <a class="block rounded-lg px-3 py-2 {{ if eq .ActiveNav "overview" }}bg-amber-500 text-slate-900{{ else }}text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/overview">Overview</a>
+                    <a class="block rounded-lg px-3 py-2 {{ if eq .ActiveNav "workers" }}bg-amber-500 text-slate-900{{ else }}text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/workers">Workers</a>
+                    <a class="block rounded-lg px-3 py-2 {{ if eq .ActiveNav "alerts" }}bg-amber-500 text-slate-900{{ else }}text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/alerts">Alerts</a>
+                </div>
+
+                <div class="mt-5 px-2 pb-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">Infra</div>
+                <div class="space-y-1">
+                    {{ if .ShowProvisioning }}
+                    <a class="block rounded-lg px-3 py-2 {{ if eq .ActiveNav "provisioning" }}bg-amber-500 text-slate-900{{ else }}text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/provisioning">Provisioning</a>
+                    <a class="block rounded-lg px-3 py-2 {{ if eq .ActiveNav "servers" }}bg-amber-500 text-slate-900{{ else }}text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/servers">Servers</a>
+                    {{ end }}
+                    <a class="block rounded-lg px-3 py-2 {{ if eq .ActiveNav "pools" }}bg-amber-500 text-slate-900{{ else }}text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/pools">Pools</a>
+                </div>
+
+                <div class="mt-5 px-2 pb-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">Governance</div>
+                <div class="space-y-1">
+                    <a class="block rounded-lg px-3 py-2 {{ if eq .ActiveNav "settings" }}bg-amber-500 text-slate-900{{ else }}text-slate-200 hover:bg-slate-800{{ end }}" href="{{ .BasePath }}/settings">Settings</a>
+                </div>
+            </nav>
+        </aside>
+
+        <div class="min-w-0 flex-1">
+            <header class="border-b border-slate-800 bg-slate-900/40">
+                <div class="mx-auto flex max-w-[88rem] flex-wrap items-center justify-between gap-3 px-6 py-4">
+                    <div class="text-sm text-slate-300">{{ .Subtitle }}</div>
+                    <div class="flex items-center gap-3">
+                        <button id="go-theme-toggle" type="button" class="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-200 hover:bg-slate-800">Light</button>
+                        {{ if .DocsURL }}
+                        <a href="{{ .DocsURL }}" target="_blank" class="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-200 hover:bg-slate-800">Docs</a>
+                        {{ end }}
+                    </div>
+                </div>
+            </header>
+
+            <main class="mx-auto max-w-[88rem] px-6 py-8">
+                {{ if eq .ContentTemplate "overview" }}
+                    {{ template "overview" . }}
+                {{ else if eq .ContentTemplate "workers" }}
+                    {{ template "workers" . }}
+                {{ else if eq .ContentTemplate "workers_runtime" }}
+                    {{ template "workers_runtime" . }}
+                {{ else if eq .ContentTemplate "provisioning" }}
+                    {{ template "provisioning" . }}
+                {{ else if eq .ContentTemplate "servers" }}
+                    {{ template "servers" . }}
+                {{ else if eq .ContentTemplate "server_manage" }}
+                    {{ template "server_manage" . }}
+                {{ else if eq .ContentTemplate "server_edit" }}
+                    {{ template "server_edit" . }}
+                {{ else if eq .ContentTemplate "pools" }}
+                    {{ template "pools" . }}
+                {{ else if eq .ContentTemplate "alerts" }}
+                    {{ template "alerts" . }}
+                {{ else if eq .ContentTemplate "settings" }}
+                    {{ template "settings" . }}
+                {{ end }}
+            </main>
+        </div>
     </div>
+
+    <script>
+        (() => {
+            const storageKey = 'go-control-plane-theme';
+            const body = document.body;
+            const toggle = document.getElementById('go-theme-toggle');
+            if (!body || !toggle) {
+                return;
+            }
+
+            const applyTheme = (theme) => {
+                const next = theme === 'light' ? 'light' : 'dark';
+                body.classList.toggle('theme-light', next === 'light');
+                toggle.textContent = next === 'light' ? 'Dark' : 'Light';
+                toggle.setAttribute('aria-label', `Switch to ${next === 'light' ? 'dark' : 'light'} theme`);
+                window.dispatchEvent(new CustomEvent('cp:theme-change', { detail: { theme: next } }));
+            };
+
+            const stored = window.localStorage.getItem(storageKey);
+            applyTheme(stored === 'light' ? 'light' : 'dark');
+
+            toggle.addEventListener('click', () => {
+                const next = body.classList.contains('theme-light') ? 'dark' : 'light';
+                window.localStorage.setItem(storageKey, next);
+                applyTheme(next);
+            });
+        })();
+    </script>
 
     {{ if .LiveStreamPath }}
     <script>
@@ -64,7 +124,7 @@
             });
 
             source.addEventListener('error', () => {
-                // Keep page stable on stream interruptions; browser reconnects automatically.
+                // Browser reconnect is automatic.
             });
 
             window.addEventListener('pagehide', close);

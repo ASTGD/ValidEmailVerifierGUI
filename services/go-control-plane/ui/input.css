@@ -1,3 +1,215 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body:not(.theme-light) .bg-slate-900\/60 {
+  background-color: #081a36;
+}
+
+body:not(.theme-light) .bg-slate-900\/70 {
+  background-color: #0a1f40;
+}
+
+body:not(.theme-light) .bg-slate-950\/60 {
+  background-color: #06142c;
+}
+
+body:not(.theme-light) .border-slate-800 {
+  border-color: #25446f;
+}
+
+body:not(.theme-light) .divide-slate-800 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1f3a5f;
+}
+
+body:not(.theme-light) .rounded-2xl.border.border-slate-800.bg-slate-900\/60 {
+  box-shadow: 0 8px 24px rgba(2, 8, 23, 0.45);
+}
+
+body.theme-light {
+  color-scheme: light;
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+body.theme-light .bg-slate-950,
+body.theme-light .bg-slate-950\/60,
+body.theme-light .bg-slate-950\/40 {
+  background-color: #f8fafc;
+}
+
+body.theme-light .bg-slate-900,
+body.theme-light .bg-slate-900\/70,
+body.theme-light .bg-slate-900\/60 {
+  background-color: #ffffff;
+}
+
+body.theme-light .bg-slate-800 {
+  background-color: #e2e8f0;
+}
+
+body.theme-light .bg-slate-700 {
+  background-color: #cbd5e1;
+}
+
+body.theme-light .bg-slate-200 {
+  background-color: #cbd5e1;
+}
+
+body.theme-light .text-slate-100 {
+  color: #0f172a;
+}
+
+body.theme-light .text-slate-200 {
+  color: #1e293b;
+}
+
+body.theme-light .text-slate-300 {
+  color: #334155;
+}
+
+body.theme-light .text-slate-400 {
+  color: #475569;
+}
+
+body.theme-light .text-slate-500 {
+  color: #64748b;
+}
+
+body.theme-light .border-slate-800,
+body.theme-light .border-slate-700 {
+  border-color: #cbd5e1;
+}
+
+body.theme-light .border-slate-600 {
+  border-color: #94a3b8;
+}
+
+body.theme-light .divide-slate-800 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #cbd5e1;
+}
+
+body.theme-light .hover\:bg-slate-800:hover {
+  background-color: #e2e8f0;
+}
+
+body.theme-light .hover\:bg-slate-700:hover {
+  background-color: #cbd5e1;
+}
+
+body.theme-light .hover\:text-slate-200:hover {
+  color: #0f172a;
+}
+
+body.theme-light .text-emerald-300,
+body.theme-light .text-emerald-200 {
+  color: #065f46;
+}
+
+body.theme-light .text-amber-300,
+body.theme-light .text-amber-200,
+body.theme-light .text-amber-100 {
+  color: #92400e;
+}
+
+body.theme-light .text-red-300,
+body.theme-light .text-red-200,
+body.theme-light .text-red-100 {
+  color: #991b1b;
+}
+
+body.theme-light .text-rose-300 {
+  color: #9f1239;
+}
+
+body.theme-light .text-cyan-300,
+body.theme-light .text-cyan-200,
+body.theme-light .text-cyan-100 {
+  color: #155e75;
+}
+
+body.theme-light .bg-emerald-500\/20 {
+  background-color: #d1fae5;
+}
+
+body.theme-light .bg-emerald-500\/10 {
+  background-color: #ecfdf5;
+}
+
+body.theme-light .bg-amber-500\/20 {
+  background-color: #fef3c7;
+}
+
+body.theme-light .bg-amber-500\/10,
+body.theme-light .bg-amber-500\/5 {
+  background-color: #fffbeb;
+}
+
+body.theme-light .bg-red-500\/20 {
+  background-color: #fee2e2;
+}
+
+body.theme-light .bg-red-500\/10 {
+  background-color: #fef2f2;
+}
+
+body.theme-light .bg-cyan-500\/20 {
+  background-color: #cffafe;
+}
+
+body.theme-light .bg-cyan-500\/10 {
+  background-color: #ecfeff;
+}
+
+body.theme-light .bg-rose-500\/20 {
+  background-color: #ffe4e6;
+}
+
+body.theme-light .border-emerald-500\/40 {
+  border-color: #34d399;
+}
+
+body.theme-light .border-emerald-500\/30 {
+  border-color: #6ee7b7;
+}
+
+body.theme-light .border-amber-500\/40 {
+  border-color: #f59e0b;
+}
+
+body.theme-light .border-amber-500\/30 {
+  border-color: #fbbf24;
+}
+
+body.theme-light .border-red-500\/40 {
+  border-color: #f87171;
+}
+
+body.theme-light .border-cyan-500\/60 {
+  border-color: #06b6d4;
+}
+
+body.theme-light .border-cyan-500\/30 {
+  border-color: #67e8f9;
+}
+
+body.theme-light .hover\:bg-emerald-500\/30:hover {
+  background-color: #a7f3d0;
+}
+
+body.theme-light .hover\:bg-amber-500\/30:hover {
+  background-color: #fde68a;
+}
+
+body.theme-light .hover\:bg-red-500\/30:hover {
+  background-color: #fecaca;
+}
+
+body.theme-light .hover\:bg-cyan-500\/30:hover,
+body.theme-light .hover\:bg-cyan-500\/20:hover {
+  background-color: #a5f3fc;
+}
+
+body.theme-light .hover\:text-cyan-200:hover {
+  color: #0e7490;
+}

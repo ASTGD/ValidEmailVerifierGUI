@@ -432,12 +432,15 @@
                                         <button class="rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-500/30" type="submit">Start</button>
                                     </form>
                                     {{ else }}
-                                    <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/pause">
-                                        <button class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700" type="submit">Pause</button>
-                                    </form>
+                                    {{ if eq .DesiredState "paused" }}
                                     <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/resume">
                                         <button class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700" type="submit">Resume</button>
                                     </form>
+                                    {{ else }}
+                                    <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/pause">
+                                        <button class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700" type="submit">Pause</button>
+                                    </form>
+                                    {{ end }}
                                     <form method="POST" action="{{ $.BasePath }}/workers/{{ .WorkerID }}/drain">
                                         <button class="rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300 hover:bg-amber-500/30" type="submit">Drain</button>
                                     </form>
@@ -595,13 +598,15 @@
 
         const renderActions = (workerID, quarantined, desiredState) => {
             const isStopped = desiredState === 'stopped';
+            const pauseAction = desiredState === 'paused'
+                ? actionButton({ workerID, name: 'resume' }, 'Resume', 'rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700')
+                : actionButton({ workerID, name: 'pause' }, 'Pause', 'rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700');
             const base = isStopped
                 ? [
                     actionButton({ workerID, name: 'resume' }, 'Start', 'rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-500/30'),
                 ]
                 : [
-                    actionButton({ workerID, name: 'pause' }, 'Pause', 'rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700'),
-                    actionButton({ workerID, name: 'resume' }, 'Resume', 'rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700'),
+                    pauseAction,
                     actionButton({ workerID, name: 'drain' }, 'Drain', 'rounded-full bg-amber-500/20 px-3 py-1 text-xs text-amber-300 hover:bg-amber-500/30'),
                     actionButton({ workerID, name: 'stop' }, 'Stop', 'rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300 hover:bg-red-500/30'),
                 ];

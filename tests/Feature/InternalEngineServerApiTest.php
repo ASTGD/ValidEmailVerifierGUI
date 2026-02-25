@@ -3,7 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\EngineServer;
+use App\Models\EngineServerCommand;
+use App\Models\EngineServerProvisioningBundle;
+use App\Models\EngineWorkerPool;
 use App\Models\SmtpDecisionTrace;
+use App\Models\VerificationWorker;
 use App\Models\VerifierDomain;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -40,6 +44,12 @@ class InternalEngineServerApiTest extends TestCase
             ->assertJsonPath('error_code', 'unauthorized')
             ->assertJsonPath('message', 'Unauthorized.')
             ->assertJsonStructure(['request_id']);
+
+        $this->getJson('/api/internal/engine-pools')
+            ->assertUnauthorized()
+            ->assertJsonPath('error_code', 'unauthorized')
+            ->assertJsonPath('message', 'Unauthorized.')
+            ->assertJsonStructure(['request_id']);
     }
 
     public function test_internal_engine_server_api_lists_and_mutates_servers(): void
@@ -47,6 +57,30 @@ class InternalEngineServerApiTest extends TestCase
         $domain = VerifierDomain::query()->create([
             'domain' => 'example.org',
             'is_active' => true,
+        ]);
+        $primaryPool = EngineWorkerPool::query()->create([
+            'slug' => 'pool-primary',
+            'name' => 'Pool Primary',
+            'is_active' => true,
+            'is_default' => false,
+            'provider_profiles' => [
+                'generic' => 'standard',
+                'gmail' => 'standard',
+                'microsoft' => 'standard',
+                'yahoo' => 'standard',
+            ],
+        ]);
+        $secondaryPool = EngineWorkerPool::query()->create([
+            'slug' => 'pool-secondary',
+            'name' => 'Pool Secondary',
+            'is_active' => true,
+            'is_default' => false,
+            'provider_profiles' => [
+                'generic' => 'standard',
+                'gmail' => 'low_hit',
+                'microsoft' => 'standard',
+                'yahoo' => 'standard',
+            ],
         ]);
 
         $server = EngineServer::query()->create([
@@ -60,6 +94,7 @@ class InternalEngineServerApiTest extends TestCase
             'helo_name' => 'helo.example.org',
             'mail_from_address' => 'probe@example.org',
             'verifier_domain_id' => $domain->id,
+            'worker_pool_id' => $primaryPool->id,
         ]);
 
         $this->withHeaders($this->internalHeaders())
@@ -67,6 +102,11 @@ class InternalEngineServerApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.servers.0.id', $server->id)
             ->assertJsonPath('data.servers.0.identity_domain', 'example.org')
+            ->assertJsonPath('data.servers.0.worker_pool_id', $primaryPool->id)
+            ->assertJsonPath('data.servers.0.worker_pool_slug', 'pool-primary')
+            ->assertJsonPath('data.servers.0.worker_pool_name', 'Pool Primary')
+            ->assertJsonPath('data.servers.0.process_state', 'unknown')
+            ->assertJsonPath('data.servers.0.heartbeat_state', 'none')
             ->assertJsonPath('data.verifier_domains.0.domain', 'example.org');
 
         $this->withHeaders($this->internalHeaders())
@@ -81,10 +121,13 @@ class InternalEngineServerApiTest extends TestCase
                 'helo_name' => 'helo2.example.org',
                 'mail_from_address' => 'probe2@example.org',
                 'verifier_domain_id' => $domain->id,
+                'worker_pool_id' => $primaryPool->id,
                 'notes' => 'created via go control plane',
             ])
             ->assertCreated()
-            ->assertJsonPath('data.name', 'engine-b');
+            ->assertJsonPath('data.name', 'engine-b')
+            ->assertJsonPath('data.worker_pool_id', $primaryPool->id)
+            ->assertJsonPath('data.worker_pool_slug', 'pool-primary');
 
         $createdServer = EngineServer::query()->where('name', 'engine-b')->firstOrFail();
 
@@ -100,18 +143,23 @@ class InternalEngineServerApiTest extends TestCase
                 'helo_name' => 'helo3.example.org',
                 'mail_from_address' => 'probe3@example.org',
                 'verifier_domain_id' => $domain->id,
+                'worker_pool_id' => $secondaryPool->id,
                 'notes' => 'updated via go control plane',
             ])
             ->assertOk()
             ->assertJsonPath('data.name', 'engine-b-updated')
             ->assertJsonPath('data.drain_mode', true)
-            ->assertJsonPath('data.max_concurrency', 16);
+            ->assertJsonPath('data.max_concurrency', 16)
+            ->assertJsonPath('data.worker_pool_id', $secondaryPool->id)
+            ->assertJsonPath('data.worker_pool_slug', 'pool-secondary')
+            ->assertJsonPath('data.worker_pool_name', 'Pool Secondary');
 
         $this->assertDatabaseHas('engine_servers', [
             'id' => $createdServer->id,
             'name' => 'engine-b-updated',
             'drain_mode' => true,
             'max_concurrency' => 16,
+            'worker_pool_id' => $secondaryPool->id,
         ]);
         $this->assertDatabaseHas('admin_audit_logs', [
             'action' => 'engine_server_created',
@@ -122,6 +170,140 @@ class InternalEngineServerApiTest extends TestCase
             'action' => 'engine_server_updated',
             'subject_type' => EngineServer::class,
             'subject_id' => (string) $createdServer->id,
+        ]);
+    }
+
+    public function test_internal_engine_pool_api_supports_crud_archive_and_default_switch(): void
+    {
+        /** @var EngineWorkerPool $defaultPool */
+        $defaultPool = EngineWorkerPool::query()->where('is_default', true)->firstOrFail();
+
+        $this->withHeaders($this->internalHeaders())
+            ->getJson('/api/internal/engine-pools')
+            ->assertOk()
+            ->assertJsonPath('data.0.slug', $defaultPool->slug);
+
+        $createResponse = $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/engine-pools', [
+                'slug' => 'gmail-lowhit',
+                'name' => 'Gmail Low Hit',
+                'description' => 'Low hit profile for Gmail',
+                'is_active' => true,
+                'provider_profiles' => [
+                    'generic' => 'standard',
+                    'gmail' => 'low_hit',
+                    'microsoft' => 'standard',
+                    'yahoo' => 'warmup',
+                ],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.slug', 'gmail-lowhit')
+            ->assertJsonPath('data.provider_profiles.gmail', 'low_hit')
+            ->assertJsonPath('data.provider_profiles.yahoo', 'warmup');
+
+        $poolID = (int) $createResponse->json('data.id');
+        $pool = EngineWorkerPool::query()->findOrFail($poolID);
+
+        $this->withHeaders($this->internalHeaders())
+            ->putJson('/api/internal/engine-pools/'.$poolID, [
+                'slug' => 'gmail-lowhit',
+                'name' => 'Gmail Low Hit Updated',
+                'description' => 'Updated profile',
+                'is_active' => true,
+                'is_default' => false,
+                'provider_profiles' => [
+                    'generic' => 'standard',
+                    'gmail' => 'low_hit',
+                    'microsoft' => 'warmup',
+                    'yahoo' => 'standard',
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Gmail Low Hit Updated')
+            ->assertJsonPath('data.provider_profiles.microsoft', 'warmup');
+
+        $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/engine-pools/'.$poolID.'/set-default')
+            ->assertOk()
+            ->assertJsonPath('data.is_default', true);
+
+        $this->assertDatabaseHas('engine_worker_pools', [
+            'id' => $poolID,
+            'is_default' => true,
+        ]);
+        $this->assertDatabaseHas('engine_worker_pools', [
+            'id' => $defaultPool->id,
+            'is_default' => false,
+        ]);
+
+        $this->withHeaders($this->internalHeaders())
+            ->putJson('/api/internal/engine-pools/'.$poolID, [
+                'slug' => 'gmail-lowhit',
+                'name' => 'Gmail Low Hit Updated',
+                'description' => 'Updated profile',
+                'is_active' => false,
+                'is_default' => true,
+                'provider_profiles' => [
+                    'generic' => 'standard',
+                    'gmail' => 'low_hit',
+                    'microsoft' => 'warmup',
+                    'yahoo' => 'standard',
+                ],
+            ])
+            ->assertStatus(409)
+            ->assertJsonPath('error_code', 'pool_default_inactive');
+
+        $server = EngineServer::query()->create([
+            'name' => 'engine-pool-guard',
+            'ip_address' => '10.0.0.201',
+            'is_active' => true,
+            'drain_mode' => false,
+            'worker_pool_id' => $poolID,
+        ]);
+
+        $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/engine-pools/'.$poolID.'/archive')
+            ->assertStatus(409)
+            ->assertJsonPath('error_code', 'pool_archive_blocked');
+
+        $server->update([
+            'worker_pool_id' => $defaultPool->id,
+        ]);
+
+        $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/engine-pools/'.$defaultPool->id.'/set-default')
+            ->assertOk()
+            ->assertJsonPath('data.is_default', true);
+
+        $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/engine-pools/'.$poolID.'/archive')
+            ->assertOk()
+            ->assertJsonPath('data.is_active', false);
+
+        $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/engine-pools/'.$defaultPool->id.'/archive')
+            ->assertStatus(409)
+            ->assertJsonPath('error_code', 'pool_archive_blocked');
+
+        $this->assertDatabaseHas('admin_audit_logs', [
+            'action' => 'engine_pool_created',
+            'subject_type' => EngineWorkerPool::class,
+            'subject_id' => (string) $poolID,
+        ]);
+        $this->assertDatabaseHas('admin_audit_logs', [
+            'action' => 'engine_pool_updated',
+            'subject_type' => EngineWorkerPool::class,
+            'subject_id' => (string) $poolID,
+        ]);
+        $this->assertDatabaseHas('admin_audit_logs', [
+            'action' => 'engine_pool_default_set',
+            'subject_type' => EngineWorkerPool::class,
+            'subject_id' => (string) $poolID,
+        ]);
+        $this->assertDatabaseHas('admin_audit_logs', [
+            'action' => 'engine_pool_archived',
+            'subject_type' => EngineWorkerPool::class,
+            'subject_id' => (string) $poolID,
         ]);
     }
 
@@ -197,6 +379,125 @@ class InternalEngineServerApiTest extends TestCase
                     'ip_address',
                 ],
             ]);
+    }
+
+    public function test_internal_engine_server_api_rejects_inactive_pool_assignment(): void
+    {
+        $inactivePool = EngineWorkerPool::query()->create([
+            'slug' => 'archived-pool',
+            'name' => 'Archived Pool',
+            'is_active' => false,
+            'is_default' => false,
+            'provider_profiles' => [
+                'generic' => 'standard',
+                'gmail' => 'standard',
+                'microsoft' => 'standard',
+                'yahoo' => 'standard',
+            ],
+        ]);
+
+        $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/engine-servers', [
+                'name' => 'engine-invalid-pool',
+                'ip_address' => '10.0.0.91',
+                'is_active' => true,
+                'drain_mode' => false,
+                'worker_pool_id' => $inactivePool->id,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('error_code', 'validation_failed')
+            ->assertJsonStructure([
+                'request_id',
+                'errors' => ['worker_pool_id'],
+            ]);
+    }
+
+    public function test_internal_engine_server_api_blocks_delete_for_active_server(): void
+    {
+        $server = EngineServer::query()->create([
+            'name' => 'engine-active',
+            'ip_address' => '10.0.0.15',
+            'is_active' => true,
+            'drain_mode' => false,
+            'last_heartbeat_at' => now(),
+            'last_agent_status' => [
+                'service_state' => 'active',
+            ],
+        ]);
+
+        $this->withHeaders($this->internalHeaders())
+            ->deleteJson('/api/internal/engine-servers/'.$server->id)
+            ->assertStatus(409)
+            ->assertJsonPath('error_code', 'server_delete_blocked')
+            ->assertJsonPath('details.process_state', 'running')
+            ->assertJsonPath('details.heartbeat_state', 'healthy')
+            ->assertJsonStructure(['request_id']);
+
+        $this->assertDatabaseHas('engine_servers', [
+            'id' => $server->id,
+        ]);
+    }
+
+    public function test_internal_engine_server_api_deletes_stopped_server_and_related_records(): void
+    {
+        $server = EngineServer::query()->create([
+            'name' => 'engine-stopped',
+            'ip_address' => '10.0.0.16',
+            'is_active' => true,
+            'drain_mode' => false,
+            'last_heartbeat_at' => now()->subMinutes(30),
+            'last_agent_status' => [
+                'service_state' => 'inactive',
+            ],
+        ]);
+
+        $bundle = EngineServerProvisioningBundle::query()->create([
+            'engine_server_id' => $server->id,
+            'bundle_uuid' => (string) fake()->uuid(),
+            'env_key' => 'env-key',
+            'script_key' => 'script-key',
+            'expires_at' => now()->addHour(),
+        ]);
+
+        $command = EngineServerCommand::query()->create([
+            'engine_server_id' => $server->id,
+            'action' => 'stop',
+            'status' => 'success',
+            'source' => 'go_control_plane_internal_api',
+            'request_id' => (string) fake()->uuid(),
+        ]);
+
+        $worker = VerificationWorker::query()->create([
+            'worker_id' => 'worker-delete-test',
+            'engine_server_id' => $server->id,
+            'version' => 'dev',
+            'last_seen_at' => now()->subMinutes(15),
+        ]);
+
+        $this->withHeaders($this->internalHeaders())
+            ->deleteJson('/api/internal/engine-servers/'.$server->id)
+            ->assertOk()
+            ->assertJsonPath('data.id', $server->id)
+            ->assertJsonPath('data.name', 'engine-stopped')
+            ->assertJsonPath('data.deleted', true);
+
+        $this->assertDatabaseMissing('engine_servers', [
+            'id' => $server->id,
+        ]);
+        $this->assertDatabaseMissing('engine_server_provisioning_bundles', [
+            'id' => $bundle->id,
+        ]);
+        $this->assertDatabaseMissing('engine_server_commands', [
+            'id' => $command->id,
+        ]);
+        $this->assertDatabaseMissing('verification_workers', [
+            'id' => $worker->id,
+        ]);
+        $this->assertDatabaseHas('admin_audit_logs', [
+            'action' => 'engine_server_deleted',
+            'subject_type' => EngineServer::class,
+            'subject_id' => (string) $server->id,
+        ]);
     }
 
     public function test_internal_engine_server_api_lists_smtp_decision_traces_with_filters(): void

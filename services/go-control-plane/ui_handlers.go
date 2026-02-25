@@ -48,10 +48,56 @@ type WorkersPageData struct {
 	BasePageData
 	WorkerCount         int
 	Workers             []WorkerSummary
+	WorkerServerLinks   map[string]WorkerServerLink
 	PollIntervalSeconds int
 	ActiveTab           string
 	ServerRegistry      EngineServerRegistryPageData
 	DecisionTraces      WorkerDecisionTracePageData
+}
+
+type ProvisioningPageData struct {
+	BasePageData
+	Mode                string
+	SelectedServer      *LaravelEngineServerRecord
+	Prefill             ProvisioningPrefillHints
+	VerificationChecked bool
+	ServerRegistry      EngineServerRegistryPageData
+}
+
+type ServersPageData struct {
+	BasePageData
+	ServerRegistry EngineServerRegistryPageData
+}
+
+type ServerManagePageData struct {
+	BasePageData
+	Server       *LaravelEngineServerRecord
+	Notice       string
+	Error        string
+	DeleteLocked bool
+}
+
+type ServerEditPageData struct {
+	BasePageData
+	Server          *LaravelEngineServerRecord
+	VerifierDomains []LaravelVerifierDomainOption
+	Pools           []LaravelEnginePoolRecord
+	Notice          string
+	Error           string
+}
+
+type WorkerServerLink struct {
+	Matched     bool   `json:"matched"`
+	ServerID    int    `json:"server_id,omitempty"`
+	ServerName  string `json:"server_name,omitempty"`
+	ManageURL   string `json:"manage_url,omitempty"`
+	RegisterURL string `json:"register_url,omitempty"`
+}
+
+type ProvisioningPrefillHints struct {
+	WorkerID string
+	Host     string
+	IP       string
 }
 
 type WorkerDecisionTracePageData struct {
@@ -69,6 +115,7 @@ type EngineServerRegistryPageData struct {
 	Error                    string
 	Warning                  string
 	Servers                  []LaravelEngineServerRecord
+	Pools                    []LaravelEnginePoolRecord
 	VerifierDomains          []LaravelVerifierDomainOption
 	EditServerID             int
 	EditServer               *LaravelEngineServerRecord
@@ -82,9 +129,27 @@ type EngineServerRegistryPageData struct {
 
 type PoolsPageData struct {
 	BasePageData
-	PoolCount           int
-	Pools               []PoolSummary
+	Configured         bool
+	Notice             string
+	Error              string
+	PoolCount          int
+	Rows               []PoolInventoryRow
+	EditPoolID         int
+	EditPool           *LaravelEnginePoolRecord
+	ProfileOptions     []PoolProfileOption
 	PollIntervalSeconds int
+}
+
+type PoolInventoryRow struct {
+	Pool                LaravelEnginePoolRecord
+	RuntimeOnline       int
+	RuntimeDesired      int
+	RuntimeHealthScore  float64
+}
+
+type PoolProfileOption struct {
+	Key   string
+	Label string
 }
 
 type AlertsPageData struct {
@@ -177,6 +242,30 @@ func (s *Server) handleUILegacyRedirect(path string) http.HandlerFunc {
 	}
 }
 
+func (s *Server) handleUILegacyServerManageRedirect(w http.ResponseWriter, r *http.Request) {
+	serverID := strings.TrimSpace(chi.URLParam(r, "serverID"))
+	if serverID == "" {
+		http.Redirect(w, r, "/verifier-engine-room/servers", http.StatusFound)
+		return
+	}
+
+	http.Redirect(w, r, "/verifier-engine-room/servers/"+url.PathEscape(serverID), http.StatusFound)
+}
+
+func (s *Server) handleUILegacyServerEditRedirect(w http.ResponseWriter, r *http.Request) {
+	serverID := strings.TrimSpace(chi.URLParam(r, "serverID"))
+	if serverID == "" {
+		http.Redirect(w, r, "/verifier-engine-room/servers", http.StatusFound)
+		return
+	}
+
+	http.Redirect(w, r, "/verifier-engine-room/servers/"+url.PathEscape(serverID)+"/edit", http.StatusFound)
+}
+
+func (s *Server) handleUIRegistryRedirect(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/verifier-engine-room/servers", http.StatusFound)
+}
+
 func (s *Server) handleUIOverview(w http.ResponseWriter, r *http.Request) {
 	stats, err := s.collectControlPlaneStats(r.Context())
 	if err != nil {
@@ -195,13 +284,14 @@ func (s *Server) handleUIOverview(w http.ResponseWriter, r *http.Request) {
 
 	data := OverviewData{
 		BasePageData: BasePageData{
-			Title:           "Verifier Engine Room · Overview",
-			Subtitle:        "Live telemetry stream",
-			ActiveNav:       "overview",
-			ContentTemplate: "overview",
-			BasePath:        "/verifier-engine-room",
-			DocsURL:         s.docsURL(),
-			LiveStreamPath:  "/verifier-engine-room/events",
+			Title:            "Verifier Engine Room · Overview",
+			Subtitle:         "Live telemetry stream",
+			ActiveNav:        "overview",
+			ContentTemplate:  "overview",
+			BasePath:         "/verifier-engine-room",
+			DocsURL:          s.docsURL(),
+			LiveStreamPath:   "/verifier-engine-room/events",
+			ShowProvisioning: true,
 		},
 		WorkerCount:            stats.WorkerCount,
 		PoolCount:              stats.PoolCount,
@@ -254,38 +344,273 @@ func (s *Server) handleUIWorkers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	settings := s.runtimeSettings(r.Context())
-	activeTab := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("tab")))
-	if activeTab != "registry" {
-		activeTab = "runtime"
-	}
 
-	registryData := s.buildEngineServerRegistryData(r, stats.Workers)
-	if activeTab == "registry" && !registryData.Enabled {
-		activeTab = "runtime"
-	}
-	decisionTraceData := s.buildWorkerDecisionTraceData(r)
-	if activeTab == "registry" {
-		decisionTraceData = WorkerDecisionTracePageData{}
+	if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("tab")), "registry") {
+		redirectQuery := r.URL.Query()
+		redirectQuery.Del("tab")
+		target := "/verifier-engine-room/servers"
+		if encoded := redirectQuery.Encode(); encoded != "" {
+			target += "?" + encoded
+		}
+		http.Redirect(w, r, target, http.StatusFound)
+		return
 	}
 
 	data := WorkersPageData{
 		BasePageData: BasePageData{
-			Title:           "Verifier Engine Room · Workers",
-			Subtitle:        "Live worker status",
-			ActiveNav:       "workers",
-			ContentTemplate: "workers",
-			BasePath:        "/verifier-engine-room",
-			DocsURL:         s.docsURL(),
+			Title:            "Verifier Engine Room · Workers",
+			Subtitle:         "Live worker status",
+			ActiveNav:        "workers",
+			ContentTemplate:  "workers_runtime",
+			BasePath:         "/verifier-engine-room",
+			DocsURL:          s.docsURL(),
+			ShowProvisioning: true,
 		},
 		WorkerCount:         stats.WorkerCount,
 		Workers:             stats.Workers,
+		WorkerServerLinks:   s.buildWorkerServerLinks(r.Context(), stats.Workers),
 		PollIntervalSeconds: settings.UIWorkersRefreshSecond,
-		ActiveTab:           activeTab,
-		ServerRegistry:      registryData,
-		DecisionTraces:      decisionTraceData,
+		DecisionTraces:      s.buildWorkerDecisionTraceData(r),
 	}
 
 	s.views.Render(w, data)
+}
+
+func (s *Server) handleUIProvisioning(w http.ResponseWriter, r *http.Request) {
+	stats, err := s.collectControlPlaneStats(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	registryData := s.buildEngineServerRegistryData(r, stats.Workers)
+	selectedServer := registryData.EditServer
+	mode := normalizeProvisioningMode(r.URL.Query().Get("mode"))
+	if selectedServer != nil {
+		mode = "existing"
+	}
+
+	data := ProvisioningPageData{
+		BasePageData: BasePageData{
+			Title:            "Verifier Engine Room · Provisioning",
+			Subtitle:         "Guided server onboarding",
+			ActiveNav:        "provisioning",
+			ContentTemplate:  "provisioning",
+			BasePath:         "/verifier-engine-room",
+			DocsURL:          s.docsURL(),
+			ShowProvisioning: true,
+		},
+		Mode:                mode,
+		SelectedServer:      selectedServer,
+		Prefill:             readProvisioningPrefillHints(r),
+		VerificationChecked: strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("verification")), "checked"),
+		ServerRegistry:      registryData,
+	}
+
+	s.views.Render(w, data)
+}
+
+func (s *Server) handleUIServers(w http.ResponseWriter, r *http.Request) {
+	if editServerID := strings.TrimSpace(firstNonEmptyQueryValue(r, "edit_server_id")); editServerID != "" {
+		if parsedID, parseErr := strconv.Atoi(editServerID); parseErr == nil && parsedID > 0 {
+			query := url.Values{}
+			if notice := firstNonEmptyQueryValue(r, "notice", "registry_notice"); notice != "" {
+				query.Set("notice", notice)
+			}
+			if queryErr := firstNonEmptyQueryValue(r, "error", "registry_error"); queryErr != "" {
+				query.Set("error", queryErr)
+			}
+			target := fmt.Sprintf("/verifier-engine-room/servers/%d/edit", parsedID)
+			if encoded := query.Encode(); encoded != "" {
+				target += "?" + encoded
+			}
+			http.Redirect(w, r, target, http.StatusFound)
+			return
+		}
+	}
+
+	if selectedServerID := strings.TrimSpace(firstNonEmptyQueryValue(r, "server_id")); selectedServerID != "" {
+		if parsedID, parseErr := strconv.Atoi(selectedServerID); parseErr == nil && parsedID > 0 {
+			if firstNonEmptyQueryValue(r, "notice", "error", "registry_notice", "registry_error", "request_id") != "" {
+				query := url.Values{}
+				if notice := firstNonEmptyQueryValue(r, "notice", "registry_notice"); notice != "" {
+					query.Set("notice", notice)
+				}
+				if queryErr := firstNonEmptyQueryValue(r, "error", "registry_error"); queryErr != "" {
+					query.Set("error", queryErr)
+				}
+				target := fmt.Sprintf("/verifier-engine-room/servers/%d", parsedID)
+				if encoded := query.Encode(); encoded != "" {
+					target += "?" + encoded
+				}
+				http.Redirect(w, r, target, http.StatusFound)
+				return
+			}
+		}
+	}
+
+	stats, err := s.collectControlPlaneStats(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	registryData := s.buildEngineServerRegistryData(r, stats.Workers)
+	data := ServersPageData{
+		BasePageData: BasePageData{
+			Title:            "Verifier Engine Room · Servers",
+			Subtitle:         "Inventory and operational state",
+			ActiveNav:        "servers",
+			ContentTemplate:  "servers",
+			BasePath:         "/verifier-engine-room",
+			DocsURL:          s.docsURL(),
+			ShowProvisioning: true,
+		},
+		ServerRegistry: registryData,
+	}
+
+	s.views.Render(w, data)
+}
+
+func (s *Server) handleUIServerManage(w http.ResponseWriter, r *http.Request) {
+	serverID, err := strconv.Atoi(strings.TrimSpace(chi.URLParam(r, "serverID")))
+	if err != nil || serverID <= 0 {
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Invalid server id."},
+		})
+		return
+	}
+
+	selectedServer, loadErr := s.loadServerWithRuntimeMatch(r.Context(), serverID)
+	if loadErr != nil {
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{mapRegistryActionError("load server registry", loadErr)},
+		})
+		return
+	}
+	if selectedServer == nil {
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Selected server not found."},
+		})
+		return
+	}
+
+	deleteLocked := serverDeleteLocked(*selectedServer)
+	data := ServerManagePageData{
+		BasePageData: BasePageData{
+			Title:            fmt.Sprintf("Verifier Engine Room · Server · %s", selectedServer.Name),
+			Subtitle:         "Server diagnostics and infrastructure control",
+			ActiveNav:        "servers",
+			ContentTemplate:  "server_manage",
+			BasePath:         "/verifier-engine-room",
+			DocsURL:          s.docsURL(),
+			ShowProvisioning: true,
+		},
+		Server:       selectedServer,
+		Notice:       firstNonEmptyQueryValue(r, "notice", "registry_notice"),
+		Error:        firstNonEmptyQueryValue(r, "error", "registry_error"),
+		DeleteLocked: deleteLocked,
+	}
+
+	s.views.Render(w, data)
+}
+
+func (s *Server) handleUIServerEdit(w http.ResponseWriter, r *http.Request) {
+	serverID, err := strconv.Atoi(strings.TrimSpace(chi.URLParam(r, "serverID")))
+	if err != nil || serverID <= 0 {
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Invalid server id."},
+		})
+		return
+	}
+
+	if s.laravelEngineClient == nil {
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Laravel internal API is not configured."},
+		})
+		return
+	}
+
+	servers, domains, listErr := s.laravelEngineClient.ListServers(r.Context())
+	if listErr != nil {
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{mapRegistryActionError("load server registry", listErr)},
+		})
+		return
+	}
+
+	pools, poolErr := s.laravelEngineClient.ListPools(r.Context())
+	if poolErr != nil {
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{mapRegistryActionError("load pools", poolErr)},
+		})
+		return
+	}
+
+	var selectedServer *LaravelEngineServerRecord
+	for index := range servers {
+		if servers[index].ID == serverID {
+			record := servers[index]
+			selectedServer = &record
+			break
+		}
+	}
+	if selectedServer == nil {
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Selected server not found."},
+		})
+		return
+	}
+
+	data := ServerEditPageData{
+		BasePageData: BasePageData{
+			Title:            fmt.Sprintf("Verifier Engine Room · Edit Server · %s", selectedServer.Name),
+			Subtitle:         "Edit server metadata",
+			ActiveNav:        "servers",
+			ContentTemplate:  "server_edit",
+			BasePath:         "/verifier-engine-room",
+			DocsURL:          s.docsURL(),
+			ShowProvisioning: true,
+		},
+		Server:          selectedServer,
+		VerifierDomains: domains,
+		Pools:           pools,
+		Notice:          firstNonEmptyQueryValue(r, "notice", "registry_notice"),
+		Error:           firstNonEmptyQueryValue(r, "error", "registry_error"),
+	}
+
+	s.views.Render(w, data)
+}
+
+func serverDeleteLocked(server LaravelEngineServerRecord) bool {
+	processState := strings.ToLower(strings.TrimSpace(server.ProcessState))
+	heartbeatState := strings.ToLower(strings.TrimSpace(server.HeartbeatState))
+
+	if heartbeatState == "healthy" {
+		return true
+	}
+	switch processState {
+	case "running", "starting", "stopping":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeProvisioningMode(raw string) string {
+	if strings.EqualFold(strings.TrimSpace(raw), "existing") {
+		return "existing"
+	}
+
+	return "create"
+}
+
+func readProvisioningPrefillHints(r *http.Request) ProvisioningPrefillHints {
+	return ProvisioningPrefillHints{
+		WorkerID: strings.TrimSpace(r.URL.Query().Get("worker_id")),
+		Host:     strings.TrimSpace(r.URL.Query().Get("worker_host")),
+		IP:       strings.TrimSpace(r.URL.Query().Get("worker_ip")),
+	}
 }
 
 func (s *Server) buildWorkerDecisionTraceData(r *http.Request) WorkerDecisionTracePageData {
@@ -327,16 +652,68 @@ func (s *Server) buildWorkerDecisionTraceData(r *http.Request) WorkerDecisionTra
 	return data
 }
 
+func (s *Server) buildWorkerServerLinks(ctx context.Context, runtimeWorkers []WorkerSummary) map[string]WorkerServerLink {
+	links := make(map[string]WorkerServerLink, len(runtimeWorkers))
+	for _, worker := range runtimeWorkers {
+		links[worker.WorkerID] = WorkerServerLink{
+			RegisterURL: workerProvisioningURL(worker),
+		}
+	}
+
+	if s.laravelEngineClient == nil {
+		return links
+	}
+
+	servers, _, err := s.laravelEngineClient.ListServers(ctx)
+	if err != nil {
+		return links
+	}
+
+	servers, _ = applyRegistryRuntimeMatch(servers, runtimeWorkers)
+	for _, server := range servers {
+		if server.RuntimeMatchStatus != "matched" {
+			continue
+		}
+		workerID := strings.TrimSpace(server.RuntimeMatchWorkerID)
+		if workerID == "" {
+			continue
+		}
+
+		link := links[workerID]
+		link.Matched = true
+		link.ServerID = server.ID
+		link.ServerName = server.Name
+		link.ManageURL = fmt.Sprintf("/verifier-engine-room/servers/%d", server.ID)
+		if link.RegisterURL == "" {
+			link.RegisterURL = "/verifier-engine-room/provisioning?mode=create"
+		}
+		links[workerID] = link
+	}
+
+	return links
+}
+
+func workerProvisioningURL(worker WorkerSummary) string {
+	query := url.Values{}
+	query.Set("mode", "create")
+	if worker.WorkerID != "" {
+		query.Set("worker_id", worker.WorkerID)
+	}
+	if strings.TrimSpace(worker.Host) != "" {
+		query.Set("worker_host", worker.Host)
+	}
+	if strings.TrimSpace(worker.IPAddress) != "" {
+		query.Set("worker_ip", worker.IPAddress)
+	}
+	return "/verifier-engine-room/provisioning?" + query.Encode()
+}
+
 func (s *Server) buildEngineServerRegistryData(r *http.Request, runtimeWorkers []WorkerSummary) EngineServerRegistryPageData {
 	data := EngineServerRegistryPageData{
-		Enabled:             s.cfg.ServerRegistryUIEnabled,
+		Enabled:             true,
 		Configured:          s.laravelEngineClient != nil,
 		Filter:              normalizeRegistryFilter(r.URL.Query().Get("registry_filter")),
 		RequireRuntimeMatch: s.cfg.ServerRegistryRequireRuntimeMatch,
-	}
-
-	if !data.Enabled {
-		return data
 	}
 
 	if !data.Configured {
@@ -350,36 +727,50 @@ func (s *Server) buildEngineServerRegistryData(r *http.Request, runtimeWorkers [
 		return data
 	}
 
+	pools, poolErr := s.laravelEngineClient.ListPools(r.Context())
+	if poolErr != nil {
+		data.Error = mapRegistryActionError("load pools", poolErr)
+		return data
+	}
+
 	servers, orphanWorkers := applyRegistryRuntimeMatch(servers, runtimeWorkers)
-	data.Servers = filterRegistryServers(servers, data.Filter)
+	allServers := servers
+	data.Servers = filterRegistryServers(allServers, data.Filter)
+	data.Pools = pools
 	data.VerifierDomains = domains
 	data.OrphanWorkers = orphanWorkers
 
-	if notice := strings.TrimSpace(r.URL.Query().Get("registry_notice")); notice != "" {
+	if notice := firstNonEmptyQueryValue(r, "notice", "registry_notice"); notice != "" {
 		data.Notice = notice
 	}
-	if queryError := strings.TrimSpace(r.URL.Query().Get("registry_error")); queryError != "" {
+	if queryError := firstNonEmptyQueryValue(r, "error", "registry_error"); queryError != "" {
 		data.Error = queryError
 	}
 
-	editServerID, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("edit_server_id")))
+	editServerID, _ := strconv.Atoi(firstNonEmptyQueryValue(r, "edit_server_id", "server_id"))
 	if editServerID > 0 {
 		data.EditServerID = editServerID
-		for index := range data.Servers {
-			if data.Servers[index].ID == editServerID {
-				server := data.Servers[index]
+		for index := range allServers {
+			if allServers[index].ID == editServerID {
+				server := allServers[index]
 				data.EditServer = &server
 				break
 			}
 		}
 	}
 
-	provisionBundleServerID, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("bundle_server_id")))
+	provisionBundleServerID, _ := strconv.Atoi(firstNonEmptyQueryValue(r, "bundle_server_id", "server_id"))
 	if provisionBundleServerID > 0 {
 		data.ProvisionBundleServerID = provisionBundleServerID
 		bundle, bundleErr := s.laravelEngineClient.LatestProvisioningBundle(r.Context(), provisionBundleServerID)
 		if bundleErr != nil {
-			data.ProvisionBundleLoadError = mapRegistryActionError("load latest provisioning bundle", bundleErr)
+			if isNoProvisioningBundleError(bundleErr) {
+				if strings.TrimSpace(data.Notice) == "" {
+					data.Notice = "No provisioning bundle exists yet for this server. Generate a new bundle in Step 2."
+				}
+			} else {
+				data.ProvisionBundleLoadError = mapRegistryActionError("load latest provisioning bundle", bundleErr)
+			}
 		} else {
 			data.ProvisionBundle = bundle
 		}
@@ -387,7 +778,7 @@ func (s *Server) buildEngineServerRegistryData(r *http.Request, runtimeWorkers [
 
 	if data.RequireRuntimeMatch {
 		mismatchCount := 0
-		for _, server := range data.Servers {
+		for _, server := range allServers {
 			if server.RuntimeMatchStatus != "matched" {
 				mismatchCount++
 			}
@@ -401,139 +792,296 @@ func (s *Server) buildEngineServerRegistryData(r *http.Request, runtimeWorkers [
 }
 
 func (s *Server) handleUICreateEngineServer(w http.ResponseWriter, r *http.Request) {
-	if !s.cfg.ServerRegistryUIEnabled {
-		http.NotFound(w, r)
-		return
-	}
 	if s.laravelEngineClient == nil {
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{"Laravel internal API is not configured."},
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Laravel internal API is not configured."},
 		})
 		return
 	}
 
 	payload, parseErr := parseEngineServerUpsertPayload(r)
 	if parseErr != nil {
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{parseErr.Error()},
+		query := url.Values{
+			"error": []string{parseErr.Error()},
+		}
+		if normalizeProvisioningMode(firstNonEmptyFormValue(r, "mode")) == "create" {
+			query.Set("mode", "create")
+		}
+		if selectedServerID := firstNonEmptyFormValue(r, "server_id", "edit_server_id"); selectedServerID != "" {
+			query.Set("server_id", selectedServerID)
+		}
+		s.redirectServerRegistry(w, r, query)
+		return
+	}
+
+	createdServer, err := s.laravelEngineClient.CreateServer(r.Context(), payload, uiTriggeredBy(r))
+	if err != nil {
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{mapRegistryActionError("create server", err)},
 		})
 		return
 	}
 
-	if _, err := s.laravelEngineClient.CreateServer(r.Context(), payload, uiTriggeredBy(r)); err != nil {
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{mapRegistryActionError("create server", err)},
-		})
-		return
+	query := url.Values{
+		"notice": []string{"Server created successfully."},
+	}
+	if createdServer != nil && createdServer.ID > 0 {
+		serverID := strconv.Itoa(createdServer.ID)
+		query.Set("server_id", serverID)
+		query.Set("edit_server_id", serverID)
+	}
+	if normalizeProvisioningMode(firstNonEmptyFormValue(r, "mode")) == "create" {
+		query.Set("mode", "existing")
 	}
 
-	s.redirectWorkersRegistry(w, r, url.Values{
-		"registry_notice": []string{"Server created successfully."},
-	})
+	s.redirectServerRegistry(w, r, query)
 }
 
 func (s *Server) handleUIUpdateEngineServer(w http.ResponseWriter, r *http.Request) {
-	if !s.cfg.ServerRegistryUIEnabled {
-		http.NotFound(w, r)
-		return
-	}
 	if s.laravelEngineClient == nil {
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{"Laravel internal API is not configured."},
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Laravel internal API is not configured."},
 		})
 		return
 	}
 
 	serverID, err := strconv.Atoi(strings.TrimSpace(chi.URLParam(r, "serverID")))
 	if err != nil || serverID <= 0 {
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{"Invalid server id."},
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Invalid server id."},
 		})
 		return
 	}
 
 	payload, parseErr := parseEngineServerUpsertPayload(r)
 	if parseErr != nil {
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{parseErr.Error()},
+		s.redirectServerRegistry(w, r, url.Values{
+			"error":          []string{parseErr.Error()},
 			"edit_server_id": []string{strconv.Itoa(serverID)},
+			"server_id":      []string{strconv.Itoa(serverID)},
 		})
 		return
 	}
 
 	if _, err := s.laravelEngineClient.UpdateServer(r.Context(), serverID, payload, uiTriggeredBy(r)); err != nil {
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{mapRegistryActionError("update server", err)},
+		s.redirectServerRegistry(w, r, url.Values{
+			"error":          []string{mapRegistryActionError("update server", err)},
 			"edit_server_id": []string{strconv.Itoa(serverID)},
+			"server_id":      []string{strconv.Itoa(serverID)},
 		})
 		return
 	}
 
-	s.redirectWorkersRegistry(w, r, url.Values{
-		"registry_notice": []string{"Server updated successfully."},
-		"edit_server_id":  []string{strconv.Itoa(serverID)},
+	s.redirectServerRegistry(w, r, url.Values{
+		"notice":         []string{"Server updated successfully."},
+		"edit_server_id": []string{strconv.Itoa(serverID)},
+		"server_id":      []string{strconv.Itoa(serverID)},
 	})
 }
 
 func (s *Server) handleUIProvisionEngineServer(w http.ResponseWriter, r *http.Request) {
-	if !s.cfg.ServerRegistryUIEnabled {
-		http.NotFound(w, r)
-		return
-	}
 	if s.laravelEngineClient == nil {
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{"Laravel internal API is not configured."},
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Laravel internal API is not configured."},
 		})
 		return
 	}
 
 	serverID, err := strconv.Atoi(strings.TrimSpace(chi.URLParam(r, "serverID")))
 	if err != nil || serverID <= 0 {
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{"Invalid server id."},
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Invalid server id."},
 		})
 		return
 	}
 
 	if _, err := s.laravelEngineClient.GenerateProvisioningBundle(r.Context(), serverID, uiTriggeredBy(r)); err != nil {
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{mapRegistryActionError("generate provisioning bundle", err)},
+		s.redirectServerRegistry(w, r, url.Values{
+			"error":          []string{mapRegistryActionError("generate provisioning bundle", err)},
 			"edit_server_id": []string{strconv.Itoa(serverID)},
+			"server_id":      []string{strconv.Itoa(serverID)},
 		})
 		return
 	}
 
-	s.redirectWorkersRegistry(w, r, url.Values{
-		"registry_notice":  []string{"Provisioning bundle generated successfully."},
+	s.redirectServerRegistry(w, r, url.Values{
+		"notice":           []string{"Provisioning bundle generated successfully."},
 		"bundle_server_id": []string{strconv.Itoa(serverID)},
 		"edit_server_id":   []string{strconv.Itoa(serverID)},
+		"server_id":        []string{strconv.Itoa(serverID)},
+		"mode":             []string{"existing"},
 	})
 }
 
-func (s *Server) handleUIEngineServerCommand(w http.ResponseWriter, r *http.Request) {
-	if !s.cfg.ServerRegistryUIEnabled {
-		http.NotFound(w, r)
-		return
-	}
+func (s *Server) handleUIDeleteEngineServer(w http.ResponseWriter, r *http.Request) {
 	if s.laravelEngineClient == nil {
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{"Laravel internal API is not configured."},
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Laravel internal API is not configured."},
 		})
 		return
 	}
 
 	serverID, err := strconv.Atoi(strings.TrimSpace(chi.URLParam(r, "serverID")))
 	if err != nil || serverID <= 0 {
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{"Invalid server id."},
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Invalid server id."},
+		})
+		return
+	}
+
+	if _, err := s.laravelEngineClient.DeleteServer(r.Context(), serverID, uiTriggeredBy(r)); err != nil {
+		query := url.Values{
+			"error": []string{mapRegistryActionError("delete server", err)},
+		}
+		if registryFilter := normalizeRegistryFilter(firstNonEmptyFormValue(r, "registry_filter")); registryFilter != "all" {
+			query.Set("registry_filter", registryFilter)
+		}
+		s.redirectServerRegistry(w, r, query)
+		return
+	}
+
+	query := url.Values{
+		"notice": []string{"Server deleted successfully."},
+	}
+	if registryFilter := normalizeRegistryFilter(firstNonEmptyFormValue(r, "registry_filter")); registryFilter != "all" {
+		query.Set("registry_filter", registryFilter)
+	}
+	s.redirectServerRegistry(w, r, query)
+}
+
+func (s *Server) handleUIVerifyProvisioningServer(w http.ResponseWriter, r *http.Request) {
+	if s.laravelEngineClient == nil {
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Laravel internal API is not configured."},
+		})
+		return
+	}
+
+	serverID, err := strconv.Atoi(strings.TrimSpace(chi.URLParam(r, "serverID")))
+	if err != nil || serverID <= 0 {
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Invalid server id."},
+		})
+		return
+	}
+
+	query := url.Values{
+		"server_id":      []string{strconv.Itoa(serverID)},
+		"edit_server_id": []string{strconv.Itoa(serverID)},
+		"mode":           []string{"existing"},
+		"verification":   []string{"checked"},
+	}
+	if bundleServerID := strings.TrimSpace(firstNonEmptyFormValue(r, "bundle_server_id")); bundleServerID != "" {
+		query.Set("bundle_server_id", bundleServerID)
+	}
+
+	selected, selectErr := s.loadServerWithRuntimeMatch(r.Context(), serverID)
+	if selectErr != nil {
+		query.Set("error", mapRegistryActionError("load server registry", selectErr))
+		s.redirectServerRegistry(w, r, query)
+		return
+	}
+
+	if selected == nil {
+		query.Set("error", "Selected server not found.")
+		s.redirectServerRegistry(w, r, query)
+		return
+	}
+
+	if selected.ProcessControlMode == "agent_systemd" && selected.AgentEnabled {
+		command, execErr := s.laravelEngineClient.ExecuteServerCommand(
+			r.Context(),
+			serverID,
+			LaravelEngineServerCommandPayload{
+				Action: "status",
+				Reason: "go-provisioning-verify",
+			},
+			uiTriggeredBy(r),
+		)
+		if execErr != nil {
+			query.Set("error", mapRegistryActionError("run verification status check", execErr))
+			s.redirectServerRegistry(w, r, query)
+			return
+		}
+
+		if strings.EqualFold(command.Status, "failed") {
+			message := strings.TrimSpace(command.ErrorMessage)
+			if message == "" {
+				message = "Verification status check failed."
+			}
+			query.Set("error", message)
+			s.redirectServerRegistry(w, r, query)
+			return
+		}
+
+		query.Set("notice", "Verification checks refreshed.")
+	} else {
+		query.Set("notice", "Verification checks refreshed. Agent status check is unavailable for this server mode.")
+	}
+
+	updatedServer, refreshErr := s.loadServerWithRuntimeMatch(r.Context(), serverID)
+	if refreshErr != nil {
+		query.Set("error", mapRegistryActionError("load server registry", refreshErr))
+		s.redirectServerRegistry(w, r, query)
+		return
+	}
+	if updatedServer != nil {
+		selected = updatedServer
+	}
+
+	if selected.RuntimeMatchStatus != "matched" {
+		if strings.EqualFold(selected.ProcessState, "running") {
+			query.Set("notice", "Verification checks refreshed. Worker process is running; runtime heartbeat is still warming up.")
+		} else {
+			query.Set("error", "Runtime heartbeat is missing. Check worker CONTROL_PLANE_BASE_URL and CONTROL_PLANE_TOKEN, then restart the worker container.")
+		}
+	}
+
+	s.redirectServerRegistry(w, r, query)
+}
+
+func (s *Server) loadServerWithRuntimeMatch(ctx context.Context, serverID int) (*LaravelEngineServerRecord, error) {
+	servers, _, err := s.laravelEngineClient.ListServers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	stats, statsErr := s.collectControlPlaneStats(ctx)
+	if statsErr == nil {
+		servers, _ = applyRegistryRuntimeMatch(servers, stats.Workers)
+	}
+
+	for index := range servers {
+		if servers[index].ID == serverID {
+			server := servers[index]
+			return &server, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func (s *Server) handleUIEngineServerCommand(w http.ResponseWriter, r *http.Request) {
+	if s.laravelEngineClient == nil {
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Laravel internal API is not configured."},
+		})
+		return
+	}
+
+	serverID, err := strconv.Atoi(strings.TrimSpace(chi.URLParam(r, "serverID")))
+	if err != nil || serverID <= 0 {
+		s.redirectServerRegistry(w, r, url.Values{
+			"error": []string{"Invalid server id."},
 		})
 		return
 	}
 
 	if parseErr := r.ParseForm(); parseErr != nil {
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{"Invalid command payload."},
+		s.redirectServerRegistry(w, r, url.Values{
+			"error":          []string{"Invalid command payload."},
 			"edit_server_id": []string{strconv.Itoa(serverID)},
+			"server_id":      []string{strconv.Itoa(serverID)},
 		})
 		return
 	}
@@ -542,9 +1090,10 @@ func (s *Server) handleUIEngineServerCommand(w http.ResponseWriter, r *http.Requ
 	switch action {
 	case "start", "stop", "restart", "status":
 	default:
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{"Invalid command action."},
+		s.redirectServerRegistry(w, r, url.Values{
+			"error":          []string{"Invalid command action."},
 			"edit_server_id": []string{strconv.Itoa(serverID)},
+			"server_id":      []string{strconv.Itoa(serverID)},
 		})
 		return
 	}
@@ -560,9 +1109,10 @@ func (s *Server) handleUIEngineServerCommand(w http.ResponseWriter, r *http.Requ
 		uiTriggeredBy(r),
 	)
 	if execErr != nil {
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{mapRegistryActionError("execute server command", execErr)},
+		s.redirectServerRegistry(w, r, url.Values{
+			"error":          []string{mapRegistryActionError("execute server command", execErr)},
 			"edit_server_id": []string{strconv.Itoa(serverID)},
+			"server_id":      []string{strconv.Itoa(serverID)},
 		})
 		return
 	}
@@ -572,30 +1122,109 @@ func (s *Server) handleUIEngineServerCommand(w http.ResponseWriter, r *http.Requ
 		if message == "" {
 			message = "Server command failed."
 		}
-		s.redirectWorkersRegistry(w, r, url.Values{
-			"registry_error": []string{message},
+		s.redirectServerRegistry(w, r, url.Values{
+			"error":          []string{message},
 			"edit_server_id": []string{strconv.Itoa(serverID)},
+			"server_id":      []string{strconv.Itoa(serverID)},
 		})
 		return
 	}
 
-	s.redirectWorkersRegistry(w, r, url.Values{
-		"registry_notice": []string{fmt.Sprintf("Server command %s completed (%s).", action, command.Status)},
-		"edit_server_id":  []string{strconv.Itoa(serverID)},
+	notice := fmt.Sprintf("Server command %s completed (%s).", action, command.Status)
+	if strings.TrimSpace(command.RequestID) != "" {
+		notice += fmt.Sprintf(" Request id: %s.", command.RequestID)
+	}
+	s.redirectServerRegistry(w, r, url.Values{
+		"notice":         []string{notice},
+		"edit_server_id": []string{strconv.Itoa(serverID)},
+		"server_id":      []string{strconv.Itoa(serverID)},
+		"request_id":     []string{command.RequestID},
 	})
 }
 
-func (s *Server) redirectWorkersRegistry(w http.ResponseWriter, r *http.Request, query url.Values) {
+func (s *Server) redirectServerRegistry(w http.ResponseWriter, r *http.Request, query url.Values) {
 	if query == nil {
 		query = url.Values{}
 	}
-	query.Set("tab", "registry")
-	targetPath := "/verifier-engine-room/workers"
+	targetPath := "/verifier-engine-room/servers"
+	returnTarget := strings.ToLower(strings.TrimSpace(firstNonEmptyFormValue(r, "return_to", "ui_return_to")))
+	serverID := parsePositiveInt(firstNonEmptyFormValue(r, "return_server_id", "server_id", "edit_server_id"))
+	switch returnTarget {
+	case "provisioning":
+		targetPath = "/verifier-engine-room/provisioning"
+	case "servers":
+		targetPath = "/verifier-engine-room/servers"
+	case "server_manage":
+		if serverID > 0 {
+			targetPath = fmt.Sprintf("/verifier-engine-room/servers/%d", serverID)
+		}
+	case "server_edit":
+		if serverID > 0 {
+			targetPath = fmt.Sprintf("/verifier-engine-room/servers/%d/edit", serverID)
+		}
+	default:
+		path := strings.ToLower(strings.TrimSpace(r.URL.Path))
+		if strings.Contains(path, "/provisioning/") {
+			targetPath = "/verifier-engine-room/provisioning"
+		}
+		if strings.Contains(path, "/servers/") {
+			targetPath = "/verifier-engine-room/servers"
+			extractedID := extractServerIDFromPath(path)
+			if extractedID > 0 {
+				if strings.HasSuffix(path, "/edit") {
+					targetPath = fmt.Sprintf("/verifier-engine-room/servers/%d/edit", extractedID)
+				} else {
+					targetPath = fmt.Sprintf("/verifier-engine-room/servers/%d", extractedID)
+				}
+			}
+		}
+	}
 	if encodedQuery := query.Encode(); encodedQuery != "" {
 		targetPath += "?" + encodedQuery
 	}
 
 	http.Redirect(w, r, targetPath, http.StatusSeeOther)
+}
+
+func parsePositiveInt(raw string) int {
+	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || parsed <= 0 {
+		return 0
+	}
+
+	return parsed
+}
+
+func extractServerIDFromPath(path string) int {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	for index, part := range parts {
+		if part != "servers" || index+1 >= len(parts) {
+			continue
+		}
+		return parsePositiveInt(parts[index+1])
+	}
+
+	return 0
+}
+
+func firstNonEmptyQueryValue(r *http.Request, keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(r.URL.Query().Get(key)); value != "" {
+			return value
+		}
+	}
+
+	return ""
+}
+
+func firstNonEmptyFormValue(r *http.Request, keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(r.FormValue(key)); value != "" {
+			return value
+		}
+	}
+
+	return ""
 }
 
 func parseEngineServerUpsertPayload(r *http.Request) (LaravelEngineServerUpsertPayload, error) {
@@ -629,6 +1258,16 @@ func parseEngineServerUpsertPayload(r *http.Request) (LaravelEngineServerUpsertP
 		AgentVerifyTLS:     true,
 		AgentServiceName:   strings.TrimSpace(r.FormValue("agent_service_name")),
 	}
+
+	workerPoolIDRaw := strings.TrimSpace(r.FormValue("worker_pool_id"))
+	if workerPoolIDRaw == "" {
+		return LaravelEngineServerUpsertPayload{}, fmt.Errorf("worker pool is required")
+	}
+	workerPoolID, err := strconv.Atoi(workerPoolIDRaw)
+	if err != nil || workerPoolID < 1 {
+		return LaravelEngineServerUpsertPayload{}, fmt.Errorf("worker pool is required")
+	}
+	payload.WorkerPoolID = &workerPoolID
 
 	if rawAgentVerifyTLS := strings.TrimSpace(r.FormValue("agent_verify_tls")); rawAgentVerifyTLS != "" {
 		payload.AgentVerifyTLS = parseFormBoolean(rawAgentVerifyTLS)
@@ -679,6 +1318,66 @@ func parseFormBoolean(raw string) bool {
 	}
 }
 
+func poolProfileOptions() []PoolProfileOption {
+	return []PoolProfileOption{
+		{Key: "standard", Label: "Standard"},
+		{Key: "low_hit", Label: "Low Hit"},
+		{Key: "warmup", Label: "Warmup"},
+	}
+}
+
+func normalizePoolProfile(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "low_hit":
+		return "low_hit"
+	case "warmup":
+		return "warmup"
+	default:
+		return "standard"
+	}
+}
+
+func normalizePoolProviderProfiles(source map[string]string) map[string]string {
+	return map[string]string{
+		"generic":   normalizePoolProfile(source["generic"]),
+		"gmail":     normalizePoolProfile(source["gmail"]),
+		"microsoft": normalizePoolProfile(source["microsoft"]),
+		"yahoo":     normalizePoolProfile(source["yahoo"]),
+	}
+}
+
+func parseEnginePoolUpsertPayload(r *http.Request) (LaravelEnginePoolUpsertPayload, error) {
+	if err := r.ParseForm(); err != nil {
+		return LaravelEnginePoolUpsertPayload{}, fmt.Errorf("invalid form payload")
+	}
+
+	slug := strings.ToLower(strings.TrimSpace(r.FormValue("slug")))
+	if slug == "" {
+		return LaravelEnginePoolUpsertPayload{}, fmt.Errorf("pool slug is required")
+	}
+
+	name := strings.TrimSpace(r.FormValue("name"))
+	if name == "" {
+		return LaravelEnginePoolUpsertPayload{}, fmt.Errorf("pool name is required")
+	}
+
+	providerProfiles := normalizePoolProviderProfiles(map[string]string{
+		"generic":   r.FormValue("provider_profile_generic"),
+		"gmail":     r.FormValue("provider_profile_gmail"),
+		"microsoft": r.FormValue("provider_profile_microsoft"),
+		"yahoo":     r.FormValue("provider_profile_yahoo"),
+	})
+
+	return LaravelEnginePoolUpsertPayload{
+		Slug:             slug,
+		Name:             name,
+		Description:      strings.TrimSpace(r.FormValue("description")),
+		IsActive:         parseFormBoolean(r.FormValue("is_active")),
+		IsDefault:        parseFormBoolean(r.FormValue("is_default")),
+		ProviderProfiles: providerProfiles,
+	}, nil
+}
+
 func mapRegistryActionError(action string, err error) string {
 	if err == nil {
 		return ""
@@ -710,10 +1409,26 @@ func mapRegistryActionError(action string, err error) string {
 	}
 }
 
+func isNoProvisioningBundleError(err error) bool {
+	apiErr := &LaravelAPIError{}
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	if apiErr.StatusCode != http.StatusNotFound {
+		return false
+	}
+
+	return strings.Contains(strings.ToLower(strings.TrimSpace(apiErr.Message)), "no provisioning bundle")
+}
+
 func normalizeRegistryFilter(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "matched", "mismatch", "offline":
+	case "operational", "needs_attention", "all", "matched", "unmatched":
 		return strings.ToLower(strings.TrimSpace(raw))
+	case "mismatch":
+		return "unmatched"
+	case "offline":
+		return "needs_attention"
 	default:
 		return "all"
 	}
@@ -727,13 +1442,23 @@ func applyRegistryRuntimeMatch(servers []LaravelEngineServerRecord, workers []Wo
 
 	for index := range servers {
 		server := &servers[index]
+		server.ProcessState = normalizeProcessStateValue(server.ProcessState, server.Status)
+		server.HeartbeatState = normalizeHeartbeatStateValue(server.HeartbeatState, server.Status, server.LastHeartbeatAt)
+		server.HeartbeatAgeText = heartbeatAgeText(server.LastHeartbeatAt, server.HeartbeatAgeSeconds)
+		server.UpdatedAtDisplay = latestServerUpdatedAt(*server)
+
 		serverID := strings.TrimSpace(strconv.Itoa(server.ID))
 		serverIDs[serverID] = struct{}{}
 		if ip := strings.TrimSpace(server.IPAddress); ip != "" {
 			serverIPs[strings.ToLower(ip)] = struct{}{}
 		}
 		if name := strings.TrimSpace(server.Name); name != "" {
-			serverNames[strings.ToLower(name)] = struct{}{}
+			normalizedName := strings.ToLower(strings.Trim(name, "."))
+			serverNames[normalizedName] = struct{}{}
+			shortName := strings.Split(normalizedName, ".")[0]
+			if shortName != "" {
+				serverNames[shortName] = struct{}{}
+			}
 		}
 
 		server.RuntimeMatchStatus = "no_runtime_heartbeat"
@@ -746,7 +1471,7 @@ func applyRegistryRuntimeMatch(servers []LaravelEngineServerRecord, workers []Wo
 			workerIP := strings.ToLower(strings.TrimSpace(worker.IPAddress))
 			workerServerIDMatch := workerID == serverID
 			workerIPMatch := workerIP != "" && strings.EqualFold(workerIP, strings.TrimSpace(server.IPAddress))
-			workerHostMatch := workerHost != "" && strings.EqualFold(workerHost, strings.TrimSpace(server.Name))
+			workerHostMatch := hostsLikelyMatch(strings.TrimSpace(server.Name), workerHost)
 
 			if !workerServerIDMatch && !workerIPMatch && !workerHostMatch {
 				continue
@@ -767,7 +1492,7 @@ func applyRegistryRuntimeMatch(servers []LaravelEngineServerRecord, workers []Wo
 		}
 
 		workerID := strings.TrimSpace(worker.WorkerID)
-		workerHost := strings.ToLower(strings.TrimSpace(worker.Host))
+		workerHost := strings.ToLower(strings.Trim(strings.TrimSpace(worker.Host), "."))
 		workerIP := strings.ToLower(strings.TrimSpace(worker.IPAddress))
 		if _, exists := serverIDs[workerID]; exists {
 			continue
@@ -785,15 +1510,151 @@ func applyRegistryRuntimeMatch(servers []LaravelEngineServerRecord, workers []Wo
 	return servers, orphanWorkers
 }
 
+func hostsLikelyMatch(serverName string, workerHost string) bool {
+	serverName = strings.ToLower(strings.Trim(strings.TrimSpace(serverName), "."))
+	workerHost = strings.ToLower(strings.Trim(strings.TrimSpace(workerHost), "."))
+	if serverName == "" || workerHost == "" {
+		return false
+	}
+
+	if serverName == workerHost {
+		return true
+	}
+
+	serverShort := strings.Split(serverName, ".")[0]
+	workerShort := strings.Split(workerHost, ".")[0]
+	if serverShort != "" && workerShort != "" && serverShort == workerShort {
+		return true
+	}
+
+	return false
+}
+
+func normalizeProcessStateValue(current string, status string) string {
+	switch strings.ToLower(strings.TrimSpace(current)) {
+	case "running", "stopped", "starting", "stopping":
+		return strings.ToLower(strings.TrimSpace(current))
+	default:
+		switch strings.ToLower(strings.TrimSpace(status)) {
+		case "online":
+			return "running"
+		case "offline":
+			return "stopped"
+		default:
+			return "unknown"
+		}
+	}
+}
+
+func normalizeHeartbeatStateValue(current string, status string, lastHeartbeat string) string {
+	switch strings.ToLower(strings.TrimSpace(current)) {
+	case "healthy", "stale", "none":
+		return strings.ToLower(strings.TrimSpace(current))
+	}
+
+	if strings.TrimSpace(lastHeartbeat) == "" {
+		return "none"
+	}
+	if strings.EqualFold(strings.TrimSpace(status), "online") {
+		return "healthy"
+	}
+
+	return "stale"
+}
+
+func latestServerUpdatedAt(server LaravelEngineServerRecord) string {
+	candidates := []string{
+		strings.TrimSpace(server.LastTransitionAt),
+		strings.TrimSpace(server.LastHeartbeatAt),
+		strings.TrimSpace(server.LastAgentSeenAt),
+	}
+	for _, candidate := range candidates {
+		if candidate != "" {
+			return candidate
+		}
+	}
+
+	return "-"
+}
+
+func heartbeatAgeText(lastHeartbeat string, heartbeatAgeSeconds *int) string {
+	lastHeartbeat = strings.TrimSpace(lastHeartbeat)
+	if lastHeartbeat == "" {
+		return "none"
+	}
+
+	if heartbeatAgeSeconds != nil && *heartbeatAgeSeconds >= 0 {
+		return formatAgeShort(time.Duration(*heartbeatAgeSeconds) * time.Second)
+	}
+
+	parsed, ok := parseTimestampFlexible(lastHeartbeat)
+	if !ok {
+		return "unknown age"
+	}
+
+	elapsed := time.Since(parsed)
+	if elapsed < 0 {
+		elapsed = 0
+	}
+
+	return formatAgeShort(elapsed)
+}
+
+func parseTimestampFlexible(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+
+	layouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05",
+	}
+	for _, layout := range layouts {
+		if parsed, err := time.Parse(layout, raw); err == nil {
+			return parsed, true
+		}
+	}
+
+	return time.Time{}, false
+}
+
+func formatAgeShort(duration time.Duration) string {
+	if duration < 0 {
+		duration = 0
+	}
+
+	if duration < time.Minute {
+		return fmt.Sprintf("%ds", int(duration.Seconds()))
+	}
+	if duration < time.Hour {
+		return fmt.Sprintf("%dm", int(duration.Minutes()))
+	}
+	if duration < 24*time.Hour {
+		return fmt.Sprintf("%dh", int(duration.Hours()))
+	}
+
+	return fmt.Sprintf("%dd", int(duration.Hours()/24))
+}
+
 func filterRegistryServers(servers []LaravelEngineServerRecord, filter string) []LaravelEngineServerRecord {
 	filtered := make([]LaravelEngineServerRecord, 0, len(servers))
 	for _, server := range servers {
 		switch filter {
+		case "operational":
+			if serverNeedsAttention(server) {
+				continue
+			}
+		case "needs_attention":
+			if !serverNeedsAttention(server) {
+				continue
+			}
 		case "matched":
 			if server.RuntimeMatchStatus != "matched" {
 				continue
 			}
-		case "mismatch":
+		case "unmatched", "mismatch":
 			if server.RuntimeMatchStatus == "matched" {
 				continue
 			}
@@ -809,6 +1670,24 @@ func filterRegistryServers(servers []LaravelEngineServerRecord, filter string) [
 	return filtered
 }
 
+func serverNeedsAttention(server LaravelEngineServerRecord) bool {
+	processState := strings.ToLower(strings.TrimSpace(server.ProcessState))
+	heartbeatState := strings.ToLower(strings.TrimSpace(server.HeartbeatState))
+	runtimeMatch := strings.ToLower(strings.TrimSpace(server.RuntimeMatchStatus))
+
+	if processState != "running" {
+		return true
+	}
+	if heartbeatState != "healthy" {
+		return true
+	}
+	if runtimeMatch != "matched" {
+		return true
+	}
+
+	return false
+}
+
 func (s *Server) handleUIPools(w http.ResponseWriter, r *http.Request) {
 	stats, err := s.collectControlPlaneStats(r.Context())
 	if err != nil {
@@ -817,33 +1696,219 @@ func (s *Server) handleUIPools(w http.ResponseWriter, r *http.Request) {
 	}
 	settings := s.runtimeSettings(r.Context())
 
+	runtimeByPool := make(map[string]PoolSummary, len(stats.Pools))
+	for _, pool := range stats.Pools {
+		runtimeByPool[strings.ToLower(strings.TrimSpace(pool.Pool))] = pool
+	}
+
 	data := PoolsPageData{
 		BasePageData: BasePageData{
-			Title:           "Verifier Engine Room · Pools",
-			Subtitle:        "Scale worker pools",
-			ActiveNav:       "pools",
-			ContentTemplate: "pools",
-			BasePath:        "/verifier-engine-room",
-			DocsURL:         s.docsURL(),
+			Title:            "Verifier Engine Room · Pools",
+			Subtitle:         "Server-group policy and capacity control",
+			ActiveNav:        "pools",
+			ContentTemplate:  "pools",
+			BasePath:         "/verifier-engine-room",
+			DocsURL:          s.docsURL(),
+			ShowProvisioning: true,
 		},
+		Configured:          s.laravelEngineClient != nil,
 		PoolCount:           stats.PoolCount,
-		Pools:               stats.Pools,
+		Rows:                []PoolInventoryRow{},
+		ProfileOptions:      poolProfileOptions(),
 		PollIntervalSeconds: settings.UIPoolsRefreshSecond,
 	}
 
+	data.Notice = firstNonEmptyQueryValue(r, "notice")
+	data.Error = firstNonEmptyQueryValue(r, "error")
+
+	if s.laravelEngineClient == nil {
+		data.Configured = false
+		if data.Error == "" {
+			data.Error = "Pools management requires Laravel internal API credentials."
+		}
+		s.views.Render(w, data)
+		return
+	}
+
+	pools, poolErr := s.laravelEngineClient.ListPools(r.Context())
+	if poolErr != nil {
+		data.Error = mapRegistryActionError("load pools", poolErr)
+		s.views.Render(w, data)
+		return
+	}
+
+	editPoolID := parsePositiveInt(firstNonEmptyQueryValue(r, "edit_pool_id"))
+	for _, pool := range pools {
+		key := strings.ToLower(strings.TrimSpace(pool.Slug))
+		runtime := runtimeByPool[key]
+
+		row := PoolInventoryRow{
+			Pool:               pool,
+			RuntimeOnline:      runtime.Online,
+			RuntimeDesired:     runtime.Desired,
+			RuntimeHealthScore: runtime.HealthScore,
+		}
+		data.Rows = append(data.Rows, row)
+
+		if editPoolID > 0 && pool.ID == editPoolID {
+			poolCopy := pool
+			data.EditPoolID = editPoolID
+			data.EditPool = &poolCopy
+		}
+	}
+
 	s.views.Render(w, data)
+}
+
+func (s *Server) redirectPools(w http.ResponseWriter, r *http.Request, values url.Values) {
+	destination := "/verifier-engine-room/pools"
+	if encoded := values.Encode(); encoded != "" {
+		destination += "?" + encoded
+	}
+
+	http.Redirect(w, r, destination, http.StatusSeeOther)
+}
+
+func (s *Server) handleUICreateEnginePool(w http.ResponseWriter, r *http.Request) {
+	if s.laravelEngineClient == nil {
+		s.redirectPools(w, r, url.Values{
+			"error": []string{"Laravel internal API is not configured."},
+		})
+		return
+	}
+
+	payload, err := parseEnginePoolUpsertPayload(r)
+	if err != nil {
+		s.redirectPools(w, r, url.Values{
+			"error": []string{err.Error()},
+		})
+		return
+	}
+
+	createdPool, createErr := s.laravelEngineClient.CreatePool(r.Context(), payload, uiTriggeredBy(r))
+	if createErr != nil {
+		s.redirectPools(w, r, url.Values{
+			"error": []string{mapRegistryActionError("create pool", createErr)},
+		})
+		return
+	}
+
+	query := url.Values{
+		"notice": []string{"Pool created successfully."},
+	}
+	if createdPool != nil && createdPool.ID > 0 {
+		query.Set("edit_pool_id", strconv.Itoa(createdPool.ID))
+	}
+
+	s.redirectPools(w, r, query)
+}
+
+func (s *Server) handleUIUpdateEnginePool(w http.ResponseWriter, r *http.Request) {
+	if s.laravelEngineClient == nil {
+		s.redirectPools(w, r, url.Values{
+			"error": []string{"Laravel internal API is not configured."},
+		})
+		return
+	}
+
+	poolID, err := strconv.Atoi(strings.TrimSpace(chi.URLParam(r, "poolID")))
+	if err != nil || poolID <= 0 {
+		s.redirectPools(w, r, url.Values{
+			"error": []string{"Invalid pool id."},
+		})
+		return
+	}
+
+	payload, parseErr := parseEnginePoolUpsertPayload(r)
+	if parseErr != nil {
+		s.redirectPools(w, r, url.Values{
+			"error":        []string{parseErr.Error()},
+			"edit_pool_id": []string{strconv.Itoa(poolID)},
+		})
+		return
+	}
+
+	if _, updateErr := s.laravelEngineClient.UpdatePool(r.Context(), poolID, payload, uiTriggeredBy(r)); updateErr != nil {
+		s.redirectPools(w, r, url.Values{
+			"error":        []string{mapRegistryActionError("update pool", updateErr)},
+			"edit_pool_id": []string{strconv.Itoa(poolID)},
+		})
+		return
+	}
+
+	s.redirectPools(w, r, url.Values{
+		"notice":        []string{"Pool updated successfully."},
+		"edit_pool_id":  []string{strconv.Itoa(poolID)},
+	})
+}
+
+func (s *Server) handleUIArchiveEnginePool(w http.ResponseWriter, r *http.Request) {
+	if s.laravelEngineClient == nil {
+		s.redirectPools(w, r, url.Values{
+			"error": []string{"Laravel internal API is not configured."},
+		})
+		return
+	}
+
+	poolID, err := strconv.Atoi(strings.TrimSpace(chi.URLParam(r, "poolID")))
+	if err != nil || poolID <= 0 {
+		s.redirectPools(w, r, url.Values{
+			"error": []string{"Invalid pool id."},
+		})
+		return
+	}
+
+	if _, archiveErr := s.laravelEngineClient.ArchivePool(r.Context(), poolID, uiTriggeredBy(r)); archiveErr != nil {
+		s.redirectPools(w, r, url.Values{
+			"error": []string{mapRegistryActionError("archive pool", archiveErr)},
+		})
+		return
+	}
+
+	s.redirectPools(w, r, url.Values{
+		"notice": []string{"Pool archived successfully."},
+	})
+}
+
+func (s *Server) handleUISetDefaultEnginePool(w http.ResponseWriter, r *http.Request) {
+	if s.laravelEngineClient == nil {
+		s.redirectPools(w, r, url.Values{
+			"error": []string{"Laravel internal API is not configured."},
+		})
+		return
+	}
+
+	poolID, err := strconv.Atoi(strings.TrimSpace(chi.URLParam(r, "poolID")))
+	if err != nil || poolID <= 0 {
+		s.redirectPools(w, r, url.Values{
+			"error": []string{"Invalid pool id."},
+		})
+		return
+	}
+
+	if _, setDefaultErr := s.laravelEngineClient.SetDefaultPool(r.Context(), poolID, uiTriggeredBy(r)); setDefaultErr != nil {
+		s.redirectPools(w, r, url.Values{
+			"error": []string{mapRegistryActionError("set default pool", setDefaultErr)},
+		})
+		return
+	}
+
+	s.redirectPools(w, r, url.Values{
+		"notice": []string{"Default pool updated successfully."},
+	})
 }
 
 func (s *Server) handleUIAlerts(w http.ResponseWriter, r *http.Request) {
 	settings := s.runtimeSettings(r.Context())
 	data := AlertsPageData{
 		BasePageData: BasePageData{
-			Title:           "Verifier Engine Room · Alerts",
-			Subtitle:        "Recent control plane alerts",
-			ActiveNav:       "alerts",
-			ContentTemplate: "alerts",
-			BasePath:        "/verifier-engine-room",
-			DocsURL:         s.docsURL(),
+			Title:            "Verifier Engine Room · Alerts",
+			Subtitle:         "Recent control plane alerts",
+			ActiveNav:        "alerts",
+			ContentTemplate:  "alerts",
+			BasePath:         "/verifier-engine-room",
+			DocsURL:          s.docsURL(),
+			ShowProvisioning: true,
 		},
 		HasStorage:          s.snapshots != nil,
 		PollIntervalSeconds: settings.UIAlertsRefreshSecond,
@@ -895,12 +1960,13 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 
 	data := SettingsPageData{
 		BasePageData: BasePageData{
-			Title:           "Verifier Engine Room · Settings",
-			Subtitle:        "Runtime controls (alerts, safety, autoscale)",
-			ActiveNav:       "settings",
-			ContentTemplate: "settings",
-			BasePath:        "/verifier-engine-room",
-			DocsURL:         s.docsURL(),
+			Title:            "Verifier Engine Room · Settings",
+			Subtitle:         "Runtime controls (alerts, safety, autoscale)",
+			ActiveNav:        "settings",
+			ContentTemplate:  "settings",
+			BasePath:         "/verifier-engine-room",
+			DocsURL:          s.docsURL(),
+			ShowProvisioning: true,
 		},
 		Saved:                                     r.URL.Query().Get("saved") == "1",
 		RolledBack:                                r.URL.Query().Get("rolled_back") == "1",

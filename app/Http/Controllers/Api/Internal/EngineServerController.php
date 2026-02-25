@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Internal;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Internal\EngineServerUpsertRequest;
 use App\Models\EngineServer;
+use App\Models\EngineServerCommand;
 use App\Models\EngineServerProvisioningBundle;
 use App\Models\VerifierDomain;
 use App\Support\AdminAuditLogger;
@@ -20,7 +21,9 @@ class EngineServerController extends Controller
         $servers = EngineServer::query()
             ->with([
                 'verifierDomain:id,domain',
+                'workerPool:id,slug,name',
                 'latestProvisioningBundle',
+                'latestCommand',
             ])
             ->orderBy('name')
             ->get();
@@ -47,7 +50,8 @@ class EngineServerController extends Controller
     {
         $payload = $request->validated();
         $server = EngineServer::query()->create($payload);
-        $server->load(['verifierDomain:id,domain', 'latestProvisioningBundle']);
+        $server->load(['verifierDomain:id,domain', 'latestProvisioningBundle', 'latestCommand']);
+        $server->loadMissing('workerPool:id,slug,name');
 
         AdminAuditLogger::log('engine_server_created', $server, [
             'source' => 'go_control_plane_internal_api',
@@ -67,7 +71,7 @@ class EngineServerController extends Controller
     {
         $payload = $request->validated();
         $engineServer->fill($payload)->save();
-        $engineServer->load(['verifierDomain:id,domain', 'latestProvisioningBundle']);
+        $engineServer->load(['verifierDomain:id,domain', 'workerPool:id,slug,name', 'latestProvisioningBundle', 'latestCommand']);
 
         AdminAuditLogger::log('engine_server_updated', $engineServer, [
             'source' => 'go_control_plane_internal_api',
@@ -83,6 +87,53 @@ class EngineServerController extends Controller
         ]);
     }
 
+    public function destroy(Request $request, EngineServer $engineServer): JsonResponse
+    {
+        $requestId = $this->requestId($request);
+        $engineServer->load('latestCommand');
+
+        /** @var EngineServerCommand|null $latestCommand */
+        $latestCommand = $engineServer->latestCommand;
+        $processState = $this->resolveProcessState($engineServer, $latestCommand);
+        $heartbeatState = $this->resolveHeartbeatState($engineServer);
+        $activeProcess = in_array($processState, ['running', 'starting', 'stopping'], true);
+
+        if ($activeProcess || $heartbeatState === 'healthy') {
+            return response()->json([
+                'error_code' => 'server_delete_blocked',
+                'message' => 'Server is active. Stop the process and wait for heartbeat to become stale/none before deleting.',
+                'request_id' => $requestId,
+                'details' => [
+                    'process_state' => $processState,
+                    'heartbeat_state' => $heartbeatState,
+                ],
+            ], 409, [
+                'X-Request-Id' => $requestId,
+            ]);
+        }
+
+        AdminAuditLogger::log('engine_server_deleted', $engineServer, [
+            'source' => 'go_control_plane_internal_api',
+            'triggered_by' => $this->triggeredBy($request),
+            'process_state' => $processState,
+            'heartbeat_state' => $heartbeatState,
+        ]);
+
+        $engineServerID = $engineServer->id;
+        $engineServerName = $engineServer->name;
+        $engineServer->delete();
+
+        return response()->json([
+            'data' => [
+                'id' => $engineServerID,
+                'name' => $engineServerName,
+                'deleted' => true,
+            ],
+        ], 200, [
+            'X-Request-Id' => $requestId,
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -90,6 +141,8 @@ class EngineServerController extends Controller
     {
         /** @var EngineServerProvisioningBundle|null $latestBundle */
         $latestBundle = $server->latestProvisioningBundle;
+        /** @var EngineServerCommand|null $latestCommand */
+        $latestCommand = $server->latestCommand;
         $latestBundleData = null;
         if ($latestBundle) {
             $latestBundleData = [
@@ -99,6 +152,10 @@ class EngineServerController extends Controller
                 'created_at' => $latestBundle->created_at?->toISOString(),
             ];
         }
+
+        $processState = $this->resolveProcessState($server, $latestCommand);
+        $heartbeatState = $this->resolveHeartbeatState($server);
+        $lastTransitionAt = $latestCommand?->finished_at?->toISOString() ?? $latestCommand?->updated_at?->toISOString();
 
         return [
             'id' => $server->id,
@@ -116,6 +173,9 @@ class EngineServerController extends Controller
             'identity_domain' => $server->verifierDomain?->domain ?? $server->identity_domain,
             'verifier_domain_id' => $server->verifier_domain_id,
             'verifier_domain' => $server->verifierDomain?->domain,
+            'worker_pool_id' => $server->worker_pool_id,
+            'worker_pool_slug' => $server->workerPool?->slug,
+            'worker_pool_name' => $server->workerPool?->name,
             'notes' => $server->notes,
             'process_control_mode' => $server->process_control_mode,
             'agent_enabled' => (bool) $server->agent_enabled,
@@ -126,10 +186,50 @@ class EngineServerController extends Controller
             'last_agent_seen_at' => $server->last_agent_seen_at?->toISOString(),
             'last_agent_error' => $server->last_agent_error,
             'latest_provisioning_bundle' => $latestBundleData,
+            'process_state' => $processState,
+            'heartbeat_state' => $heartbeatState,
+            'last_transition_at' => $lastTransitionAt,
+            'last_command_status' => $latestCommand?->status,
+            'last_command_request_id' => $latestCommand?->request_id,
         ];
     }
 
-    private function triggeredBy(EngineServerUpsertRequest $request): string
+    private function resolveProcessState(EngineServer $server, ?EngineServerCommand $latestCommand): string
+    {
+        $serviceState = strtolower(trim((string) data_get($server->last_agent_status, 'service_state', '')));
+        $processState = match ($serviceState) {
+            'active', 'running' => 'running',
+            'inactive', 'failed', 'dead' => 'stopped',
+            'activating' => 'starting',
+            'deactivating' => 'stopping',
+            default => 'unknown',
+        };
+
+        if ($latestCommand && $latestCommand->status === 'pending') {
+            return match ($latestCommand->action) {
+                'start', 'restart' => 'starting',
+                'stop' => 'stopping',
+                default => $processState,
+            };
+        }
+
+        return $processState;
+    }
+
+    private function resolveHeartbeatState(EngineServer $server): string
+    {
+        if (! $server->last_heartbeat_at) {
+            return 'none';
+        }
+
+        if ($server->isOnline()) {
+            return 'healthy';
+        }
+
+        return 'stale';
+    }
+
+    private function triggeredBy(Request $request): string
     {
         $triggeredBy = trim((string) $request->header('X-Triggered-By', 'go-control-plane'));
 

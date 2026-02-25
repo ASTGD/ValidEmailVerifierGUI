@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Feedback\FeedbackOutcomesController;
+use App\Http\Controllers\Api\Internal\EnginePoolController;
 use App\Http\Controllers\Api\Internal\EngineServerCommandController;
 use App\Http\Controllers\Api\Internal\EngineServerController;
 use App\Http\Controllers\Api\Internal\EngineServerProvisioningBundleController;
@@ -114,6 +115,8 @@ Route::middleware(['go.internal.token', 'throttle:go-internal-api'])
         Route::post('engine-servers', [EngineServerController::class, 'store'])->name('engine-servers.store');
         Route::put('engine-servers/{engineServer}', [EngineServerController::class, 'update'])
             ->name('engine-servers.update');
+        Route::delete('engine-servers/{engineServer}', [EngineServerController::class, 'destroy'])
+            ->name('engine-servers.destroy');
         Route::post(
             'engine-servers/{engineServer}/provisioning-bundles',
             [EngineServerProvisioningBundleController::class, 'store']
@@ -130,6 +133,13 @@ Route::middleware(['go.internal.token', 'throttle:go-internal-api'])
             'engine-servers/{engineServer}/provisioning-bundles/latest',
             [EngineServerProvisioningBundleController::class, 'showLatest']
         )->name('engine-servers.provisioning-bundles.latest');
+        Route::get('engine-pools', [EnginePoolController::class, 'index'])->name('engine-pools.index');
+        Route::post('engine-pools', [EnginePoolController::class, 'store'])->name('engine-pools.store');
+        Route::put('engine-pools/{enginePool}', [EnginePoolController::class, 'update'])->name('engine-pools.update');
+        Route::post('engine-pools/{enginePool}/archive', [EnginePoolController::class, 'archive'])
+            ->name('engine-pools.archive');
+        Route::post('engine-pools/{enginePool}/set-default', [EnginePoolController::class, 'setDefault'])
+            ->name('engine-pools.set-default');
         Route::get('smtp-decision-traces', [SmtpDecisionTraceController::class, 'index'])
             ->name('smtp-decision-traces.index');
     });

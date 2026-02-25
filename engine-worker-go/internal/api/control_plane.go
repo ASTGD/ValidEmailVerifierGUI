@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -152,7 +153,18 @@ func (c *ControlPlaneClient) Heartbeat(
 }
 
 func (c *ControlPlaneClient) ProviderPolicies(ctx context.Context) (*ControlPlaneProviderPoliciesResponse, error) {
-	status, body, err := doJSON(ctx, c.httpClient, c.baseURL, c.token, http.MethodGet, "/api/providers/policies", nil)
+	return c.ProviderPoliciesForPool(ctx, "")
+}
+
+func (c *ControlPlaneClient) ProviderPoliciesForPool(ctx context.Context, workerPool string) (*ControlPlaneProviderPoliciesResponse, error) {
+	path := "/api/providers/policies"
+	if normalizedPool := strings.TrimSpace(workerPool); normalizedPool != "" {
+		query := url.Values{}
+		query.Set("worker_pool", normalizedPool)
+		path += "?" + query.Encode()
+	}
+
+	status, body, err := doJSON(ctx, c.httpClient, c.baseURL, c.token, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
 	}
