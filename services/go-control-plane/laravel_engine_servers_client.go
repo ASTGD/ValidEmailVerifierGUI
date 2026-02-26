@@ -58,16 +58,16 @@ type LaravelEngineServerRecord struct {
 }
 
 type LaravelEnginePoolRecord struct {
-	ID                int               `json:"id"`
-	Slug              string            `json:"slug"`
-	Name              string            `json:"name"`
-	Description       string            `json:"description"`
-	IsActive          bool              `json:"is_active"`
-	IsDefault         bool              `json:"is_default"`
-	ProviderProfiles  map[string]string `json:"provider_profiles"`
-	LinkedServersCount int              `json:"linked_servers_count"`
-	CreatedAt         string            `json:"created_at"`
-	UpdatedAt         string            `json:"updated_at"`
+	ID                 int               `json:"id"`
+	Slug               string            `json:"slug"`
+	Name               string            `json:"name"`
+	Description        string            `json:"description"`
+	IsActive           bool              `json:"is_active"`
+	IsDefault          bool              `json:"is_default"`
+	ProviderProfiles   map[string]string `json:"provider_profiles"`
+	LinkedServersCount int               `json:"linked_servers_count"`
+	CreatedAt          string            `json:"created_at"`
+	UpdatedAt          string            `json:"updated_at"`
 }
 
 type LaravelProvisioningBundleBrief struct {
@@ -89,6 +89,19 @@ type LaravelProvisioningBundleDetails struct {
 	IsExpired              bool                `json:"is_expired"`
 	DownloadURLs           LaravelDownloadURLs `json:"download_urls"`
 	InstallCommandTemplate string              `json:"install_command_template"`
+}
+
+type LaravelProvisioningCredentials struct {
+	GHCRUsername        string `json:"ghcr_username"`
+	GHCRTokenConfigured bool   `json:"ghcr_token_configured"`
+	GHCRTokenMasked     string `json:"ghcr_token_masked"`
+	UpdatedAt           string `json:"updated_at"`
+}
+
+type LaravelProvisioningCredentialsUpdatePayload struct {
+	GHCRUsername   string `json:"ghcr_username"`
+	GHCRToken      string `json:"ghcr_token,omitempty"`
+	ClearGHCRToken bool   `json:"clear_ghcr_token,omitempty"`
 }
 
 type LaravelDownloadURLs map[string]string
@@ -473,6 +486,71 @@ func (c *LaravelEngineServerClient) LatestProvisioningBundle(ctx context.Context
 	return &responseBody.Data, nil
 }
 
+func (c *LaravelEngineServerClient) ProvisioningCredentials(ctx context.Context) (*LaravelProvisioningCredentials, error) {
+	if c == nil {
+		return nil, fmt.Errorf("laravel engine server client is not configured")
+	}
+
+	responseBody := struct {
+		Data LaravelProvisioningCredentials `json:"data"`
+	}{}
+	if err := c.doJSON(ctx, http.MethodGet, "/api/internal/provisioning-credentials", nil, "", &responseBody); err != nil {
+		return nil, err
+	}
+
+	return &responseBody.Data, nil
+}
+
+func (c *LaravelEngineServerClient) UpdateProvisioningCredentials(
+	ctx context.Context,
+	payload LaravelProvisioningCredentialsUpdatePayload,
+	triggeredBy string,
+) (*LaravelProvisioningCredentials, error) {
+	if c == nil {
+		return nil, fmt.Errorf("laravel engine server client is not configured")
+	}
+
+	responseBody := struct {
+		Data LaravelProvisioningCredentials `json:"data"`
+	}{}
+	if err := c.doJSON(
+		ctx,
+		http.MethodPut,
+		"/api/internal/provisioning-credentials",
+		payload,
+		triggeredBy,
+		&responseBody,
+	); err != nil {
+		return nil, err
+	}
+
+	return &responseBody.Data, nil
+}
+
+func (c *LaravelEngineServerClient) RevealProvisioningCredentials(ctx context.Context) (string, error) {
+	if c == nil {
+		return "", fmt.Errorf("laravel engine server client is not configured")
+	}
+
+	responseBody := struct {
+		Data struct {
+			GHCRToken string `json:"ghcr_token"`
+		} `json:"data"`
+	}{}
+	if err := c.doJSON(
+		ctx,
+		http.MethodPost,
+		"/api/internal/provisioning-credentials/reveal",
+		map[string]any{},
+		"",
+		&responseBody,
+	); err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(responseBody.Data.GHCRToken), nil
+}
+
 func (c *LaravelEngineServerClient) ExecuteServerCommand(
 	ctx context.Context,
 	serverID int,
@@ -778,6 +856,12 @@ func (c *LaravelEngineServerClient) MetricsSnapshot() InternalAPIMetricsSnapshot
 func internalAPIAction(method string, path string) string {
 	normalized := strings.TrimSpace(path)
 	switch {
+	case normalized == "/api/internal/provisioning-credentials" && strings.EqualFold(method, http.MethodGet):
+		return "get_provisioning_credentials"
+	case normalized == "/api/internal/provisioning-credentials" && strings.EqualFold(method, http.MethodPut):
+		return "update_provisioning_credentials"
+	case normalized == "/api/internal/provisioning-credentials/reveal" && strings.EqualFold(method, http.MethodPost):
+		return "reveal_provisioning_credentials"
 	case normalized == "/api/internal/engine-pools" && strings.EqualFold(method, http.MethodGet):
 		return "list_pools"
 	case normalized == "/api/internal/engine-pools" && strings.EqualFold(method, http.MethodPost):

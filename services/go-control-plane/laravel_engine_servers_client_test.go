@@ -524,6 +524,140 @@ func TestLaravelEngineServerClientPoolMutations(t *testing.T) {
 	}
 }
 
+func TestLaravelEngineServerClientProvisioningCredentials(t *testing.T) {
+	var updateSeen bool
+	var revealSeen bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/internal/provisioning-credentials":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"ghcr_username":         "astgd",
+					"ghcr_token_configured": true,
+					"ghcr_token_masked":     "******",
+					"updated_at":            "2026-02-26T10:00:00Z",
+				},
+			})
+		case r.Method == http.MethodPut && r.URL.Path == "/api/internal/provisioning-credentials":
+			updateSeen = true
+
+			var payload LaravelProvisioningCredentialsUpdatePayload
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("failed to decode payload: %v", err)
+			}
+			if payload.GHCRUsername != "astgd" {
+				t.Fatalf("expected username astgd, got %q", payload.GHCRUsername)
+			}
+			if payload.GHCRToken != "ghp_test_token" {
+				t.Fatalf("expected token payload, got %q", payload.GHCRToken)
+			}
+			if got := r.Header.Get("X-Triggered-By"); got != "go-ui:test" {
+				t.Fatalf("expected triggered by header, got %q", got)
+			}
+
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"ghcr_username":         "astgd",
+					"ghcr_token_configured": true,
+					"ghcr_token_masked":     "******",
+				},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/internal/provisioning-credentials/reveal":
+			revealSeen = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"ghcr_token": "ghp_test_token",
+				},
+			})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := NewLaravelEngineServerClient(Config{
+		LaravelInternalAPIBaseURL: server.URL,
+		LaravelInternalAPIToken:   "internal-token",
+	})
+	if client == nil {
+		t.Fatal("expected configured client")
+	}
+
+	credentials, err := client.ProvisioningCredentials(context.Background())
+	if err != nil {
+		t.Fatalf("expected provisioning credentials to succeed, got %v", err)
+	}
+	if credentials == nil || credentials.GHCRUsername != "astgd" || !credentials.GHCRTokenConfigured {
+		t.Fatalf("unexpected credentials payload %#v", credentials)
+	}
+
+	updated, err := client.UpdateProvisioningCredentials(context.Background(), LaravelProvisioningCredentialsUpdatePayload{
+		GHCRUsername: "astgd",
+		GHCRToken:    "ghp_test_token",
+	}, "go-ui:test")
+	if err != nil {
+		t.Fatalf("expected update provisioning credentials to succeed, got %v", err)
+	}
+	if updated == nil || updated.GHCRTokenMasked != "******" {
+		t.Fatalf("unexpected update response %#v", updated)
+	}
+
+	revealedToken, err := client.RevealProvisioningCredentials(context.Background())
+	if err != nil {
+		t.Fatalf("expected reveal provisioning credentials to succeed, got %v", err)
+	}
+	if revealedToken != "ghp_test_token" {
+		t.Fatalf("unexpected revealed token %q", revealedToken)
+	}
+
+	if !updateSeen || !revealSeen {
+		t.Fatalf("expected update and reveal calls, update=%t reveal=%t", updateSeen, revealSeen)
+	}
+}
+
+func TestLaravelEngineServerClientRevealProvisioningCredentialsReturnsAPIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/internal/provisioning-credentials/reveal" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error_code": "ghcr_token_missing",
+			"message":    "GHCR token is not configured.",
+			"request_id": "req-missing-token",
+		})
+	}))
+	defer server.Close()
+
+	client := NewLaravelEngineServerClient(Config{
+		LaravelInternalAPIBaseURL: server.URL,
+		LaravelInternalAPIToken:   "internal-token",
+	})
+	if client == nil {
+		t.Fatal("expected configured client")
+	}
+
+	_, err := client.RevealProvisioningCredentials(context.Background())
+	if err == nil {
+		t.Fatal("expected reveal call to fail")
+	}
+
+	apiErr := &LaravelAPIError{}
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected LaravelAPIError, got %T", err)
+	}
+	if apiErr.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", apiErr.StatusCode)
+	}
+	if apiErr.ErrorCode != "ghcr_token_missing" {
+		t.Fatalf("expected ghcr_token_missing error code, got %q", apiErr.ErrorCode)
+	}
+}
+
 func TestLaravelEngineServerClientDeleteServer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/internal/engine-servers/42" {

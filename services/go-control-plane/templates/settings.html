@@ -12,9 +12,19 @@
         Settings saved.
     </div>
     {{ end }}
+    {{ if .ProvisioningCredentialsSaved }}
+    <div class="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
+        Provisioning credentials saved.
+    </div>
+    {{ end }}
     {{ if .RolledBack }}
     <div class="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
         Rolled back to the previous runtime settings snapshot.
+    </div>
+    {{ end }}
+    {{ if .ProvisioningCredentialsError }}
+    <div class="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
+        {{ .ProvisioningCredentialsError }}
     </div>
     {{ end }}
 
@@ -253,6 +263,59 @@
             <span class="text-xs text-slate-500">Rollback available after the first saved change.</span>
         {{ end }}
     </div>
+</section>
+
+<section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+    <div>
+        <h2 class="text-lg font-semibold">Provisioning Bundle Credentials</h2>
+        <p class="text-sm text-slate-400">Store GHCR credentials once for provisioning command copy flows. Token is masked by default.</p>
+    </div>
+
+    {{ if .ProvisioningCredentials }}
+        <form method="POST" action="{{ .BasePath }}/settings/provisioning-credentials" class="mt-4 grid gap-4 md:grid-cols-2">
+            <label class="space-y-2">
+                <span class="text-xs uppercase tracking-wider text-slate-400">GHCR Username</span>
+                <input name="ghcr_username" required value="{{ .ProvisioningCredentials.GHCRUsername }}" class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100" />
+            </label>
+
+            <label class="space-y-2">
+                <span class="text-xs uppercase tracking-wider text-slate-400">Stored Token</span>
+                <div class="flex items-center gap-2">
+                    <input
+                        id="provisioning-stored-token"
+                        name="ghcr_token"
+                        type="password"
+                        autocomplete="off"
+                        value="{{ if .ProvisioningCredentials.GHCRTokenConfigured }}{{ .ProvisioningCredentials.GHCRTokenMasked }}{{ else }}{{ end }}"
+                        data-token-masked="{{ if .ProvisioningCredentials.GHCRTokenConfigured }}{{ .ProvisioningCredentials.GHCRTokenMasked }}{{ else }}{{ end }}"
+                        data-token-configured="{{ if .ProvisioningCredentials.GHCRTokenConfigured }}1{{ else }}0{{ end }}"
+                        placeholder="Paste GHCR token"
+                        class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                    />
+                    <button
+                        type="button"
+                        id="provisioning-reveal-token-btn"
+                        class="rounded-full border border-slate-600 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+                    >
+                        Show
+                    </button>
+                </div>
+                <p class="text-xs text-slate-400">Paste a new token here to rotate. Existing token stays unchanged if this masked value is not modified.</p>
+            </label>
+
+            <label class="md:col-span-2 flex items-center gap-2 text-xs text-slate-300">
+                <input type="checkbox" name="clear_ghcr_token" value="1" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500" />
+                Clear stored token
+            </label>
+
+            <div class="md:col-span-2 flex flex-wrap items-center gap-2">
+                <button type="submit" class="rounded-full bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-cyan-400">Save Provisioning Credentials</button>
+                <span id="provisioning-reveal-token-error" class="text-xs text-red-300"></span>
+            </div>
+        </form>
+    {{ else }}
+        <p class="mt-4 text-sm text-slate-400">Provisioning credentials are unavailable until Laravel internal API integration is configured.</p>
+    {{ end }}
 </section>
 
 <section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
@@ -984,6 +1047,98 @@
 
         versionSelect.addEventListener('change', syncState);
         syncState();
+    });
+</script>
+<script>
+    window.addEventListener('DOMContentLoaded', () => {
+        const storedTokenInput = document.getElementById('provisioning-stored-token');
+        const revealButton = document.getElementById('provisioning-reveal-token-btn');
+        const errorLabel = document.getElementById('provisioning-reveal-token-error');
+        if (!storedTokenInput || !revealButton) {
+            return;
+        }
+
+        const maskedValue = storedTokenInput.getAttribute('data-token-masked') || '';
+        const tokenConfigured = storedTokenInput.getAttribute('data-token-configured') === '1';
+        const revealEndpoint = '{{ .BasePath }}/settings/provisioning-credentials/reveal';
+        let revealedToken = '';
+        let showingBackendToken = false;
+
+        const setError = (message) => {
+            if (!errorLabel) {
+                return;
+            }
+            errorLabel.textContent = message;
+        };
+
+        const applyHiddenState = () => {
+            if (showingBackendToken && tokenConfigured) {
+                storedTokenInput.value = maskedValue;
+            }
+            storedTokenInput.type = 'password';
+            revealButton.textContent = 'Show';
+            showingBackendToken = false;
+        };
+
+        if (tokenConfigured && storedTokenInput.value.trim() === '') {
+            storedTokenInput.value = maskedValue;
+        }
+
+        storedTokenInput.addEventListener('input', () => {
+            showingBackendToken = false;
+        });
+
+        revealButton.addEventListener('click', async () => {
+            setError('');
+
+            if (storedTokenInput.type === 'text') {
+                applyHiddenState();
+                return;
+            }
+
+            const currentValue = storedTokenInput.value.trim();
+            const shouldFetchBackendToken = tokenConfigured && currentValue === maskedValue;
+            if (shouldFetchBackendToken && revealedToken === '') {
+                revealButton.disabled = true;
+                revealButton.textContent = 'Loading...';
+                try {
+                    const response = await fetch(revealEndpoint, {
+                        method: 'POST',
+                        headers: {
+                            Accept: 'application/json',
+                        },
+                    });
+                    const payload = await response.json();
+                    if (!response.ok) {
+                        setError(payload.error || 'Unable to reveal token.');
+                        applyMaskedState();
+                        return;
+                    }
+                    revealedToken = payload?.data?.ghcr_token || '';
+                    if (revealedToken === '') {
+                        setError('Stored token is empty.');
+                        applyMaskedState();
+                        return;
+                    }
+                } catch (_) {
+                    setError('Unable to reveal token.');
+                    applyHiddenState();
+                    return;
+                } finally {
+                    revealButton.disabled = false;
+                }
+            }
+
+            if (shouldFetchBackendToken) {
+                storedTokenInput.value = revealedToken;
+                showingBackendToken = true;
+            } else {
+                showingBackendToken = false;
+            }
+
+            storedTokenInput.type = 'text';
+            revealButton.textContent = 'Hide';
+        });
     });
 </script>
 {{ end }}

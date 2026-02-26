@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\EngineServer;
 use App\Models\EngineServerCommand;
 use App\Models\EngineServerProvisioningBundle;
+use App\Models\EngineSetting;
 use App\Models\EngineWorkerPool;
 use App\Models\SmtpDecisionTrace;
 use App\Models\VerificationWorker;
@@ -50,6 +51,98 @@ class InternalEngineServerApiTest extends TestCase
             ->assertJsonPath('error_code', 'unauthorized')
             ->assertJsonPath('message', 'Unauthorized.')
             ->assertJsonStructure(['request_id']);
+
+        $this->getJson('/api/internal/provisioning-credentials')
+            ->assertUnauthorized()
+            ->assertJsonPath('error_code', 'unauthorized')
+            ->assertJsonPath('message', 'Unauthorized.')
+            ->assertJsonStructure(['request_id']);
+    }
+
+    public function test_internal_provisioning_credentials_api_supports_show_update_and_reveal(): void
+    {
+        $this->withHeaders($this->internalHeaders())
+            ->getJson('/api/internal/provisioning-credentials')
+            ->assertOk()
+            ->assertJsonPath('data.ghcr_username', '')
+            ->assertJsonPath('data.ghcr_token_configured', false)
+            ->assertJsonPath('data.ghcr_token_masked', '');
+
+        $this->withHeaders($this->internalHeaders())
+            ->putJson('/api/internal/provisioning-credentials', [
+                'ghcr_username' => 'astgd',
+                'ghcr_token' => 'ghp_test_token_12345',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.ghcr_username', 'astgd')
+            ->assertJsonPath('data.ghcr_token_configured', true)
+            ->assertJsonPath('data.ghcr_token_masked', '******');
+
+        $settings = EngineSetting::query()->firstOrFail();
+        $this->assertSame('astgd', $settings->provisioning_ghcr_username);
+        $this->assertSame('ghp_test_token_12345', $settings->provisioning_ghcr_token);
+
+        $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/provisioning-credentials/reveal')
+            ->assertOk()
+            ->assertJsonPath('data.ghcr_token', 'ghp_test_token_12345');
+
+        $this->withHeaders($this->internalHeaders())
+            ->putJson('/api/internal/provisioning-credentials', [
+                'ghcr_username' => 'astgd-updated',
+                'ghcr_token' => '******',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.ghcr_username', 'astgd-updated')
+            ->assertJsonPath('data.ghcr_token_configured', true);
+
+        $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/provisioning-credentials/reveal')
+            ->assertOk()
+            ->assertJsonPath('data.ghcr_token', 'ghp_test_token_12345');
+
+        $this->withHeaders($this->internalHeaders())
+            ->putJson('/api/internal/provisioning-credentials', [
+                'ghcr_username' => 'astgd',
+                'clear_ghcr_token' => true,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.ghcr_token_configured', false)
+            ->assertJsonPath('data.ghcr_token_masked', '');
+
+        $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/provisioning-credentials/reveal')
+            ->assertStatus(404)
+            ->assertJsonPath('error_code', 'ghcr_token_missing');
+
+        $this->assertDatabaseHas('admin_audit_logs', [
+            'action' => 'engine_provisioning_credentials_updated',
+            'subject_type' => EngineSetting::class,
+            'subject_id' => (string) $settings->id,
+        ]);
+        $this->assertDatabaseHas('admin_audit_logs', [
+            'action' => 'engine_provisioning_credentials_revealed',
+            'subject_type' => EngineSetting::class,
+            'subject_id' => (string) $settings->id,
+        ]);
+    }
+
+    public function test_internal_provisioning_credentials_api_requires_username_on_update(): void
+    {
+        $this->withHeaders($this->internalHeaders())
+            ->putJson('/api/internal/provisioning-credentials', [
+                'ghcr_username' => '',
+                'ghcr_token' => 'token-value',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('error_code', 'validation_failed')
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonStructure([
+                'request_id',
+                'errors' => [
+                    'ghcr_username',
+                ],
+            ]);
     }
 
     public function test_internal_engine_server_api_lists_and_mutates_servers(): void

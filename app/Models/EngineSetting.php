@@ -63,6 +63,8 @@ class EngineSetting extends Model
         'queue_worker_timeout',
         'queue_worker_tries',
         'queue_worker_sleep',
+        'provisioning_ghcr_username',
+        'provisioning_ghcr_token',
     ];
 
     protected $casts = [
@@ -105,5 +107,6 @@ class EngineSetting extends Model
         'queue_worker_timeout' => 'integer',
         'queue_worker_tries' => 'integer',
         'queue_worker_sleep' => 'integer',
+        'provisioning_ghcr_token' => 'encrypted',
     ];
 }

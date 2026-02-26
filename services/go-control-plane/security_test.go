@@ -85,6 +85,8 @@ func TestUIRoutesRejectCrossOriginPosts(t *testing.T) {
 		"/verifier-engine-room/pools/default/scale",
 		"/verifier-engine-room/settings",
 		"/verifier-engine-room/settings/rollback",
+		"/verifier-engine-room/settings/provisioning-credentials",
+		"/verifier-engine-room/settings/provisioning-credentials/reveal",
 		"/verifier-engine-room/providers/gmail/mode",
 		"/verifier-engine-room/providers/policies/reload",
 		"/verifier-engine-room/policies/validate",

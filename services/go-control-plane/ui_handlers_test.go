@@ -63,9 +63,11 @@ func TestSettingsTemplateRendersRuntimeHelpKeys(t *testing.T) {
 			BasePath:        "/verifier-engine-room",
 			DocsURL:         "http://localhost:8082/internal/docs",
 		},
-		Settings:        defaults,
-		DefaultSettings: defaults,
-		RuntimeHelp:     help,
+		Settings:                     defaults,
+		DefaultSettings:              defaults,
+		RuntimeHelp:                  help,
+		ProvisioningCredentials:      &LaravelProvisioningCredentials{GHCRUsername: "astgd", GHCRTokenConfigured: true, GHCRTokenMasked: "******"},
+		ProvisioningCredentialsSaved: true,
 	})
 
 	body := recorder.Body.String()
@@ -113,6 +115,18 @@ func TestSettingsTemplateRendersRuntimeHelpKeys(t *testing.T) {
 	}
 	if !strings.Contains(body, "runtime-settings-set-all-recommended") {
 		t.Fatalf("expected settings page to include set all to recommended button")
+	}
+	if !strings.Contains(body, "Provisioning Bundle Credentials") {
+		t.Fatalf("expected settings page to include provisioning credentials section")
+	}
+	if !strings.Contains(body, "provisioning-reveal-token-btn") {
+		t.Fatalf("expected settings page to include token reveal button")
+	}
+	if !strings.Contains(body, "provisioning-stored-token") {
+		t.Fatalf("expected settings page to include stored token field")
+	}
+	if !strings.Contains(body, `name="ghcr_token"`) {
+		t.Fatalf("expected settings page to submit ghcr token from stored token field")
 	}
 }
 
@@ -175,6 +189,9 @@ func TestProvisioningTemplateRendersWizardOnly(t *testing.T) {
 				},
 			},
 		},
+		InstallCommandCopy:   `curl -fsSL "https://app.test/install.sh" | bash -s -- --ghcr-user "<ghcr-username>" --ghcr-token "<ghcr-token>"`,
+		InstallCopyUsesSaved: true,
+		InstallCopyUsername:  "astgd",
 	})
 
 	body := recorder.Body.String()
@@ -196,6 +213,9 @@ func TestProvisioningTemplateRendersWizardOnly(t *testing.T) {
 	assertContains("Select Server")
 	assertContains("Run this command on your VPS shell as root.")
 	assertContains("Claim-next auth sanity")
+	assertContains("provisioning-copy-install-command")
+	assertContains("Install command copied")
+	assertContains("saved GHCR credentials")
 	if strings.Contains(body, "Runtime-only orphan workers") {
 		t.Fatalf("expected provisioning template to hide inventory table blocks")
 	}
