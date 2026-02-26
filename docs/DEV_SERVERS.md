@@ -23,7 +23,24 @@ Use this runbook to start and stop all local dev services in this repo.
    - `LARAVEL_VERIFIER_TOKEN=<verifier-service-token>`
    - `POLICY_PAYLOAD_STRICT_VALIDATION_ENABLED=true`
 5. `go run .`
-6. Open `http://localhost:9091/verifier-engine-room/overview`
+6. Open:
+   - `http://localhost:9091/verifier-engine-room/overview`
+   - `http://localhost:9091/verifier-engine-room/workers`
+   - `http://localhost:9091/verifier-engine-room/provisioning`
+   - `http://localhost:9091/verifier-engine-room/servers`
+   - `http://localhost:9091/verifier-engine-room/pools`
+
+## Go closeout regression sweep (real VPS)
+1. In Go UI:
+   - Provisioning: select/create server -> generate bundle -> install.
+   - Step 4: click **Run Verification Checks** until all checks pass.
+2. On VPS:
+   - `systemctl status vev-worker.service --no-pager`
+   - `systemctl status vev-worker-agent.service --no-pager`
+   - `docker logs --tail=120 valid-email-worker`
+3. In Go UI:
+   - Servers > Manage: run `Stop`, `Start`, `Restart`, `Status`.
+   - Workers: confirm runtime heartbeat/match and test `Pause/Resume`, `Drain`, `Quarantine`.
 
 **Go worker**
 1. `cd engine-worker-go`

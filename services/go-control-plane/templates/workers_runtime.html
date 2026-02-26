@@ -5,7 +5,8 @@
             <div class="space-y-2">
                 <h2 class="text-lg font-semibold">Workers</h2>
                 <p class="text-sm text-slate-400">Daily runtime scheduling controls for active workers.</p>
-                <p class="text-xs text-slate-500">Runtime controls affect scheduling and claims. Host process lifecycle is managed in Servers &gt; Advanced.</p>
+                <p class="text-xs text-slate-500">Pause/Resume, Drain, and Quarantine control scheduler intent and claim behavior only. They do not start or stop the VPS process.</p>
+                <p class="text-xs text-slate-500">For host process lifecycle, use <span class="text-slate-300">Servers &gt; Manage &gt; Infrastructure Control</span>.</p>
             </div>
             <span id="workers-active-count" class="text-xs text-slate-400">{{ .WorkerCount }} active</span>
         </div>

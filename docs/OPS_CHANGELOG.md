@@ -17,3 +17,23 @@ For Codex continuity and implementation handoff details, use `docs/CONTEXT_HANDO
 ## 2026-02 (ongoing)
 - Worker process-control foundation added for remote start/stop orchestration.
 - Docker worker image supply-chain improvements: digest pinning/canary flow + verification controls.
+- Go UI information architecture finalized to 4 operational surfaces:
+  - Workers (runtime scheduling only)
+  - Provisioning (wizard only)
+  - Servers (inventory + manage/edit)
+  - Pools (first-class server groups)
+- Pools became first-class infrastructure objects with:
+  - create/edit/archive/set-default
+  - server assignment from provisioning/edit flows
+  - provider profile mapping (`standard`, `low_hit`, `warmup`)
+- Provisioning flow hardened:
+  - explicit Run Verification Checks action
+  - expired/latest bundle handling improvements
+  - clearer install + verify sequence
+- Go closeout hardening:
+  - removed legacy `/ui/*` and workers-registry compatibility UI paths
+  - Step 4 claim-next sanity is now explicit API auth probe (validation-only, non-claiming)
+  - runtime vs infrastructure control copy/tooltips finalized
+- Migration/test-state hardening completed:
+  - duplicate checkout-intent migrations made safe/idempotent
+  - full suite green (`210 passed`)

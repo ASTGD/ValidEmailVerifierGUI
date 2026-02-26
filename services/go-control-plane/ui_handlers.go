@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -50,18 +52,18 @@ type WorkersPageData struct {
 	Workers             []WorkerSummary
 	WorkerServerLinks   map[string]WorkerServerLink
 	PollIntervalSeconds int
-	ActiveTab           string
-	ServerRegistry      EngineServerRegistryPageData
 	DecisionTraces      WorkerDecisionTracePageData
 }
 
 type ProvisioningPageData struct {
 	BasePageData
-	Mode                string
-	SelectedServer      *LaravelEngineServerRecord
-	Prefill             ProvisioningPrefillHints
-	VerificationChecked bool
-	ServerRegistry      EngineServerRegistryPageData
+	Mode                 string
+	SelectedServer       *LaravelEngineServerRecord
+	Prefill              ProvisioningPrefillHints
+	VerificationChecked  bool
+	ClaimNextProbe       string
+	ClaimNextProbeDetail string
+	ServerRegistry       EngineServerRegistryPageData
 }
 
 type ServersPageData struct {
@@ -129,22 +131,22 @@ type EngineServerRegistryPageData struct {
 
 type PoolsPageData struct {
 	BasePageData
-	Configured         bool
-	Notice             string
-	Error              string
-	PoolCount          int
-	Rows               []PoolInventoryRow
-	EditPoolID         int
-	EditPool           *LaravelEnginePoolRecord
-	ProfileOptions     []PoolProfileOption
+	Configured          bool
+	Notice              string
+	Error               string
+	PoolCount           int
+	Rows                []PoolInventoryRow
+	EditPoolID          int
+	EditPool            *LaravelEnginePoolRecord
+	ProfileOptions      []PoolProfileOption
 	PollIntervalSeconds int
 }
 
 type PoolInventoryRow struct {
-	Pool                LaravelEnginePoolRecord
-	RuntimeOnline       int
-	RuntimeDesired      int
-	RuntimeHealthScore  float64
+	Pool               LaravelEnginePoolRecord
+	RuntimeOnline      int
+	RuntimeDesired     int
+	RuntimeHealthScore float64
 }
 
 type PoolProfileOption struct {
@@ -204,10 +206,6 @@ type LivePayload struct {
 	AutoscaleEnabled       bool                    `json:"autoscale_enabled"`
 }
 
-func (s *Server) handleUIRedirect(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/verifier-engine-room/overview", http.StatusFound)
-}
-
 func (s *Server) runtimeSettings(ctx context.Context) RuntimeSettings {
 	defaults := defaultRuntimeSettings(s.cfg)
 	if s.store == nil {
@@ -234,36 +232,6 @@ func (s *Server) docsURL() string {
 	}
 
 	return base + "/internal/docs"
-}
-
-func (s *Server) handleUILegacyRedirect(path string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, path, http.StatusFound)
-	}
-}
-
-func (s *Server) handleUILegacyServerManageRedirect(w http.ResponseWriter, r *http.Request) {
-	serverID := strings.TrimSpace(chi.URLParam(r, "serverID"))
-	if serverID == "" {
-		http.Redirect(w, r, "/verifier-engine-room/servers", http.StatusFound)
-		return
-	}
-
-	http.Redirect(w, r, "/verifier-engine-room/servers/"+url.PathEscape(serverID), http.StatusFound)
-}
-
-func (s *Server) handleUILegacyServerEditRedirect(w http.ResponseWriter, r *http.Request) {
-	serverID := strings.TrimSpace(chi.URLParam(r, "serverID"))
-	if serverID == "" {
-		http.Redirect(w, r, "/verifier-engine-room/servers", http.StatusFound)
-		return
-	}
-
-	http.Redirect(w, r, "/verifier-engine-room/servers/"+url.PathEscape(serverID)+"/edit", http.StatusFound)
-}
-
-func (s *Server) handleUIRegistryRedirect(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/verifier-engine-room/servers", http.StatusFound)
 }
 
 func (s *Server) handleUIOverview(w http.ResponseWriter, r *http.Request) {
@@ -345,17 +313,6 @@ func (s *Server) handleUIWorkers(w http.ResponseWriter, r *http.Request) {
 	}
 	settings := s.runtimeSettings(r.Context())
 
-	if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("tab")), "registry") {
-		redirectQuery := r.URL.Query()
-		redirectQuery.Del("tab")
-		target := "/verifier-engine-room/servers"
-		if encoded := redirectQuery.Encode(); encoded != "" {
-			target += "?" + encoded
-		}
-		http.Redirect(w, r, target, http.StatusFound)
-		return
-	}
-
 	data := WorkersPageData{
 		BasePageData: BasePageData{
 			Title:            "Verifier Engine Room · Workers",
@@ -400,11 +357,13 @@ func (s *Server) handleUIProvisioning(w http.ResponseWriter, r *http.Request) {
 			DocsURL:          s.docsURL(),
 			ShowProvisioning: true,
 		},
-		Mode:                mode,
-		SelectedServer:      selectedServer,
-		Prefill:             readProvisioningPrefillHints(r),
-		VerificationChecked: strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("verification")), "checked"),
-		ServerRegistry:      registryData,
+		Mode:                 mode,
+		SelectedServer:       selectedServer,
+		Prefill:              readProvisioningPrefillHints(r),
+		VerificationChecked:  strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("verification")), "checked"),
+		ClaimNextProbe:       normalizeClaimNextProbeStatus(r.URL.Query().Get("claim_next_probe")),
+		ClaimNextProbeDetail: strings.TrimSpace(r.URL.Query().Get("claim_next_probe_detail")),
+		ServerRegistry:       registryData,
 	}
 
 	s.views.Render(w, data)
@@ -971,8 +930,12 @@ func (s *Server) handleUIVerifyProvisioningServer(w http.ResponseWriter, r *http
 		"mode":           []string{"existing"},
 		"verification":   []string{"checked"},
 	}
-	if bundleServerID := strings.TrimSpace(firstNonEmptyFormValue(r, "bundle_server_id")); bundleServerID != "" {
-		query.Set("bundle_server_id", bundleServerID)
+	bundleServerID := serverID
+	if bundleServerIDRaw := strings.TrimSpace(firstNonEmptyFormValue(r, "bundle_server_id")); bundleServerIDRaw != "" {
+		query.Set("bundle_server_id", bundleServerIDRaw)
+		if parsedBundleServerID, parseErr := strconv.Atoi(bundleServerIDRaw); parseErr == nil && parsedBundleServerID > 0 {
+			bundleServerID = parsedBundleServerID
+		}
 	}
 
 	selected, selectErr := s.loadServerWithRuntimeMatch(r.Context(), serverID)
@@ -1037,7 +1000,198 @@ func (s *Server) handleUIVerifyProvisioningServer(w http.ResponseWriter, r *http
 		}
 	}
 
+	claimNextProbeStatus, claimNextProbeDetail := s.runProvisioningClaimNextAuthProbe(r.Context(), bundleServerID)
+	query.Set("claim_next_probe", claimNextProbeStatus)
+	if claimNextProbeDetail != "" {
+		query.Set("claim_next_probe_detail", claimNextProbeDetail)
+	}
+
 	s.redirectServerRegistry(w, r, query)
+}
+
+func (s *Server) runProvisioningClaimNextAuthProbe(ctx context.Context, serverID int) (string, string) {
+	if s.laravelEngineClient == nil {
+		return "fail", "Laravel internal API is not configured."
+	}
+	if serverID <= 0 {
+		return "fail", "Invalid server id for claim-next auth probe."
+	}
+
+	bundle, bundleErr := s.laravelEngineClient.LatestProvisioningBundle(ctx, serverID)
+	if bundleErr != nil {
+		if isNoProvisioningBundleError(bundleErr) {
+			return "fail", "No provisioning bundle found. Generate a bundle in Step 2 first."
+		}
+
+		return "fail", mapRegistryActionError("run claim-next auth probe", bundleErr)
+	}
+	if bundle == nil {
+		return "fail", "No provisioning bundle found. Generate a bundle in Step 2 first."
+	}
+
+	envURL := strings.TrimSpace(bundle.DownloadURLs["env"])
+	if envURL == "" {
+		return "fail", "Latest bundle has no worker.env download URL. Generate a fresh bundle."
+	}
+
+	timeoutSeconds := s.cfg.LaravelInternalAPITimeoutSeconds
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 5
+	}
+	client := &http.Client{
+		Timeout: time.Duration(timeoutSeconds) * time.Second,
+	}
+
+	envRequest, requestErr := http.NewRequestWithContext(ctx, http.MethodGet, envURL, nil)
+	if requestErr != nil {
+		return "fail", "Unable to prepare worker.env probe request."
+	}
+
+	envResponse, responseErr := client.Do(envRequest)
+	if responseErr != nil {
+		return "fail", fmt.Sprintf("Unable to fetch worker.env bundle payload: %s", responseErr.Error())
+	}
+	defer envResponse.Body.Close()
+
+	envPayload, readErr := io.ReadAll(io.LimitReader(envResponse.Body, 64*1024))
+	if readErr != nil {
+		return "fail", "Unable to read worker.env bundle payload."
+	}
+	if envResponse.StatusCode != http.StatusOK {
+		return "fail", fmt.Sprintf("Unable to fetch worker.env bundle payload (status %d).", envResponse.StatusCode)
+	}
+
+	envMap := parseProvisioningEnvPayload(string(envPayload))
+	apiBaseURL := strings.TrimRight(strings.TrimSpace(envMap["ENGINE_API_BASE_URL"]), "/")
+	apiToken := strings.TrimSpace(envMap["ENGINE_API_TOKEN"])
+	if apiBaseURL == "" {
+		return "fail", "ENGINE_API_BASE_URL is missing in worker.env."
+	}
+	if apiToken == "" {
+		return "fail", "ENGINE_API_TOKEN is missing in worker.env."
+	}
+
+	probePayload, marshalErr := json.Marshal(map[string]string{
+		"worker_id": "probe-auth-only",
+	})
+	if marshalErr != nil {
+		return "fail", "Unable to encode claim-next probe payload."
+	}
+
+	claimRequest, claimRequestErr := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		apiBaseURL+"/api/verifier/chunks/claim-next",
+		bytes.NewReader(probePayload),
+	)
+	if claimRequestErr != nil {
+		return "fail", "Unable to prepare claim-next probe request."
+	}
+	claimRequest.Header.Set("Authorization", "Bearer "+apiToken)
+	claimRequest.Header.Set("Accept", "application/json")
+	claimRequest.Header.Set("Content-Type", "application/json")
+
+	claimResponse, claimResponseErr := client.Do(claimRequest)
+	if claimResponseErr != nil {
+		return "fail", fmt.Sprintf("Claim-next probe request failed: %s", claimResponseErr.Error())
+	}
+	defer claimResponse.Body.Close()
+
+	claimResponseBody, claimReadErr := io.ReadAll(io.LimitReader(claimResponse.Body, 8*1024))
+	if claimReadErr != nil {
+		claimResponseBody = nil
+	}
+
+	requestID := strings.TrimSpace(claimResponse.Header.Get("X-Request-Id"))
+	message := extractProbeErrorMessage(claimResponseBody)
+	switch claimResponse.StatusCode {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		if message == "" {
+			message = "Verifier API rejected the worker token."
+		}
+		return "fail", appendProbeRequestID(message, requestID)
+	case http.StatusUnprocessableEntity:
+		return "pass", appendProbeRequestID("API auth accepted (validation-only probe).", requestID)
+	case http.StatusOK, http.StatusNoContent:
+		return "pass", appendProbeRequestID("API auth accepted.", requestID)
+	case http.StatusTooManyRequests:
+		message = fallbackProbeMessage(message, "Verifier API is rate-limited. Retry verification shortly.")
+		return "pending", appendProbeRequestID(message, requestID)
+	default:
+		if claimResponse.StatusCode >= http.StatusInternalServerError {
+			message = fallbackProbeMessage(message, "Verifier API is temporarily unavailable. Retry verification shortly.")
+			return "pending", appendProbeRequestID(message, requestID)
+		}
+		message = fallbackProbeMessage(message, fmt.Sprintf("Unexpected verifier API status %d.", claimResponse.StatusCode))
+		return "fail", appendProbeRequestID(message, requestID)
+	}
+}
+
+func parseProvisioningEnvPayload(payload string) map[string]string {
+	values := make(map[string]string)
+	for _, rawLine := range strings.Split(payload, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		keyValue := strings.SplitN(line, "=", 2)
+		if len(keyValue) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(keyValue[0])
+		if key == "" {
+			continue
+		}
+		value := strings.TrimSpace(keyValue[1])
+		value = strings.Trim(value, "\"'")
+		values[key] = value
+	}
+
+	return values
+}
+
+func extractProbeErrorMessage(payload []byte) string {
+	trimmed := strings.TrimSpace(string(payload))
+	if trimmed == "" {
+		return ""
+	}
+
+	var envelope struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err == nil {
+		message := strings.TrimSpace(envelope.Message)
+		if message != "" {
+			return message
+		}
+	}
+
+	if len(trimmed) > 180 {
+		return trimmed[:180] + "..."
+	}
+
+	return trimmed
+}
+
+func fallbackProbeMessage(message string, fallback string) string {
+	if strings.TrimSpace(message) != "" {
+		return message
+	}
+
+	return fallback
+}
+
+func appendProbeRequestID(message string, requestID string) string {
+	baseMessage := strings.TrimSpace(message)
+	if baseMessage == "" {
+		baseMessage = "Claim-next auth probe completed."
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return baseMessage
+	}
+
+	return fmt.Sprintf("%s (request id: %s)", baseMessage, requestID)
 }
 
 func (s *Server) loadServerWithRuntimeMatch(ctx context.Context, serverID int) (*LaravelEngineServerRecord, error) {
@@ -1431,6 +1585,15 @@ func normalizeRegistryFilter(raw string) string {
 		return "needs_attention"
 	default:
 		return "all"
+	}
+}
+
+func normalizeClaimNextProbeStatus(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "pass", "fail", "pending":
+		return strings.ToLower(strings.TrimSpace(raw))
+	default:
+		return ""
 	}
 }
 
@@ -1837,8 +2000,8 @@ func (s *Server) handleUIUpdateEnginePool(w http.ResponseWriter, r *http.Request
 	}
 
 	s.redirectPools(w, r, url.Values{
-		"notice":        []string{"Pool updated successfully."},
-		"edit_pool_id":  []string{strconv.Itoa(poolID)},
+		"notice":       []string{"Pool updated successfully."},
+		"edit_pool_id": []string{strconv.Itoa(poolID)},
 	})
 }
 

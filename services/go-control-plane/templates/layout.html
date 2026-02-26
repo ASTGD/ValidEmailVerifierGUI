@@ -5,7 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
-    <link rel="stylesheet" href="/assets/app.css?v=22_4_server_inventory_rearch" />
+    <link rel="stylesheet" href="/assets/app.css?v=22_5_go_closeout" />
 </head>
 <body class="min-h-screen bg-slate-950 text-slate-100">
     <div class="min-h-screen md:flex">
@@ -55,8 +55,6 @@
             <main class="mx-auto max-w-[88rem] px-6 py-8">
                 {{ if eq .ContentTemplate "overview" }}
                     {{ template "overview" . }}
-                {{ else if eq .ContentTemplate "workers" }}
-                    {{ template "workers" . }}
                 {{ else if eq .ContentTemplate "workers_runtime" }}
                     {{ template "workers_runtime" . }}
                 {{ else if eq .ContentTemplate "provisioning" }}

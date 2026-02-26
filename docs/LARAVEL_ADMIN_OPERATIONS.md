@@ -19,7 +19,8 @@
 4. If unsure, use conservative values and monitor for one window.
 
 ## Engine Server Fallback (Break-Glass Only)
-1. Normal daily engine operations must be done from Go: `/verifier-engine-room/workers`.
+1. Normal daily engine operations must be done from Go pages:
+   `/verifier-engine-room/workers`, `/verifier-engine-room/provisioning`, `/verifier-engine-room/servers`, `/verifier-engine-room/pools`.
 2. Laravel `/admin/engine-servers` is emergency fallback only.
 3. Fallback is gated by config:
 - `ENGINE_SERVERS_FALLBACK_UI_ENABLED`

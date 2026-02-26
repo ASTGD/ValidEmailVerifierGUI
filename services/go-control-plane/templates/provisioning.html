@@ -215,6 +215,7 @@
                             <a href="{{ .BasePath }}/servers/{{ .SelectedServer.ID }}/edit" class="text-xs text-cyan-200 underline">Edit server details</a>
                         {{ end }}
                     </div>
+                    <p class="mt-2 text-xs text-slate-400">Runs explicit API auth probe for <code class="text-slate-200">claim-next</code> using the latest bundle token (validation-only payload, no chunk claim).</p>
                     {{ if .SelectedServer }}
                         <form method="POST" action="{{ .BasePath }}/provisioning/servers/{{ .SelectedServer.ID }}/verify" class="mt-3">
                             <input type="hidden" name="return_to" value="provisioning" />
@@ -252,14 +253,19 @@
                                 </div>
                                 <div class="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2">
                                     <span class="text-slate-300">Claim-next auth sanity</span>
-                                    {{ if and (eq .SelectedServer.RuntimeMatchStatus "matched") (eq .SelectedServer.HeartbeatState "healthy") }}
+                                    {{ if eq .ClaimNextProbe "pass" }}
                                         <span class="rounded-full bg-emerald-500/20 px-2 py-1 text-emerald-300">Pass</span>
-                                    {{ else if eq .SelectedServer.ProcessState "running" }}
-                                        <span class="rounded-full bg-amber-500/20 px-2 py-1 text-amber-200">Pending · run after heartbeat</span>
+                                    {{ else if eq .ClaimNextProbe "pending" }}
+                                        <span class="rounded-full bg-amber-500/20 px-2 py-1 text-amber-200">Pending</span>
+                                    {{ else if eq .ClaimNextProbe "fail" }}
+                                        <span class="rounded-full bg-red-500/20 px-2 py-1 text-red-300">Fail</span>
                                     {{ else }}
-                                        <span class="rounded-full bg-amber-500/20 px-2 py-1 text-amber-200">Fail · manual check required</span>
+                                        <span class="rounded-full bg-slate-800 px-2 py-1 text-slate-300">Pending</span>
                                     {{ end }}
                                 </div>
+                                {{ if .ClaimNextProbeDetail }}
+                                    <p class="rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs text-slate-300">{{ .ClaimNextProbeDetail }}</p>
+                                {{ end }}
                             </div>
                         {{ else }}
                             <p class="mt-3 text-sm text-slate-400">Run verification after installing the bundle on your VPS.</p>

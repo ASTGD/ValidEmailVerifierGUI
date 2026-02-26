@@ -90,6 +90,7 @@
         <section class="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
             <h3 class="text-sm font-semibold text-slate-100">Infrastructure Control</h3>
             <p class="mt-1 text-xs text-slate-400">Start/Stop/Restart control the host worker process and are not daily runtime scheduling actions.</p>
+            <p class="mt-1 text-xs text-slate-500">Use Workers page for Pause/Resume, Drain, and Quarantine (scheduler controls).</p>
 
             {{ if and (eq .Server.ProcessControlMode "agent_systemd") .Server.AgentEnabled }}
                 <div class="mt-3 flex flex-wrap gap-2">

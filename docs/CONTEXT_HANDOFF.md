@@ -1,6 +1,6 @@
 # Context Handoff (ValidEmailVerifierGUI)
 
-Last updated: 2026-02-19
+Last updated: 2026-02-26
 
 This document is the handoff bundle for a fresh workspace. It summarizes the current system state, key decisions, and how to resume work without losing context. Do not place secrets in this file.
 
@@ -14,6 +14,11 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - DynamoDB cache write-back (miss-only, valid/invalid) is implemented with admin settings and retries.
 - Cache write-back test mode (cache-only) can write `Cache_miss` to a separate DynamoDB test table.
 - Engine monitoring (RBL checks) is implemented with `engine-monitor-go` and admin UI.
+- Go control-plane UI has finalized IA:
+  - Workers: runtime scheduling controls only.
+  - Provisioning: onboarding/re-provisioning wizard only.
+  - Servers: inventory + diagnostics + infrastructure process controls.
+  - Pools: first-class server groups with provider profiles.
 - Admin Ops Overview dashboard is available with system, queue, engine, and job health widgets.
 - System + queue metrics are collected via scheduled commands and stored for trend charts.
 - Developer Tools page provides capacity, queue pressure, poll load, and cost estimators.
@@ -62,11 +67,17 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - No customer mode selection is exposed; internal policy gates decide probe execution.
 
 ## 8) Engine server provisioning (worker)
-- Admin manages Engine Servers and Verifier Domains.
-- Provisioning bundle generates a one-line install command:
-  - Downloads signed `install.sh`
-  - Installs Docker, pulls GHCR image, runs container with generated env
-- Provisioning block is inside Engine Server edit UI.
+- Primary operator path is now Go panel (`/verifier-engine-room/*`), not Filament daily UI.
+- Provisioning wizard (`/verifier-engine-room/provisioning`) handles:
+  - create/select server
+  - generate short-lived bundle
+  - install command
+  - post-install verification checks
+- Servers page (`/verifier-engine-room/servers`) handles inventory visibility and manage/edit flows.
+- Server Manage page (`/verifier-engine-room/servers/{id}`) handles infrastructure controls:
+  - `start`, `stop`, `restart`, `status`
+- Workers page (`/verifier-engine-room/workers`) handles runtime scheduler controls:
+  - `pause/resume`, `drain`, `quarantine`
 
 ## 9) S3 storage (uploads/results)
 - S3 support is working in local dev.
@@ -111,16 +122,26 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 - Queue worker: `./vendor/bin/sail artisan queue:work --timeout=1800`
 - Tests: `./vendor/bin/sail test`
 
-## 14) Today’s update (2026-02-02)
-- Added Admin Ops Overview dashboard (system health, queue health, engine health, job health, trends, active jobs).
-- Added system + queue metrics tables and scheduled collectors (every 60s).
-- Added per-job metrics tracking (phase, progress, cache hits/misses, write-back progress, peak CPU/memory).
-- Added progress bars + metrics to admin job list and job detail view; logs are collapsible.
+## 14) Latest Go segment update (2026-02-26)
+- Phase 22.5 merged: Pools are first-class server groups.
+- Added Laravel pool model + API + migrations:
+  - `engine_worker_pools`
+  - `engine_servers.worker_pool_id`
+- Go UI finalized with left-nav grouped IA (Ops / Infra / Governance).
+- Provisioning is wizard-only; Servers list is inventory-only with Manage deep-link.
+- Workers page remains runtime-only controls.
+- Pool/provider profile policy overlay now affects claim routing and worker provider-policy fetch.
+- Migration-state blocker resolved; full test suite green (`210 passed`).
 
-## 15) Next planned upgrades (not yet implemented)
-- SG6 pilot completion items (real ESP adapter, credit settlement finalization, operational reporting)
-- Go policy canary drill automation and wider provider rollout (post-pilot)
-- Additional cache-read optimization for very large uploads
+## 15) Go closeout status before Filament focus
+- Completed:
+  - Legacy `/ui/*` compatibility routes removed.
+  - Legacy workers-registry mixed template removed.
+  - Runtime vs infrastructure control semantics finalized in Go UI copy.
+  - Provisioning Step 4 now runs explicit `claim-next` API auth probe (validation-only payload, no chunk claim).
+  - Docs/runbooks aligned with current Go IA.
+- Operator sign-off still required (manual on real VPS):
+  - final multi-VPS regression sweep using checklist in `docs/GO_WORKER_CONTROL_PLANE_SPEC.md`.
 
 ## 16) Pre-release flag burn-down plan (make v1 permanent)
 - Goal: before first production release, remove temporary rollout feature flags and keep only operational/safety flags.
@@ -138,6 +159,46 @@ This document is the handoff bundle for a fresh workspace. It summarizes the cur
 ---
 
 ## Update log
+
+### 2026-02-26 — Go Phase 22.5 + migration/test hardening (main)
+- Added pool domain model and Laravel internal APIs:
+  - `EngineWorkerPool` model
+  - `EnginePoolController` (+ upsert request)
+  - CRUD/archive/set-default with guard rules
+- Added DB changes:
+  - `engine_worker_pools` table
+  - `engine_servers.worker_pool_id` foreign key + backfill to default pool
+- Added provisioning + server payload support for pool assignment and `WORKER_POOL` in generated bundle env.
+- Added pool profile policy service and pool-aware routing/provider-policy behavior in:
+  - claim-next scoring
+  - Go control-plane provider policy endpoint
+  - Go worker policy fetch path
+- Finalized Go UI IA:
+  - workers runtime-only
+  - provisioning wizard-only
+  - servers inventory/manage/edit
+  - pools first-class page
+- Hardened duplicate checkout-intent migrations for safe re-run/state drift.
+- Hardened base test state to ensure required engine defaults are present after schema dumps.
+- Full verification:
+  - Laravel migrations pass
+  - full Laravel suite pass (`210 passed`)
+  - Go control-plane tests pass
+  - Go worker tests pass
+
+### 2026-02-26 — Go closeout pass (legacy cleanup + provisioning auth probe)
+- Removed legacy Go UI compatibility surface:
+  - deleted `/ui/*` route aliases
+  - removed old workers-registry template fragments
+- Cleaned control semantics:
+  - workers page copy now explicitly runtime-only
+  - servers manage page copy now explicitly infrastructure-only
+- Provisioning Step 4 hardening:
+  - added explicit `claim-next` auth probe using latest bundle `worker.env` token
+  - probe uses validation-only payload to avoid claiming chunks
+  - UI now shows probe status (`pass|pending|fail`) and detail message
+- Added test coverage in Go control-plane for probe pass/fail cases.
+- Added final VPS regression + Go release freeze checklists to `docs/GO_WORKER_CONTROL_PLANE_SPEC.md`.
 
 ### 2026-02-19 — Docs cleanup and reorganization (feature/docs-cleanup-reorg)
 - Consolidated Go UI reference into `docs/GO_WORKER_CONTROL_PLANE_SPEC.md`.

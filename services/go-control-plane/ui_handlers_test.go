@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -39,21 +41,6 @@ func TestDocsURLReturnsEmptyWhenUnavailable(t *testing.T) {
 
 	if got := server.docsURL(); got != "" {
 		t.Fatalf("expected empty docs URL, got %q", got)
-	}
-}
-
-func TestHandleUIRegistryRedirectTargetsServers(t *testing.T) {
-	server := &Server{cfg: Config{}}
-
-	req := httptest.NewRequest(http.MethodGet, "/verifier-engine-room/registry", nil)
-	recorder := httptest.NewRecorder()
-	server.handleUIRegistryRedirect(recorder, req)
-
-	if recorder.Code != http.StatusFound {
-		t.Fatalf("expected redirect status, got %d", recorder.Code)
-	}
-	if location := recorder.Header().Get("Location"); location != "/verifier-engine-room/servers" {
-		t.Fatalf("expected redirect to servers, got %q", location)
 	}
 }
 
@@ -660,7 +647,7 @@ func TestWorkersRuntimeTemplateRendersRuntimeControlsOnly(t *testing.T) {
 	})
 
 	body := recorder.Body.String()
-	if !strings.Contains(body, "Runtime controls affect scheduling and claims") {
+	if !strings.Contains(body, "Pause/Resume, Drain, and Quarantine control scheduler intent") {
 		t.Fatalf("expected workers runtime microcopy to be rendered")
 	}
 	if strings.Contains(body, "Server Registry &amp; Provisioning") {
@@ -759,6 +746,118 @@ func TestHostsLikelyMatchSupportsShortAndFQDNHosts(t *testing.T) {
 	}
 	if hostsLikelyMatch("eng2.vasevev.com", "eng9.vasevev.com") {
 		t.Fatal("expected different hosts not to match")
+	}
+}
+
+func TestRunProvisioningClaimNextAuthProbePassesOnValidationOnlyResponse(t *testing.T) {
+	var testServerURL string
+	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/internal/engine-servers/7/provisioning-bundles/latest":
+			if got := r.Header.Get("Authorization"); got != "Bearer internal-token" {
+				t.Fatalf("expected internal auth header, got %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"bundle_uuid":      "bundle-7",
+					"engine_server_id": 7,
+					"download_urls": map[string]string{
+						"env": testServerURL + "/bundle/env",
+					},
+				},
+			})
+		case "/bundle/env":
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("ENGINE_API_BASE_URL=" + testServerURL + "\nENGINE_API_TOKEN=probe-token\n"))
+		case "/api/verifier/chunks/claim-next":
+			if got := r.Header.Get("Authorization"); got != "Bearer probe-token" {
+				t.Fatalf("expected probe token auth header, got %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"message":"The engine server field is required."}`))
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer testServer.Close()
+	testServerURL = testServer.URL
+
+	client := NewLaravelEngineServerClient(Config{
+		LaravelInternalAPIBaseURL: testServerURL,
+		LaravelInternalAPIToken:   "internal-token",
+	})
+	if client == nil {
+		t.Fatal("expected configured internal client")
+	}
+
+	server := &Server{
+		cfg: Config{
+			LaravelInternalAPITimeoutSeconds: 2,
+		},
+		laravelEngineClient: client,
+	}
+
+	status, detail := server.runProvisioningClaimNextAuthProbe(context.Background(), 7)
+	if status != "pass" {
+		t.Fatalf("expected pass status, got %q (%s)", status, detail)
+	}
+	if !strings.Contains(detail, "validation-only probe") {
+		t.Fatalf("expected validation-only pass detail, got %q", detail)
+	}
+}
+
+func TestRunProvisioningClaimNextAuthProbeFailsOnUnauthorizedToken(t *testing.T) {
+	var testServerURL string
+	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/internal/engine-servers/9/provisioning-bundles/latest":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"bundle_uuid":      "bundle-9",
+					"engine_server_id": 9,
+					"download_urls": map[string]string{
+						"env": testServerURL + "/bundle/env",
+					},
+				},
+			})
+		case "/bundle/env":
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("ENGINE_API_BASE_URL=" + testServerURL + "\nENGINE_API_TOKEN=bad-token\n"))
+		case "/api/verifier/chunks/claim-next":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"message":"Unauthenticated."}`))
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer testServer.Close()
+	testServerURL = testServer.URL
+
+	client := NewLaravelEngineServerClient(Config{
+		LaravelInternalAPIBaseURL: testServerURL,
+		LaravelInternalAPIToken:   "internal-token",
+	})
+	if client == nil {
+		t.Fatal("expected configured internal client")
+	}
+
+	server := &Server{
+		cfg: Config{
+			LaravelInternalAPITimeoutSeconds: 2,
+		},
+		laravelEngineClient: client,
+	}
+
+	status, detail := server.runProvisioningClaimNextAuthProbe(context.Background(), 9)
+	if status != "fail" {
+		t.Fatalf("expected fail status, got %q (%s)", status, detail)
+	}
+	if !strings.Contains(detail, "Unauthenticated") {
+		t.Fatalf("expected unauthorized detail, got %q", detail)
 	}
 }
 
