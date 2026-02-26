@@ -64,6 +64,10 @@ type ProvisioningPageData struct {
 	ClaimNextProbe       string
 	ClaimNextProbeDetail string
 	ServerRegistry       EngineServerRegistryPageData
+	InstallCommandCopy   string
+	InstallCopyUsesSaved bool
+	InstallCopyUsername  string
+	InstallCopyError     string
 }
 
 type ServersPageData struct {
@@ -167,8 +171,11 @@ type AlertsPageData struct {
 type SettingsPageData struct {
 	BasePageData
 	Saved                                     bool
+	ProvisioningCredentialsSaved              bool
 	RolledBack                                bool
 	HasRollbackSnapshot                       bool
+	ProvisioningCredentials                   *LaravelProvisioningCredentials
+	ProvisioningCredentialsError              string
 	Settings                                  RuntimeSettings
 	DefaultSettings                           RuntimeSettings
 	ProviderHealth                            []ProviderHealthSummary
@@ -364,6 +371,20 @@ func (s *Server) handleUIProvisioning(w http.ResponseWriter, r *http.Request) {
 		ClaimNextProbe:       normalizeClaimNextProbeStatus(r.URL.Query().Get("claim_next_probe")),
 		ClaimNextProbeDetail: strings.TrimSpace(r.URL.Query().Get("claim_next_probe_detail")),
 		ServerRegistry:       registryData,
+	}
+
+	if registryData.ProvisionBundle != nil {
+		template := strings.TrimSpace(registryData.ProvisionBundle.InstallCommandTemplate)
+		if template != "" {
+			data.InstallCommandCopy = template
+			credentials, credentialsErr := s.loadProvisioningCredentials(r.Context())
+			if credentialsErr != nil {
+				data.InstallCopyError = mapRegistryActionError("load provisioning credentials", credentialsErr)
+			} else if credentials != nil {
+				data.InstallCopyUsername = strings.TrimSpace(credentials.GHCRUsername)
+				data.InstallCopyUsesSaved = data.InstallCopyUsername != "" && credentials.GHCRTokenConfigured
+			}
+		}
 	}
 
 	s.views.Render(w, data)
@@ -1532,6 +1553,19 @@ func parseEnginePoolUpsertPayload(r *http.Request) (LaravelEnginePoolUpsertPaylo
 	}, nil
 }
 
+func (s *Server) loadProvisioningCredentials(ctx context.Context) (*LaravelProvisioningCredentials, error) {
+	if s.laravelEngineClient == nil {
+		return nil, nil
+	}
+
+	credentials, err := s.laravelEngineClient.ProvisioningCredentials(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return credentials, nil
+}
+
 func mapRegistryActionError(action string, err error) string {
 	if err == nil {
 		return ""
@@ -2121,6 +2155,15 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 		hasRollbackSnapshot, _ = s.store.HasRuntimeSettingsSnapshot(r.Context())
 	}
 
+	provisioningCredentials, provisioningCredentialsErr := s.loadProvisioningCredentials(r.Context())
+	provisioningCredentialsError := ""
+	if provisioningCredentialsErr != nil {
+		provisioningCredentialsError = mapRegistryActionError("load provisioning credentials", provisioningCredentialsErr)
+	}
+	if queryError := strings.TrimSpace(r.URL.Query().Get("provisioning_credentials_error")); queryError != "" {
+		provisioningCredentialsError = queryError
+	}
+
 	data := SettingsPageData{
 		BasePageData: BasePageData{
 			Title:            "Verifier Engine Room · Settings",
@@ -2132,8 +2175,11 @@ func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
 			ShowProvisioning: true,
 		},
 		Saved:                                     r.URL.Query().Get("saved") == "1",
+		ProvisioningCredentialsSaved:              r.URL.Query().Get("provisioning_credentials_saved") == "1",
 		RolledBack:                                r.URL.Query().Get("rolled_back") == "1",
 		HasRollbackSnapshot:                       hasRollbackSnapshot,
+		ProvisioningCredentials:                   provisioningCredentials,
+		ProvisioningCredentialsError:              provisioningCredentialsError,
 		Settings:                                  settings,
 		DefaultSettings:                           defaults,
 		ProviderHealth:                            providerHealth,
@@ -2418,6 +2464,97 @@ func (s *Server) handleUIRollbackSettings(w http.ResponseWriter, r *http.Request
 	}
 
 	http.Redirect(w, r, "/verifier-engine-room/settings?saved=1&rolled_back=1", http.StatusSeeOther)
+}
+
+func (s *Server) handleUIUpdateProvisioningCredentials(w http.ResponseWriter, r *http.Request) {
+	if s.laravelEngineClient == nil {
+		http.Redirect(w, r, "/verifier-engine-room/settings?provisioning_credentials_error=Laravel+internal+API+is+not+configured.", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/verifier-engine-room/settings?provisioning_credentials_error=Invalid+provisioning+credential+payload.", http.StatusSeeOther)
+		return
+	}
+
+	ghcrUsername := strings.TrimSpace(r.FormValue("ghcr_username"))
+	ghcrToken := strings.TrimSpace(r.FormValue("ghcr_token"))
+	clearGHCRToken := parseFormBoolean(r.FormValue("clear_ghcr_token"))
+	if ghcrUsername == "" {
+		http.Redirect(w, r, "/verifier-engine-room/settings?provisioning_credentials_error=GHCR+username+is+required.", http.StatusSeeOther)
+		return
+	}
+
+	payload := LaravelProvisioningCredentialsUpdatePayload{
+		GHCRUsername:   ghcrUsername,
+		ClearGHCRToken: clearGHCRToken,
+	}
+	if ghcrToken != "" {
+		payload.GHCRToken = ghcrToken
+	}
+
+	if _, err := s.laravelEngineClient.UpdateProvisioningCredentials(r.Context(), payload, uiTriggeredBy(r)); err != nil {
+		errorMessage := mapRegistryActionError("save provisioning credentials", err)
+		http.Redirect(
+			w,
+			r,
+			"/verifier-engine-room/settings?provisioning_credentials_error="+url.QueryEscape(errorMessage),
+			http.StatusSeeOther,
+		)
+		return
+	}
+
+	http.Redirect(w, r, "/verifier-engine-room/settings?provisioning_credentials_saved=1", http.StatusSeeOther)
+}
+
+func (s *Server) handleUIRevealProvisioningCredentials(w http.ResponseWriter, r *http.Request) {
+	if s.laravelEngineClient == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "Laravel internal API is not configured.",
+		})
+		return
+	}
+
+	token, err := s.laravelEngineClient.RevealProvisioningCredentials(r.Context())
+	if err != nil {
+		statusCode := http.StatusBadGateway
+		requestID := ""
+		apiErr := &LaravelAPIError{}
+		if errors.As(err, &apiErr) {
+			requestID = strings.TrimSpace(apiErr.RequestID)
+			switch apiErr.StatusCode {
+			case http.StatusNotFound:
+				statusCode = http.StatusNotFound
+			case http.StatusUnprocessableEntity:
+				statusCode = http.StatusUnprocessableEntity
+			case http.StatusTooManyRequests:
+				statusCode = http.StatusTooManyRequests
+			case http.StatusUnauthorized, http.StatusForbidden:
+				statusCode = http.StatusBadGateway
+			default:
+				if apiErr.StatusCode >= 500 {
+					statusCode = http.StatusBadGateway
+				} else if apiErr.StatusCode >= 400 {
+					statusCode = http.StatusBadRequest
+				}
+			}
+		}
+
+		payload := map[string]string{
+			"error": mapRegistryActionError("reveal provisioning credentials", err),
+		}
+		if requestID != "" {
+			payload["request_id"] = requestID
+		}
+		writeJSON(w, statusCode, payload)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": map[string]string{
+			"ghcr_token": token,
+		},
+	})
 }
 
 func (s *Server) handleUIProviderMode(w http.ResponseWriter, r *http.Request) {

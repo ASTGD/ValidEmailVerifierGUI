@@ -94,6 +94,8 @@ func (s *Server) Router() http.Handler {
 		router.Get("/verifier-engine-room/settings", s.handleUISettings)
 		router.Post("/verifier-engine-room/settings", s.requireSameOriginUI(s.handleUIUpdateSettings))
 		router.Post("/verifier-engine-room/settings/rollback", s.requireSameOriginUI(s.handleUIRollbackSettings))
+		router.Post("/verifier-engine-room/settings/provisioning-credentials", s.requireSameOriginUI(s.handleUIUpdateProvisioningCredentials))
+		router.Post("/verifier-engine-room/settings/provisioning-credentials/reveal", s.requireSameOriginUI(s.handleUIRevealProvisioningCredentials))
 		router.Get("/verifier-engine-room/events", s.handleUIEvents)
 		router.Post("/verifier-engine-room/workers/{workerID}/pause", s.requireSameOriginUI(s.handleUISetDesired("paused")))
 		router.Post("/verifier-engine-room/workers/{workerID}/resume", s.requireSameOriginUI(s.handleUISetDesired("running")))

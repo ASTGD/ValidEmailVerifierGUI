@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Internal\EnginePoolController;
 use App\Http\Controllers\Api\Internal\EngineServerCommandController;
 use App\Http\Controllers\Api\Internal\EngineServerController;
 use App\Http\Controllers\Api\Internal\EngineServerProvisioningBundleController;
+use App\Http\Controllers\Api\Internal\ProvisioningCredentialController;
 use App\Http\Controllers\Api\Internal\SmtpDecisionTraceController;
 use App\Http\Controllers\Api\Monitor\MonitorChecksController;
 use App\Http\Controllers\Api\Monitor\MonitorConfigController;
@@ -133,6 +134,12 @@ Route::middleware(['go.internal.token', 'throttle:go-internal-api'])
             'engine-servers/{engineServer}/provisioning-bundles/latest',
             [EngineServerProvisioningBundleController::class, 'showLatest']
         )->name('engine-servers.provisioning-bundles.latest');
+        Route::get('provisioning-credentials', [ProvisioningCredentialController::class, 'show'])
+            ->name('provisioning-credentials.show');
+        Route::put('provisioning-credentials', [ProvisioningCredentialController::class, 'update'])
+            ->name('provisioning-credentials.update');
+        Route::post('provisioning-credentials/reveal', [ProvisioningCredentialController::class, 'reveal'])
+            ->name('provisioning-credentials.reveal');
         Route::get('engine-pools', [EnginePoolController::class, 'index'])->name('engine-pools.index');
         Route::post('engine-pools', [EnginePoolController::class, 'store'])->name('engine-pools.store');
         Route::put('engine-pools/{enginePool}', [EnginePoolController::class, 'update'])->name('engine-pools.update');
