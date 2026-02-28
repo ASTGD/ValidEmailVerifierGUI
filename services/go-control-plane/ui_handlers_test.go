@@ -128,6 +128,9 @@ func TestSettingsTemplateRendersRuntimeHelpKeys(t *testing.T) {
 	if !strings.Contains(body, `name="ghcr_token"`) {
 		t.Fatalf("expected settings page to submit ghcr token from stored token field")
 	}
+	if !strings.Contains(body, `id="cp-confirm-modal"`) {
+		t.Fatalf("expected layout to render centered confirm modal container")
+	}
 }
 
 func TestProvisioningTemplateRendersWizardOnly(t *testing.T) {
@@ -433,6 +436,7 @@ func TestServerManageTemplateRendersInfrastructureControls(t *testing.T) {
 	assertContains("/verifier-engine-room/servers/7/delete")
 	assertContains("/verifier-engine-room/servers/7/edit")
 	assertContains("/verifier-engine-room/provisioning?mode=existing&server_id=7")
+	assertContains(`data-confirm-message="Delete server engine-7 from inventory? This does not terminate the VPS itself."`)
 }
 
 func TestServerEditTemplateRendersDedicatedEditForm(t *testing.T) {

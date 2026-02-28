@@ -5,7 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ .Title }}</title>
-    <link rel="stylesheet" href="/assets/app.css?v=22_5_tooltip_fix" />
+    <link rel="stylesheet" href="/assets/app.css?v=22_5_confirm_modal_fix" />
 </head>
 <body class="min-h-screen bg-slate-950 text-slate-100">
     <div class="min-h-screen md:flex">
@@ -76,6 +76,17 @@
         </div>
     </div>
 
+    <div id="cp-confirm-modal" class="fixed inset-0 z-[120] hidden items-center justify-center bg-slate-950/70 p-4" role="presentation" aria-hidden="true">
+        <div class="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow">
+            <h2 id="cp-confirm-modal-title" class="text-lg font-semibold text-slate-100">Confirm Action</h2>
+            <p id="cp-confirm-modal-message" class="mt-3 text-sm text-slate-300"></p>
+            <div class="mt-6 flex justify-end gap-2">
+                <button id="cp-confirm-modal-cancel" type="button" class="rounded-full border border-slate-600 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800">Cancel</button>
+                <button id="cp-confirm-modal-confirm" type="button" class="rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-400">OK</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         (() => {
             const storageKey = 'go-control-plane-theme';
@@ -100,6 +111,101 @@
                 const next = body.classList.contains('theme-light') ? 'dark' : 'light';
                 window.localStorage.setItem(storageKey, next);
                 applyTheme(next);
+            });
+        })();
+    </script>
+
+    <script>
+        (() => {
+            const modal = document.getElementById('cp-confirm-modal');
+            const titleNode = document.getElementById('cp-confirm-modal-title');
+            const messageNode = document.getElementById('cp-confirm-modal-message');
+            const cancelButton = document.getElementById('cp-confirm-modal-cancel');
+            const confirmButton = document.getElementById('cp-confirm-modal-confirm');
+            if (!modal || !titleNode || !messageNode || !cancelButton || !confirmButton) {
+                return;
+            }
+
+            let pendingForm = null;
+
+            const closeModal = () => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                modal.setAttribute('aria-hidden', 'true');
+                document.body.classList.remove('overflow-hidden');
+            };
+
+            const openModal = (title, message) => {
+                titleNode.textContent = title;
+                messageNode.textContent = message;
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                modal.setAttribute('aria-hidden', 'false');
+                document.body.classList.add('overflow-hidden');
+                cancelButton.focus();
+            };
+
+            document.addEventListener('submit', (event) => {
+                const form = event.target;
+                if (!(form instanceof HTMLFormElement)) {
+                    return;
+                }
+
+                const message = form.getAttribute('data-confirm-message');
+                if (!message) {
+                    return;
+                }
+
+                if (form.getAttribute('data-confirm-bypass') === '1') {
+                    form.removeAttribute('data-confirm-bypass');
+                    return;
+                }
+
+                event.preventDefault();
+                pendingForm = form;
+                const title = form.getAttribute('data-confirm-title') || 'Confirm Action';
+                openModal(title, message);
+            }, true);
+
+            cancelButton.addEventListener('click', () => {
+                pendingForm = null;
+                closeModal();
+            });
+
+            confirmButton.addEventListener('click', () => {
+                if (!pendingForm) {
+                    closeModal();
+                    return;
+                }
+
+                const form = pendingForm;
+                pendingForm = null;
+                form.setAttribute('data-confirm-bypass', '1');
+                closeModal();
+
+                if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit();
+                    return;
+                }
+
+                form.submit();
+                form.removeAttribute('data-confirm-bypass');
+            });
+
+            modal.addEventListener('click', (event) => {
+                if (event.target !== modal) {
+                    return;
+                }
+                pendingForm = null;
+                closeModal();
+            });
+
+            window.addEventListener('keydown', (event) => {
+                if (event.key !== 'Escape' || modal.classList.contains('hidden')) {
+                    return;
+                }
+                pendingForm = null;
+                closeModal();
             });
         })();
     </script>
