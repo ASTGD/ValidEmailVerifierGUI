@@ -132,7 +132,7 @@
             <h3 class="text-sm font-semibold text-slate-100">Delete Guard</h3>
             <p class="mt-1 text-xs text-slate-400">Delete is blocked while process is running/starting/stopping or heartbeat is healthy.</p>
             <div class="mt-3 flex items-center gap-3">
-                <form method="POST" action="{{ .BasePath }}/servers/{{ .Server.ID }}/delete" onsubmit="return confirm('Delete server {{ .Server.Name }} from inventory? This does not terminate the VPS itself.');">
+                <form method="POST" action="{{ .BasePath }}/servers/{{ .Server.ID }}/delete" data-confirm-title="Delete Server" data-confirm-message="Delete server {{ .Server.Name }} from inventory? This does not terminate the VPS itself.">
                     <input type="hidden" name="return_to" value="servers" />
                     <input type="hidden" name="registry_filter" value="all" />
                     <button class="rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300 hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-40" type="submit" {{ if .DeleteLocked }}disabled{{ end }}>Delete Server</button>
