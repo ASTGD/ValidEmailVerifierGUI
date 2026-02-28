@@ -90,6 +90,10 @@ class EngineWorkerProvisioningServiceTest extends TestCase
         $script = Storage::disk('local')->get($bundle->script_key);
 
         $this->assertStringContainsString("IMAGE='ghcr.io/astgd/vev-engine:v1.2.3'", $script);
+        $this->assertStringContainsString('Running post-install self-check...', $script);
+        $this->assertStringContainsString('/api/verifier/heartbeat', $script);
+        $this->assertStringContainsString('/api/verifier/chunks/claim-next', $script);
+        $this->assertStringContainsString('Self-check result: PASS', $script);
     }
 
     public function test_bundle_includes_control_plane_heartbeat_env_when_configured(): void
@@ -144,6 +148,47 @@ class EngineWorkerProvisioningServiceTest extends TestCase
 
         $workerEnv = Storage::disk('local')->get($bundle->env_key);
         $this->assertStringContainsString('WORKER_POOL=gmail-lowhit', $workerEnv);
+    }
+
+    public function test_regenerating_bundle_does_not_revoke_previous_worker_token(): void
+    {
+        Storage::fake('local');
+        $this->setBaseProvisioningConfig();
+
+        $server = $this->createEngineServer();
+        $actor = User::factory()->create();
+        $service = app(EngineWorkerProvisioningService::class);
+
+        $firstBundle = $service->createBundle($server, $actor);
+        $firstTokenId = (int) $firstBundle->token_id;
+        $this->assertDatabaseHas('personal_access_tokens', ['id' => $firstTokenId]);
+
+        $secondBundle = $service->createBundle($server->fresh(), $actor);
+
+        $this->assertDatabaseHas('personal_access_tokens', ['id' => $firstTokenId]);
+        $this->assertNotSame($firstTokenId, (int) $secondBundle->token_id);
+    }
+
+    public function test_pruning_expired_bundles_keeps_worker_tokens_valid(): void
+    {
+        Storage::fake('local');
+        $this->setBaseProvisioningConfig();
+
+        $server = $this->createEngineServer();
+        $actor = User::factory()->create();
+        $service = app(EngineWorkerProvisioningService::class);
+
+        $bundle = $service->createBundle($server, $actor);
+        $tokenId = (int) $bundle->token_id;
+        $this->assertDatabaseHas('personal_access_tokens', ['id' => $tokenId]);
+
+        $bundle->forceFill(['expires_at' => now()->subMinute()])->save();
+
+        $this->artisan('prune:worker-provisioning-bundles')
+            ->assertExitCode(0);
+
+        $this->assertDatabaseMissing('engine_server_provisioning_bundles', ['id' => $bundle->id]);
+        $this->assertDatabaseHas('personal_access_tokens', ['id' => $tokenId]);
     }
 
     public function test_bundle_installs_worker_agent_and_systemd_units_for_agent_mode(): void

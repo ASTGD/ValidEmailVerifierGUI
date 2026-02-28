@@ -10,7 +10,6 @@ use App\Support\Roles;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\NewAccessToken;
-use Laravel\Sanctum\PersonalAccessToken;
 use RuntimeException;
 use Spatie\Permission\Models\Role;
 
@@ -81,20 +80,10 @@ class EngineWorkerProvisioningService
 
     private function expirePreviousBundles(EngineServer $server): void
     {
-        $bundleIds = EngineServerProvisioningBundle::query()
-            ->where('engine_server_id', $server->id)
-            ->pluck('token_id')
-            ->filter();
-
-        if ($bundleIds->isNotEmpty()) {
-            PersonalAccessToken::query()->whereIn('id', $bundleIds)->delete();
-        }
-
         EngineServerProvisioningBundle::query()
             ->where('engine_server_id', $server->id)
             ->update([
                 'expires_at' => now(),
-                'token_id' => null,
             ]);
     }
 
@@ -279,6 +268,15 @@ if ! command -v docker >/dev/null 2>&1; then
   systemctl enable --now docker
 fi
 
+if ! command -v curl >/dev/null 2>&1; then
+  if ! command -v apt-get >/dev/null 2>&1; then
+    echo "Unsupported OS. This installer requires apt-get (Ubuntu)."
+    exit 1
+  fi
+  apt-get update -y
+  apt-get install -y curl
+fi
+
 mkdir -p "$(dirname "$ENV_PATH")"
 cat > "$ENV_PATH" <<'ENVFILE'
 {{WORKER_ENV}}
@@ -364,9 +362,101 @@ esac
 WORKERCTL
 chmod 0755 "$WORKER_CONTROL_SCRIPT"
 
+read_env_value() {
+  local key="$1"
+  local value
+  value="$(grep -E "^${key}=" "$ENV_PATH" | tail -n 1 | cut -d'=' -f2-)"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  printf "%s" "$value"
+}
+
+run_post_install_self_check() {
+  local failed=0
+  local status_code=""
+  local api_base_url=""
+  local api_token=""
+  local worker_id=""
+  local server_name=""
+  local server_ip=""
+  local server_env=""
+  local server_region=""
+
+  echo "Running post-install self-check..."
+
+  if "$WORKER_CONTROL_SCRIPT" status >/dev/null 2>&1; then
+    echo "[PASS] Worker process is running."
+  else
+    echo "[FAIL] Worker process is not running."
+    failed=1
+  fi
+
+  api_base_url="$(read_env_value "ENGINE_API_BASE_URL")"
+  api_token="$(read_env_value "ENGINE_API_TOKEN")"
+  worker_id="$(read_env_value "WORKER_ID")"
+  server_name="$(read_env_value "ENGINE_SERVER_NAME")"
+  server_ip="$(read_env_value "ENGINE_SERVER_IP")"
+  server_env="$(read_env_value "ENGINE_SERVER_ENV")"
+  server_region="$(read_env_value "ENGINE_SERVER_REGION")"
+
+  if [[ -z "$api_base_url" || -z "$api_token" ]]; then
+    echo "[FAIL] Missing ENGINE_API_BASE_URL or ENGINE_API_TOKEN in worker env."
+    failed=1
+  else
+    status_code="$(curl -sS -o /tmp/vev-heartbeat-check.out -w "%{http_code}" \
+      -X POST "${api_base_url%/}/api/verifier/heartbeat" \
+      -H "Authorization: Bearer $api_token" \
+      -H "Accept: application/json" \
+      -H "Content-Type: application/json" \
+      --connect-timeout 8 --max-time 15 \
+      -d "{\"server\":{\"name\":\"${server_name}\",\"ip_address\":\"${server_ip}\",\"environment\":\"${server_env}\",\"region\":\"${server_region}\"}}" || true)"
+
+    if [[ "$status_code" == "200" ]]; then
+      echo "[PASS] Database heartbeat API accepted."
+    else
+      echo "[FAIL] Database heartbeat API check failed (status: ${status_code:-none})."
+      failed=1
+    fi
+
+    status_code="$(curl -sS -o /tmp/vev-claim-check.out -w "%{http_code}" \
+      -X POST "${api_base_url%/}/api/verifier/chunks/claim-next" \
+      -H "Authorization: Bearer $api_token" \
+      -H "Accept: application/json" \
+      -H "Content-Type: application/json" \
+      --connect-timeout 8 --max-time 15 \
+      -d "{\"worker_id\":\"${worker_id:-install-probe}\"}" || true)"
+
+    case "$status_code" in
+      200|204|422)
+        echo "[PASS] Claim-next auth sanity accepted (status: $status_code)."
+        ;;
+      401|403)
+        echo "[FAIL] Claim-next auth rejected (status: $status_code)."
+        failed=1
+        ;;
+      *)
+        echo "[FAIL] Claim-next auth probe failed (status: ${status_code:-none})."
+        failed=1
+        ;;
+    esac
+  fi
+
+  if [[ "$failed" -eq 0 ]]; then
+    echo "Self-check result: PASS"
+    return 0
+  fi
+
+  echo "Self-check result: FAIL"
+  echo "Inspect /tmp/vev-heartbeat-check.out and /tmp/vev-claim-check.out for details."
+  return 1
+}
+
 if [[ "$AGENT_ENABLED" != "1" ]]; then
   "$WORKER_CONTROL_SCRIPT" restart
-  exit 0
+  run_post_install_self_check
+  exit $?
 fi
 
 if ! command -v python3 >/dev/null 2>&1; then
@@ -605,6 +695,7 @@ systemctl enable --now "$WORKER_SERVICE_NAME"
 systemctl enable --now "$AGENT_SERVICE_NAME"
 
 echo "Agent mode installed. Worker service: $WORKER_SERVICE_NAME, agent service: $AGENT_SERVICE_NAME, port: $AGENT_PORT"
+run_post_install_self_check
 
 BASH;
 

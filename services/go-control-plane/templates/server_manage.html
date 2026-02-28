@@ -31,10 +31,10 @@
                         </dd>
                     </div>
                     <div>
-                        <dt class="text-xs uppercase tracking-wide text-slate-500">Heartbeat</dt>
+                        <dt class="text-xs uppercase tracking-wide text-slate-500">Database Sync</dt>
                         <dd class="mt-1">
-                            <span class="rounded-full px-3 py-1 text-xs {{ if eq .Server.HeartbeatState "healthy" }}bg-emerald-500/20 text-emerald-300{{ else if eq .Server.HeartbeatState "stale" }}bg-amber-500/20 text-amber-200{{ else }}bg-slate-800 text-slate-300{{ end }}">{{ .Server.HeartbeatState }}{{ if .Server.HeartbeatAgeText }} · {{ .Server.HeartbeatAgeText }}{{ end }}</span>
-                            <p class="mt-1 text-xs text-slate-500">{{ if .Server.LastHeartbeatAt }}{{ .Server.LastHeartbeatAt }}{{ else }}No heartbeat timestamp yet.{{ end }}</p>
+                            <span class="rounded-full px-3 py-1 text-xs {{ if eq .Server.HeartbeatState "healthy" }}bg-emerald-500/20 text-emerald-300{{ else if eq .Server.HeartbeatState "stale" }}bg-amber-500/20 text-amber-200{{ else }}bg-slate-800 text-slate-300{{ end }}">{{ if eq .Server.HeartbeatState "healthy" }}synced{{ else if eq .Server.HeartbeatState "stale" }}delayed{{ else }}no data{{ end }}{{ if .Server.HeartbeatAgeText }} · {{ .Server.HeartbeatAgeText }}{{ end }}</span>
+                            <p class="mt-1 text-xs text-slate-500">{{ if .Server.LastHeartbeatAt }}{{ .Server.LastHeartbeatAt }}{{ else }}No database sync timestamp yet.{{ end }}</p>
                         </dd>
                     </div>
                     <div>
@@ -81,7 +81,7 @@
                 {{ end }}
 
                 <div class="mt-4 rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs text-slate-400">
-                    <p><strong class="text-slate-200">Heartbeat:</strong> freshness timer from last worker heartbeat.</p>
+                    <p><strong class="text-slate-200">Database sync:</strong> freshness timer from last database heartbeat.</p>
                     <p class="mt-1"><strong class="text-slate-200">Runtime match:</strong> identity mapping by worker id/ip/host, independent from freshness.</p>
                 </div>
             </section>
@@ -130,7 +130,7 @@
 
         <section class="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
             <h3 class="text-sm font-semibold text-slate-100">Delete Guard</h3>
-            <p class="mt-1 text-xs text-slate-400">Delete is blocked while process is running/starting/stopping or heartbeat is healthy.</p>
+            <p class="mt-1 text-xs text-slate-400">Delete is blocked while process is running/starting/stopping or Database sync is healthy.</p>
             <div class="mt-3 flex items-center gap-3">
                 <form method="POST" action="{{ .BasePath }}/servers/{{ .Server.ID }}/delete" data-confirm-title="Delete Server" data-confirm-message="Delete server {{ .Server.Name }} from inventory? This does not terminate the VPS itself.">
                     <input type="hidden" name="return_to" value="servers" />
@@ -138,7 +138,7 @@
                     <button class="rounded-full bg-red-500/20 px-3 py-1 text-xs text-red-300 hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-40" type="submit" {{ if .DeleteLocked }}disabled{{ end }}>Delete Server</button>
                 </form>
                 {{ if .DeleteLocked }}
-                    <span class="text-xs text-amber-200">Blocked until process is stopped and heartbeat is stale/none.</span>
+                    <span class="text-xs text-amber-200">Blocked until process is stopped and Database sync is delayed/no data.</span>
                 {{ else }}
                     <span class="text-xs text-emerald-200">Eligible for delete.</span>
                 {{ end }}
