@@ -11,6 +11,7 @@ use App\Models\SmtpDecisionTrace;
 use App\Models\VerificationWorker;
 use App\Models\VerifierDomain;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -764,6 +765,43 @@ class InternalEngineServerApiTest extends TestCase
         ]);
 
         Http::assertNothingSent();
+    }
+
+    public function test_internal_engine_server_api_sets_unknown_process_state_when_agent_is_unreachable(): void
+    {
+        Http::fake(function (): never {
+            throw new ConnectionException('Connection refused');
+        });
+
+        $server = EngineServer::query()->create([
+            'name' => 'engine-unreachable-agent',
+            'ip_address' => '10.0.0.52',
+            'is_active' => true,
+            'drain_mode' => false,
+            'last_heartbeat_at' => now()->subMinutes(20),
+            'process_control_mode' => 'agent_systemd',
+            'agent_enabled' => true,
+            'agent_base_url' => 'http://10.0.0.52:9713',
+            'last_agent_status' => [
+                'service_state' => 'active',
+            ],
+        ]);
+
+        $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/engine-servers/'.$server->id.'/commands', [
+                'action' => 'stop',
+                'reason' => 'host-reinstalled',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'failed');
+
+        $server->refresh();
+        $this->assertSame('unknown', strtolower((string) data_get($server->last_agent_status, 'service_state')));
+
+        $this->withHeaders($this->internalHeaders())
+            ->deleteJson('/api/internal/engine-servers/'.$server->id)
+            ->assertOk()
+            ->assertJsonPath('data.deleted', true);
     }
 
     /**

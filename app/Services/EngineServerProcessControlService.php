@@ -139,6 +139,7 @@ class EngineServerProcessControlService
             $command->status = 'failed';
             $command->error_message = 'Agent request failed: '.$throwable->getMessage();
             $engineServer->last_agent_error = $command->error_message;
+            $engineServer->last_agent_status = $this->buildUnavailableAgentStatus($command->action, $command->error_message);
         }
 
         $command->finished_at = now();
@@ -164,6 +165,7 @@ class EngineServerProcessControlService
         $command->save();
 
         $engineServer->last_agent_error = $message;
+        $engineServer->last_agent_status = $this->buildUnavailableAgentStatus($command->action, $message);
         $engineServer->save();
 
         AdminAuditLogger::log('engine_server_command_executed', $engineServer, [
@@ -217,5 +219,19 @@ class EngineServerProcessControlService
         $trimmed = trim((string) $value);
 
         return $trimmed !== '' ? $trimmed : null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildUnavailableAgentStatus(string $action, string $message): array
+    {
+        return [
+            'status' => 'failed',
+            'action' => $action,
+            'service_state' => 'unknown',
+            'message' => $message,
+            'checked_at' => now()->toIso8601String(),
+        ];
     }
 }
