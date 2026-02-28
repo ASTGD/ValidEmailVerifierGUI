@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -130,6 +131,25 @@ func TestSettingsTemplateRendersRuntimeHelpKeys(t *testing.T) {
 	}
 	if !strings.Contains(body, `id="cp-confirm-modal"`) {
 		t.Fatalf("expected layout to render centered confirm modal container")
+	}
+}
+
+func TestBuiltCSSContainsHelpTipStyles(t *testing.T) {
+	asset, err := os.ReadFile("assets/app.css")
+	if err != nil {
+		t.Fatalf("failed to read built css asset: %v", err)
+	}
+
+	css := string(asset)
+	for _, selector := range []string{
+		".help-tip__trigger",
+		".help-tip__panel",
+		".help-tip__risk--high",
+		".help-tip__details>summary",
+	} {
+		if !strings.Contains(css, selector) {
+			t.Fatalf("expected css asset to include selector %s", selector)
+		}
 	}
 }
 
