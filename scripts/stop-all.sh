@@ -6,9 +6,11 @@ if ! command -v screen >/dev/null 2>&1; then
   exit 1
 fi
 
-for name in dev-vite dev-queue dev-go-dashboard dev-go-worker dev-ngrok; do
-  if screen -ls | grep -q "\.${name}"; then
-    screen -S "$name" -X quit
+screen_sessions="$(screen -ls 2>/dev/null | tr -d '\r' || true)"
+
+for name in dev-vite dev-queue dev-scheduler dev-go-dashboard dev-go-worker dev-tunnel-app dev-tunnel-go dev-ngrok; do
+  if printf '%s\n' "$screen_sessions" | grep -Fq ".${name}"; then
+    screen -S "$name" -X quit || true
   fi
 done
 
