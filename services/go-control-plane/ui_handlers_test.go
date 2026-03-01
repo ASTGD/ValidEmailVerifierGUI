@@ -402,6 +402,7 @@ func TestServersTemplateRendersInventoryListWithManageAction(t *testing.T) {
 	}
 
 	assertContains("Server Inventory")
+	assertContains("Refresh Sync")
 	assertContains("Open Provisioning Wizard")
 	assertContains("List and manage state only")
 	assertContains("Filter:")

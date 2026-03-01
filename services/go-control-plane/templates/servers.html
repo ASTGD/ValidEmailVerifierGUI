@@ -7,7 +7,10 @@
                 <p class="text-sm text-slate-400">List and manage state only. Onboarding and re-provisioning are in Provisioning.</p>
                 <p class="text-xs text-slate-500">Database sync freshness and runtime match explain different signals. A server can be matched but delayed.</p>
             </div>
-            <a href="{{ .BasePath }}/provisioning" class="rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-400">Open Provisioning Wizard</a>
+            <div class="flex items-center gap-2">
+                <a href="{{ .BasePath }}/servers{{ if and .ServerRegistry.Filter (ne .ServerRegistry.Filter "all") }}?registry_filter={{ .ServerRegistry.Filter }}{{ end }}" class="rounded-full bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700">Refresh Sync</a>
+                <a href="{{ .BasePath }}/provisioning" class="rounded-full bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-400">Open Provisioning Wizard</a>
+            </div>
         </div>
 
         {{ if not .ServerRegistry.Configured }}
