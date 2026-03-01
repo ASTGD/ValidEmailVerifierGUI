@@ -465,7 +465,37 @@ class InternalEngineServerApiTest extends TestCase
             ])
             ->assertStatus(422)
             ->assertJsonPath('error_code', 'validation_failed')
-            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonPath('message', 'The name field is required.')
+            ->assertJsonStructure([
+                'request_id',
+                'errors' => [
+                    'name',
+                    'ip_address',
+                ],
+            ]);
+    }
+
+    public function test_internal_engine_server_api_rejects_duplicate_server_name_and_ip_address(): void
+    {
+        EngineServer::query()->create([
+            'name' => 'engine-duplicate',
+            'ip_address' => '10.0.0.250',
+            'is_active' => true,
+            'drain_mode' => false,
+        ]);
+
+        $response = $this->withHeaders($this->internalHeaders())
+            ->postJson('/api/internal/engine-servers', [
+                'name' => 'engine-duplicate',
+                'ip_address' => '10.0.0.250',
+                'is_active' => true,
+                'drain_mode' => false,
+            ]);
+
+        $response
+            ->assertStatus(422)
+            ->assertJsonPath('error_code', 'validation_failed')
+            ->assertJsonPath('message', 'A server with this name already exists. Choose a different name or edit the existing server.')
             ->assertJsonStructure([
                 'request_id',
                 'errors' => [

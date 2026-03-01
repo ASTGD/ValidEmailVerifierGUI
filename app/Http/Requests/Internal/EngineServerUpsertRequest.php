@@ -26,9 +26,11 @@ class EngineServerUpsertRequest extends FormRequest
      */
     public function rules(): array
     {
+        $engineServerId = $this->route('engineServer')?->id;
+
         return [
-            'name' => ['required', 'string', 'max:255'],
-            'ip_address' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255', Rule::unique('engine_servers', 'name')->ignore($engineServerId)],
+            'ip_address' => ['required', 'string', 'max:255', Rule::unique('engine_servers', 'ip_address')->ignore($engineServerId)],
             'environment' => ['nullable', 'string', 'max:255'],
             'region' => ['nullable', 'string', 'max:255'],
             'is_active' => ['required', 'boolean'],
@@ -72,6 +74,8 @@ class EngineServerUpsertRequest extends FormRequest
             : EngineWorkerPool::resolveDefaultId();
 
         $this->merge([
+            'name' => trim((string) $this->input('name', '')),
+            'ip_address' => trim((string) $this->input('ip_address', '')),
             'is_active' => $this->boolean('is_active'),
             'drain_mode' => $this->boolean('drain_mode'),
             'max_concurrency' => $this->filled('max_concurrency') ? $this->input('max_concurrency') : null,
@@ -92,6 +96,17 @@ class EngineServerUpsertRequest extends FormRequest
         ]);
     }
 
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'name.unique' => 'A server with this name already exists. Choose a different name or edit the existing server.',
+            'ip_address.unique' => 'A server with this IP address already exists. Use Select Server to continue with that server.',
+        ];
+    }
+
     private function defaultAgentBaseUrl(): ?string
     {
         $ipAddress = trim((string) $this->input('ip_address', ''));
@@ -107,10 +122,12 @@ class EngineServerUpsertRequest extends FormRequest
     protected function failedValidation(Validator $validator): void
     {
         $requestId = $this->requestId();
+        $firstError = trim((string) $validator->errors()->first());
+        $message = $firstError !== '' ? $firstError : 'Validation failed.';
 
         throw new HttpResponseException(response()->json([
             'error_code' => 'validation_failed',
-            'message' => 'Validation failed.',
+            'message' => $message,
             'request_id' => $requestId,
             'errors' => $validator->errors()->toArray(),
         ], 422, [

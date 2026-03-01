@@ -745,9 +745,7 @@ func (s *Server) buildEngineServerRegistryData(r *http.Request, runtimeWorkers [
 		bundle, bundleErr := s.laravelEngineClient.LatestProvisioningBundle(r.Context(), provisionBundleServerID)
 		if bundleErr != nil {
 			if isNoProvisioningBundleError(bundleErr) {
-				if strings.TrimSpace(data.Notice) == "" {
-					data.Notice = "No provisioning bundle exists yet for this server. Generate a new bundle in Step 2."
-				}
+				data.ProvisionBundle = nil
 			} else {
 				data.ProvisionBundleLoadError = mapRegistryActionError("load latest provisioning bundle", bundleErr)
 			}
@@ -1585,6 +1583,9 @@ func mapRegistryActionError(action string, err error) string {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return "Laravel internal API authentication failed. Check internal token configuration." + requestSuffix
 	case http.StatusUnprocessableEntity:
+		if message := strings.TrimSpace(apiErr.Message); message != "" && !strings.EqualFold(message, "Validation failed.") {
+			return message + requestSuffix
+		}
 		return "Validation failed. Review the form values and retry." + requestSuffix
 	case http.StatusTooManyRequests:
 		return "Laravel internal API is rate-limited. Retry shortly." + requestSuffix

@@ -225,15 +225,17 @@ func TestProvisioningTemplateRendersWizardOnly(t *testing.T) {
 	}
 
 	assertContains("Provisioning Wizard")
-	assertContains("Step 1: Select Server")
+	assertContains("Step 1: Create Server/Choose Server")
 	assertContains("Step 2: Generate Bundle")
 	assertContains("Step 3: Install on VPS")
 	assertContains("Step 4: Verification Checks")
+	assertContains("Register or select a server, generate an engine worker bundle, install on VPS, then verify.")
 	assertContains("/verifier-engine-room/provisioning/servers")
 	assertContains("/verifier-engine-room/provisioning/servers/7/provision")
 	assertContains("/verifier-engine-room/provisioning/servers/7/verify")
 	assertContains("Add New Server")
 	assertContains("Select Server")
+	assertContains("Selecting a server applies Step 2 automatically.")
 	assertContains("Run this command on your VPS shell as root.")
 	assertContains("Claim-next auth sanity")
 	assertContains("provisioning-copy-install-command")
@@ -241,6 +243,9 @@ func TestProvisioningTemplateRendersWizardOnly(t *testing.T) {
 	assertContains("saved GHCR credentials")
 	if strings.Contains(body, "Runtime-only orphan workers") {
 		t.Fatalf("expected provisioning template to hide inventory table blocks")
+	}
+	if strings.Contains(body, ">Continue<") {
+		t.Fatalf("expected provisioning template to remove explicit continue button in step 1 existing mode")
 	}
 	if strings.Contains(body, "/verifier-engine-room/provisioning/servers/7/command") {
 		t.Fatalf("expected provisioning template to hide infrastructure command controls")
@@ -329,6 +334,19 @@ func TestProvisioningTemplateCreateModeRendersPoolSelector(t *testing.T) {
 	}
 	if !strings.Contains(body, "Manage Pools") {
 		t.Fatalf("expected provisioning create mode to render manage pools deep link")
+	}
+}
+
+func TestMapRegistryActionErrorReturnsValidationDetailForUnprocessableEntity(t *testing.T) {
+	err := mapRegistryActionError("create server", &LaravelAPIError{
+		StatusCode: http.StatusUnprocessableEntity,
+		Message:    "A server with this IP address already exists.",
+		RequestID:  "req-duplicate",
+	})
+
+	expected := "A server with this IP address already exists. (request id: req-duplicate)"
+	if err != expected {
+		t.Fatalf("expected %q, got %q", expected, err)
 	}
 }
 
